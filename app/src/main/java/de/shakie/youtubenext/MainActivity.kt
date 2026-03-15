@@ -252,11 +252,13 @@ class MainActivity : AppCompatActivity() {
             normalizeInternalUrl = ::normalizeInternalYouTubeUrl,
             onBeforeMainFrameNavigation = { url ->
                 applyBrowsingMode(session.id, url)
+                overlayLog(session.id, "beforeNav url=$url")
             },
             onMainPageStarted = { startedUrl ->
                 val startedUri = runCatching { Uri.parse(startedUrl) }.getOrNull()
                 val scheme = startedUri?.scheme?.lowercase().orEmpty()
                 if (scheme == "http" || scheme == "https") {
+                    overlayLog(session.id, "pageStarted url=$startedUrl")
                     onTabMainNavigationStarted(session.id)
                 }
             },
@@ -265,6 +267,7 @@ class MainActivity : AppCompatActivity() {
                 updateTabState(session.id, newUrl = url)
             },
             onMainPageFinished = { url ->
+                overlayLog(session.id, "pageFinished url=$url")
                 scheduleWatchViewportStabilization(session.id, url)
             },
             onMainTitleUpdated = { title ->
@@ -274,6 +277,7 @@ class MainActivity : AppCompatActivity() {
                 Log.i("YTNEXT_VIEWPORT", "url=$pageUrl metrics=$metrics")
             },
             onLoadError = {
+                overlayLog(session.id, "loadError")
                 completeTabLoading(session.id, browserTabs[session.id]?.pageLoadGeneration)
                 Snackbar.make(webViewContainer, R.string.page_load_error, Snackbar.LENGTH_SHORT).show()
             }
@@ -828,21 +832,25 @@ class MainActivity : AppCompatActivity() {
         val generation = tab.watchStabilizationGeneration
         val pageLoadGeneration = tab.pageLoadGeneration
         if (!isWatchYouTubeUrl(finishedUrl)) {
+            overlayLog(tabId, "schedule non-watch hide generation=$generation")
             tab.webView.postDelayed({
                 val currentTab = browserTabs[tabId] ?: return@postDelayed
                 if (currentTab.watchStabilizationGeneration != generation) return@postDelayed
                 val currentUrl = currentTab.webView.url ?: currentTab.url
                 if (isWatchYouTubeUrl(currentUrl)) return@postDelayed
+                overlayLog(tabId, "non-watch delayed complete")
                 completeTabLoading(tabId, pageLoadGeneration)
             }, NON_WATCH_OVERLAY_HIDE_DELAY_MS)
             return
         }
 
+        overlayLog(tabId, "schedule watch stabilize generation=$generation")
         tab.webView.postDelayed({
             val currentTab = browserTabs[tabId] ?: return@postDelayed
             if (currentTab.watchStabilizationGeneration != generation) return@postDelayed
             val currentUrl = currentTab.webView.url ?: currentTab.url
             if (!isWatchYouTubeUrl(currentUrl)) return@postDelayed
+            overlayLog(tabId, "run watch stabilize")
             stabilizeYouTubeViewport(tabId, currentUrl)
             waitForWatchQuietAndComplete(tabId, generation, pageLoadGeneration, attempt = 0)
         }, WATCH_VIEWPORT_STABILIZE_DELAY_MS)
@@ -858,6 +866,7 @@ class MainActivity : AppCompatActivity() {
         if (tab.watchStabilizationGeneration != watchGeneration) return
         val currentUrl = tab.webView.url ?: tab.url
         if (!isWatchYouTubeUrl(currentUrl)) {
+            overlayLog(tabId, "quiet check aborted non-watch")
             completeTabLoading(tabId, pageLoadGeneration)
             return
         }
@@ -903,7 +912,9 @@ class MainActivity : AppCompatActivity() {
             val current = browserTabs[tabId] ?: return@evaluateJavascript
             if (current.watchStabilizationGeneration != watchGeneration) return@evaluateJavascript
             val settled = isWatchLayoutSettled(raw)
+            overlayLog(tabId, "quietCheck attempt=$attempt settled=$settled")
             if (settled || attempt >= WATCH_QUIET_MAX_ATTEMPTS) {
+                overlayLog(tabId, "quietCheck complete attempt=$attempt")
                 completeTabLoading(tabId, pageLoadGeneration)
                 return@evaluateJavascript
             }
@@ -938,8 +949,10 @@ class MainActivity : AppCompatActivity() {
         }
         val generation = tab.pageLoadGeneration
         tab.loadingLastSignalAtMs = now
+        tab.loadingProgressLogBucket = -1
         tab.loadingOverlayVisible = true
         tab.loadingProgress = 8
+        overlayLog(tabId, "loadingStart chain=$chainInProgress generation=$generation")
         if (selectedTabId == tabId) {
             showLoadingOverlay(tab.loadingProgress)
         }
@@ -950,6 +963,7 @@ class MainActivity : AppCompatActivity() {
             if (currentTab.loadingStartedAtMs <= 0L) return@postDelayed
             val elapsed = SystemClock.uptimeMillis() - currentTab.loadingStartedAtMs
             if (elapsed < LOADING_OVERLAY_FAILSAFE_MS) return@postDelayed
+            overlayLog(tabId, "failsafeComplete elapsed=$elapsed")
             completeTabLoading(tabId, generation)
         }, LOADING_OVERLAY_FAILSAFE_MS)
         scheduleOverlayStallWatchdog(tabId, generation)
@@ -958,6 +972,11 @@ class MainActivity : AppCompatActivity() {
     private fun onTabProgress(tabId: String, progress: Int) {
         val tab = browserTabs[tabId] ?: return
         tab.loadingLastSignalAtMs = SystemClock.uptimeMillis()
+        val bucket = (progress.coerceIn(0, 100)) / 20
+        if (bucket != tab.loadingProgressLogBucket || progress == 100) {
+            tab.loadingProgressLogBucket = bucket
+            overlayLog(tabId, "progress=$progress")
+        }
         if (progress in 1..99) {
             tab.loadingOverlayVisible = true
             tab.loadingProgress = progress.coerceAtLeast(8)
@@ -977,7 +996,11 @@ class MainActivity : AppCompatActivity() {
     private fun completeTabLoading(tabId: String, generation: Long?) {
         val tab = browserTabs[tabId] ?: return
         val targetGeneration = generation ?: tab.pageLoadGeneration
-        if (tab.pageLoadGeneration != targetGeneration) return
+        if (tab.pageLoadGeneration != targetGeneration) {
+            overlayLog(tabId, "completeIgnored generationMismatch target=$targetGeneration")
+            return
+        }
+        overlayLog(tabId, "completeLoading generation=$targetGeneration")
         tab.loadingOverlayVisible = false
         tab.loadingStartedAtMs = 0L
         tab.loadingLastSignalAtMs = 0L
@@ -995,11 +1018,23 @@ class MainActivity : AppCompatActivity() {
             val now = SystemClock.uptimeMillis()
             val lastSignal = currentTab.loadingLastSignalAtMs
             if (lastSignal > 0L && now - lastSignal >= LOADING_OVERLAY_STALL_TIMEOUT_MS) {
+                overlayLog(tabId, "stallWatchdogComplete idleMs=${now - lastSignal}")
                 completeTabLoading(tabId, generation)
                 return@postDelayed
             }
             scheduleOverlayStallWatchdog(tabId, generation)
         }, LOADING_OVERLAY_WATCHDOG_INTERVAL_MS)
+    }
+
+    private fun overlayLog(tabId: String, message: String) {
+        val tab = browserTabs[tabId]
+        val url = tab?.webView?.url ?: tab?.url.orEmpty()
+        Log.i(
+            "YTNEXT_OVERLAY",
+            "tab=$tabId msg=$message gen=${tab?.pageLoadGeneration} vis=${tab?.loadingOverlayVisible} " +
+                "prog=${tab?.loadingProgress} started=${tab?.loadingStartedAtMs} " +
+                "lastSignal=${tab?.loadingLastSignalAtMs} selected=${selectedTabId == tabId} url=$url"
+        )
     }
 
     private fun refreshLoadingOverlayForSelectedTab() {

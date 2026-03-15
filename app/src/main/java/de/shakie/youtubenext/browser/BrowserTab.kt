@@ -17,5 +17,6 @@ data class BrowserTab(
     var loadingOverlayVisible: Boolean = false,
     var loadingProgress: Int = 0,
     var loadingStartedAtMs: Long = 0L,
-    var loadingLastSignalAtMs: Long = 0L
+    var loadingLastSignalAtMs: Long = 0L,
+    var loadingProgressLogBucket: Int = -1
 )

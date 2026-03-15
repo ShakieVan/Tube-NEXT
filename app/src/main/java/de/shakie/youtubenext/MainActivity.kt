@@ -42,6 +42,7 @@ import de.shakie.youtubenext.tabs.TabPersistence
 import de.shakie.youtubenext.tabs.TabSession
 import de.shakie.youtubenext.ui.TabOverviewAdapter
 import de.shakie.youtubenext.ui.TabOverviewItem
+import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
     private lateinit var toolbar: MaterialToolbar
@@ -836,8 +837,88 @@ class MainActivity : AppCompatActivity() {
             val currentUrl = currentTab.webView.url ?: currentTab.url
             if (!isWatchYouTubeUrl(currentUrl)) return@postDelayed
             stabilizeYouTubeViewport(tabId, currentUrl)
-            completeTabLoading(tabId, pageLoadGeneration)
+            waitForWatchQuietAndComplete(tabId, generation, pageLoadGeneration, attempt = 0)
         }, WATCH_VIEWPORT_STABILIZE_DELAY_MS)
+    }
+
+    private fun waitForWatchQuietAndComplete(
+        tabId: String,
+        watchGeneration: Long,
+        pageLoadGeneration: Long,
+        attempt: Int
+    ) {
+        val tab = browserTabs[tabId] ?: return
+        if (tab.watchStabilizationGeneration != watchGeneration) return
+        val currentUrl = tab.webView.url ?: tab.url
+        if (!isWatchYouTubeUrl(currentUrl)) {
+            completeTabLoading(tabId, pageLoadGeneration)
+            return
+        }
+        tab.webView.evaluateJavascript(
+            """
+            (function() {
+              if (!window.__ytNextLayoutProbe) {
+                window.__ytNextLayoutProbe = { lastMutationAt: Date.now() };
+                const target = document.body || document.documentElement;
+                if (target) {
+                  const observer = new MutationObserver(function() {
+                    window.__ytNextLayoutProbe.lastMutationAt = Date.now();
+                  });
+                  observer.observe(target, {
+                    childList: true,
+                    subtree: true,
+                    attributes: true
+                  });
+                  window.__ytNextLayoutProbe.observer = observer;
+                }
+              }
+              const probe = window.__ytNextLayoutProbe;
+              const quietMs = Date.now() - (probe.lastMutationAt || Date.now());
+              const player =
+                document.querySelector('#movie_player') ||
+                document.querySelector('.html5-video-player') ||
+                document.querySelector('#player');
+              const rect = player ? player.getBoundingClientRect() : null;
+              const viewportWidth = Math.min(
+                window.innerWidth || 0,
+                document.documentElement ? document.documentElement.clientWidth : window.innerWidth || 0
+              );
+              return JSON.stringify({
+                quietMs: quietMs,
+                playerPresent: !!player,
+                playerX: rect ? rect.x : null,
+                playerRight: rect ? rect.right : null,
+                viewportWidth: viewportWidth
+              });
+            })();
+            """.trimIndent()
+        ) { raw ->
+            val current = browserTabs[tabId] ?: return@evaluateJavascript
+            if (current.watchStabilizationGeneration != watchGeneration) return@evaluateJavascript
+            val settled = isWatchLayoutSettled(raw)
+            if (settled || attempt >= WATCH_QUIET_MAX_ATTEMPTS) {
+                completeTabLoading(tabId, pageLoadGeneration)
+                return@evaluateJavascript
+            }
+            current.webView.postDelayed({
+                waitForWatchQuietAndComplete(tabId, watchGeneration, pageLoadGeneration, attempt + 1)
+            }, WATCH_QUIET_RETRY_DELAY_MS)
+        }
+    }
+
+    private fun isWatchLayoutSettled(raw: String?): Boolean {
+        if (raw.isNullOrBlank() || raw == "null") return false
+        val json = runCatching { JSONObject(raw) }.getOrNull() ?: return false
+        val quietMs = json.optDouble("quietMs", 0.0)
+        val playerPresent = json.optBoolean("playerPresent", false)
+        val playerX = json.optDouble("playerX", Double.NaN)
+        val playerRight = json.optDouble("playerRight", Double.NaN)
+        val viewportWidth = json.optDouble("viewportWidth", Double.NaN)
+        if (!playerPresent || playerX.isNaN() || playerRight.isNaN() || viewportWidth.isNaN()) {
+            return false
+        }
+        val geometryStable = kotlin.math.abs(playerX) <= 2.0 && playerRight <= viewportWidth + 2.0
+        return quietMs >= WATCH_QUIET_REQUIRED_MS && geometryStable
     }
 
     private fun onTabMainNavigationStarted(tabId: String) {
@@ -1352,5 +1433,8 @@ class MainActivity : AppCompatActivity() {
         private const val MAX_TAB_LABEL_LENGTH = 24
         private const val WATCH_VIEWPORT_STABILIZE_DELAY_MS = 1000L
         private const val NON_WATCH_OVERLAY_HIDE_DELAY_MS = 120L
+        private const val WATCH_QUIET_REQUIRED_MS = 650.0
+        private const val WATCH_QUIET_RETRY_DELAY_MS = 180L
+        private const val WATCH_QUIET_MAX_ATTEMPTS = 12
     }
 }

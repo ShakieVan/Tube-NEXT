@@ -1098,6 +1098,8 @@ class MainActivity : AppCompatActivity() {
         var startTranslationX = 0f
         var startTranslationY = 0f
         var isPanning = false
+        var gestureCaptured = false
+        var cancelSent = false
         val touchSlop = ViewConfiguration.get(this).scaledTouchSlop.toFloat()
 
         val detector = ScaleGestureDetector(
@@ -1130,12 +1132,22 @@ class MainActivity : AppCompatActivity() {
                     startTranslationX = landscapeVideoTranslationX
                     startTranslationY = landscapeVideoTranslationY
                     isPanning = false
+                    gestureCaptured = false
+                    cancelSent = false
                     false
                 }
 
                 MotionEvent.ACTION_MOVE -> {
-                    if (event.pointerCount > 1) {
-                        isPanning = false
+                    if (event.pointerCount > 1 || detector.isInProgress) {
+                        if (!cancelSent) {
+                            MotionEvent.obtain(event).also { cancelEvent ->
+                                cancelEvent.action = MotionEvent.ACTION_CANCEL
+                                webView.onTouchEvent(cancelEvent)
+                                cancelEvent.recycle()
+                            }
+                            cancelSent = true
+                        }
+                        gestureCaptured = true
                         return@setOnTouchListener true
                     }
                     if (landscapeVideoScale <= 1.01f) {
@@ -1149,12 +1161,34 @@ class MainActivity : AppCompatActivity() {
                         }
                         isPanning = true
                     }
+                    if (!cancelSent) {
+                        MotionEvent.obtain(event).also { cancelEvent ->
+                            cancelEvent.action = MotionEvent.ACTION_CANCEL
+                            webView.onTouchEvent(cancelEvent)
+                            cancelEvent.recycle()
+                        }
+                        cancelSent = true
+                    }
+                    gestureCaptured = true
                     val maxX = ((landscapeVideoScale - 1f) * webView.width) / 2f
                     val maxY = ((landscapeVideoScale - 1f) * webView.height) / 2f
                     landscapeVideoTranslationX = (startTranslationX + dx).coerceIn(-maxX, maxX)
                     landscapeVideoTranslationY = (startTranslationY + dy).coerceIn(-maxY, maxY)
                     webView.translationX = landscapeVideoTranslationX
                     webView.translationY = landscapeVideoTranslationY
+                    true
+                }
+
+                MotionEvent.ACTION_POINTER_DOWN -> {
+                    if (!cancelSent) {
+                        MotionEvent.obtain(event).also { cancelEvent ->
+                            cancelEvent.action = MotionEvent.ACTION_CANCEL
+                            webView.onTouchEvent(cancelEvent)
+                            cancelEvent.recycle()
+                        }
+                        cancelSent = true
+                    }
+                    gestureCaptured = true
                     true
                 }
 
@@ -1168,12 +1202,14 @@ class MainActivity : AppCompatActivity() {
                         webView.translationX = 0f
                         webView.translationY = 0f
                     }
-                    val consumed = isPanning
+                    val consumed = isPanning || gestureCaptured
                     isPanning = false
+                    gestureCaptured = false
+                    cancelSent = false
                     consumed
                 }
 
-                else -> event.pointerCount > 1
+                else -> gestureCaptured || event.pointerCount > 1
             }
         }
     }

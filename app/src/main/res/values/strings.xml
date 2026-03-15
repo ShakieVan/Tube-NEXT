@@ -14,4 +14,7 @@
     <string name="tab_switcher_title">%1$d Tabs</string>
     <string name="tab_switcher_button">Tabs</string>
     <string name="url_copied">Link kopiert</string>
+    <string name="tab_overview_title">Tabs</string>
+    <string name="tab_overview_close">Tab-Uebersicht schliessen</string>
+    <string name="tab_overview_close_others">Andere Tabs schliessen</string>
 </resources>

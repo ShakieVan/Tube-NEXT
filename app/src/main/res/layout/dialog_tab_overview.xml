@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/colorSurface"
+    android:orientation="vertical"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingEnd="8dp">
+
+        <TextView
+            android:id="@+id/tabOverviewTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/tab_overview_title"
+            android:textColor="?attr/colorOnSurface"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/tabOverviewNewTab"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/menu_new_tab"
+            android:padding="8dp"
+            android:src="@android:drawable/ic_input_add"
+            app:tint="?attr/colorOnSurface" />
+
+        <ImageButton
+            android:id="@+id/tabOverviewDuplicateCurrent"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/menu_duplicate_tab"
+            android:padding="8dp"
+            android:src="@drawable/ic_tabs_overview"
+            app:tint="?attr/colorOnSurface" />
+
+        <ImageButton
+            android:id="@+id/tabOverviewCloseOthers"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/tab_overview_close_others"
+            android:padding="8dp"
+            android:src="@drawable/ic_tabs_close_others" />
+
+        <ImageButton
+            android:id="@+id/tabOverviewClose"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/tab_overview_close"
+            android:padding="8dp"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            app:tint="?attr/colorOnSurface" />
+    </LinearLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/tabOverviewList"
+        android:layout_width="match_parent"
+        android:layout_height="420dp"
+        android:clipToPadding="false"
+        android:paddingTop="4dp"
+        android:paddingBottom="8dp" />
+</LinearLayout>

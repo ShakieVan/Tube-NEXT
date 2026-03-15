@@ -56,3 +56,33 @@ Status: `umgesetzt`
 2. Tab-Anzahl-Badge zaehlt korrekt bei Neu/Schliessen/Duplizieren.
 3. Fullscreen-Video weiterhin funktionsfaehig.
 4. Watch-Navigation und Back-Verlauf unveraendert stabil.
+
+## Block C: Tab-Manager (Liste + Vorschau + Header-Piktogramme)
+Status: `umgesetzt`
+
+### Umgesetzt
+- Bottom-Sheet-Tab-Manager statt einfachem Dialog.
+- Tab-Liste mit:
+  - Vorschau links (oberer Seitenbereich)
+  - Titel rechts daneben
+  - `X` zum Schliessen ganz rechts
+- Klick auf Tab wechselt den Tab, **Dialog bleibt offen**.
+- Aktiver Tab wird dezent gruen markiert.
+- Kopfzeile des Tab-Managers mit Piktogramm-Buttons:
+  - `+` fuer neuer Tab
+  - ueberlappende Rechtecke fuer Duplizieren
+  - Close-Others-Icon mit rotem Hinterelement und kleinem `x`
+
+### Nicht enthalten (absichtlich)
+- Keine Overlay/Settle-/Watch-Layout-Erweiterungen
+- Kein Eingriff in Fullscreen/CustomView-Handling
+
+### Test-Checkliste (manuell)
+1. Tab-Manager per Kopfzeilen-Button oeffnen.
+2. Tabs in Liste sehen (Preview + Titel + `X`).
+3. Auf Tabs klicken und schnell hin-/herschalten: Dialog bleibt offen, aktiver Tab markiert.
+4. Kopf-Buttons pruefen:
+   - `+` erstellt Tab
+   - Duplizieren dupliziert aktiven Tab
+   - Andere Tabs schliessen laesst nur aktiven Tab uebrig
+5. Danach Watch + Fullscreen erneut pruefen.

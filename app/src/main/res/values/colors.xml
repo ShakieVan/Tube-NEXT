@@ -4,4 +4,5 @@
     <color name="yt_on_surface">#FFFFFF</color>
     <color name="yt_primary">#FF0000</color>
     <color name="yt_on_primary">#FFFFFF</color>
+    <color name="yt_tab_active">#22392B</color>
 </resources>

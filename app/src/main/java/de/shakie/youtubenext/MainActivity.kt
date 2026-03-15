@@ -6,6 +6,8 @@ import android.content.ClipboardManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.res.Configuration
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -22,7 +24,9 @@ import android.widget.TextView
 import androidx.core.content.getSystemService
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
@@ -34,6 +38,8 @@ import de.shakie.youtubenext.browser.YouTubeWebViewClient
 import de.shakie.youtubenext.tabs.TabManager
 import de.shakie.youtubenext.tabs.TabPersistence
 import de.shakie.youtubenext.tabs.TabSession
+import de.shakie.youtubenext.ui.TabOverviewAdapter
+import de.shakie.youtubenext.ui.TabOverviewItem
 
 class MainActivity : AppCompatActivity() {
     private lateinit var toolbar: MaterialToolbar
@@ -124,7 +130,7 @@ class MainActivity : AppCompatActivity() {
             currentTab()?.webView?.reload()
         }
         tabSwitcherButton.setOnClickListener {
-            showSimpleTabSwitcher()
+            showTabOverview()
         }
         toolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
@@ -353,29 +359,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun closeCurrentTab() {
         val tabId = selectedTabId ?: return
-        val tab = browserTabs.remove(tabId) ?: return
-        webViewContainer.removeView(tab.webView)
-        tab.webView.stopLoading()
-        tab.webView.destroy()
-
-        val nextTabId = tabManager.close(tabId)
-        if (browserTabs.isEmpty()) {
-            createAndSelectTab(DEFAULT_URL)
-            return
-        }
-        syncTabLayout()
-        if (nextTabId != null) {
-            selectTab(nextTabId, persistSelection = false)
-        }
-        Snackbar.make(webViewContainer, R.string.tab_closed_message, Snackbar.LENGTH_SHORT).show()
+        closeTabById(tabId)
     }
 
     private fun duplicateCurrentTab() {
         val currentId = selectedTabId ?: return
-        val duplicatedSession = tabManager.duplicate(currentId) ?: return
-        createBrowserTab(duplicatedSession)
-        syncTabLayout()
-        selectTab(duplicatedSession.id, persistSelection = false)
+        duplicateTabById(currentId)
     }
 
     private fun loadInCurrentTab(url: String) {
@@ -460,32 +449,111 @@ class MainActivity : AppCompatActivity() {
         urlTextView.text = current?.url?.takeIf { it.isNotBlank() }?.let(::formatToolbarUrl).orEmpty()
     }
 
-    private fun showSimpleTabSwitcher() {
+    private fun closeTabById(tabId: String, showMessage: Boolean = true) {
+        val tab = browserTabs.remove(tabId) ?: return
+        webViewContainer.removeView(tab.webView)
+        tab.webView.stopLoading()
+        tab.webView.destroy()
+
+        val nextTabId = tabManager.close(tabId)
+        if (browserTabs.isEmpty()) {
+            createAndSelectTab(DEFAULT_URL)
+            return
+        }
+        syncTabLayout()
+        if (nextTabId != null) {
+            selectTab(nextTabId, persistSelection = false)
+        }
+        if (showMessage) {
+            Snackbar.make(webViewContainer, R.string.tab_closed_message, Snackbar.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun duplicateTabById(tabId: String) {
+        val duplicatedSession = tabManager.duplicate(tabId) ?: return
+        createBrowserTab(duplicatedSession)
+        syncTabLayout()
+        selectTab(duplicatedSession.id, persistSelection = false)
+    }
+
+    private fun showTabOverview() {
+        val dialog = BottomSheetDialog(this)
+        val content = layoutInflater.inflate(R.layout.dialog_tab_overview, null)
+        val recyclerView =
+            content.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.tabOverviewList)
+        val title = content.findViewById<TextView>(R.id.tabOverviewTitle)
+        val newTabButton = content.findViewById<ImageButton>(R.id.tabOverviewNewTab)
+        val duplicateCurrentButton = content.findViewById<ImageButton>(R.id.tabOverviewDuplicateCurrent)
+        val closeOthersButton = content.findViewById<ImageButton>(R.id.tabOverviewCloseOthers)
+        val closeButton = content.findViewById<ImageButton>(R.id.tabOverviewClose)
+
+        lateinit var adapter: TabOverviewAdapter
+        adapter = TabOverviewAdapter(
+            onTabClick = { tabId ->
+                selectTab(tabId)
+                refreshTabOverview(adapter, title)
+            },
+            onTabClose = { tabId ->
+                closeTabById(tabId)
+                refreshTabOverview(adapter, title)
+            }
+        )
+        recyclerView.layoutManager = LinearLayoutManager(this)
+        recyclerView.adapter = adapter
+
+        closeButton.setOnClickListener { dialog.dismiss() }
+        newTabButton.setOnClickListener {
+            createAndSelectTab(DEFAULT_URL)
+            refreshTabOverview(adapter, title)
+        }
+        duplicateCurrentButton.setOnClickListener {
+            currentTab()?.id?.let(::duplicateTabById)
+            refreshTabOverview(adapter, title)
+        }
+        closeOthersButton.setOnClickListener {
+            val keepId = selectedTabId ?: return@setOnClickListener
+            tabManager.all()
+                .map { it.id }
+                .filter { it != keepId }
+                .forEach { closeTabById(it, showMessage = false) }
+            refreshTabOverview(adapter, title)
+        }
+
+        dialog.setContentView(content)
+        refreshTabOverview(adapter, title)
+        dialog.show()
+    }
+
+    private fun refreshTabOverview(adapter: TabOverviewAdapter, titleView: TextView) {
         val sessions = tabManager.all()
-        val items = mutableListOf<String>()
-        val itemTabIds = mutableListOf<String?>()
-        items += getString(R.string.menu_new_tab)
-        itemTabIds += null
-        sessions.forEach { session ->
-            val label = session.title.ifBlank {
+        titleView.text = getString(R.string.tab_switcher_title, sessions.size)
+        val items = sessions.map { session ->
+            val tab = browserTabs[session.id]
+            val displayTitle = session.title.ifBlank {
                 session.url.takeIf { it.isNotBlank() }?.let(::formatToolbarUrl)
                     ?: getString(R.string.default_tab_title)
             }
-            val prefix = if (session.id == selectedTabId) "\u2022 " else ""
-            items += (prefix + label).take(64)
-            itemTabIds += session.id
+            TabOverviewItem(
+                id = session.id,
+                title = displayTitle,
+                preview = tab?.let(::captureTabPreview),
+                isActive = session.id == selectedTabId
+            )
         }
-        MaterialAlertDialogBuilder(this)
-            .setTitle(getString(R.string.tab_switcher_title, sessions.size))
-            .setItems(items.toTypedArray()) { _, which ->
-                val tabId = itemTabIds[which]
-                if (tabId == null) {
-                    createAndSelectTab(DEFAULT_URL)
-                } else {
-                    selectTab(tabId)
-                }
-            }
-            .show()
+        adapter.submitList(items)
+    }
+
+    private fun captureTabPreview(tab: BrowserTab): Bitmap? {
+        val width = tab.webView.width.takeIf { it > 0 } ?: return null
+        val height = tab.webView.height.takeIf { it > 0 } ?: return null
+        val previewWidth = 192
+        val previewHeight = 108
+        val bitmap = Bitmap.createBitmap(previewWidth, previewHeight, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val scale = previewWidth / width.toFloat()
+        canvas.scale(scale, scale)
+        tab.webView.draw(canvas)
+        return bitmap
     }
 
     private fun formatToolbarUrl(url: String): String {

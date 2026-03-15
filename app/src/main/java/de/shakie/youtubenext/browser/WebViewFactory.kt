@@ -13,6 +13,7 @@ import java.util.WeakHashMap
 
 object WebViewFactory {
     private const val DEFAULT_URL = "https://www.youtube.com/"
+    private const val YOUTUBE_PREF_DARK = "f6=400"
     private val baseUserAgents = WeakHashMap<WebView, String>()
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -41,6 +42,7 @@ object WebViewFactory {
         CookieManager.getInstance().apply {
             setAcceptCookie(true)
             setAcceptThirdPartyCookies(webView, true)
+            applyYouTubeDarkThemePreference(this)
             flush()
         }
 
@@ -51,7 +53,7 @@ object WebViewFactory {
             WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, false)
         }
 
-        webView.setBackgroundColor(Color.WHITE)
+        webView.setBackgroundColor(Color.BLACK)
         return webView
     }
 
@@ -82,5 +84,31 @@ object WebViewFactory {
         return existing
             .replace("Mobile", "", ignoreCase = true)
             .replace("Android", "X11; Linux x86_64", ignoreCase = true)
+    }
+
+    private fun applyYouTubeDarkThemePreference(cookieManager: CookieManager) {
+        listOf("https://www.youtube.com", "https://m.youtube.com").forEach { url ->
+            val mergedPref = mergeYouTubePref(cookieManager.getCookie(url))
+            cookieManager.setCookie(
+                url,
+                "PREF=$mergedPref; Path=/; Domain=.youtube.com; Secure"
+            )
+        }
+    }
+
+    private fun mergeYouTubePref(cookieHeader: String?): String {
+        val existingPref = cookieHeader
+            ?.split(";")
+            ?.map { it.trim() }
+            ?.firstOrNull { it.startsWith("PREF=") }
+            ?.removePrefix("PREF=")
+            .orEmpty()
+
+        val parts = existingPref
+            .split("&")
+            .filter { it.isNotBlank() && !it.startsWith("f6=") }
+            .toMutableList()
+        parts.add(YOUTUBE_PREF_DARK)
+        return parts.joinToString("&")
     }
 }

@@ -110,3 +110,17 @@ Status: `umgesetzt`
 - Interne YouTube-URL-Normalisierung fuegt `app=desktop` nicht mehr hinzu.
 - Vorhandene `app`- und `persist_app`-Parameter werden entfernt.
 - Watch/Desktop bleibt ueber WebView-Modus (User-Agent) gesteuert.
+
+## Block F: Punkt 8 (Dark Mode)
+Status: `umgesetzt`
+
+### Umgesetzt
+- YouTube-Dark-Preference via `PREF`-Cookie fuer:
+  - `https://www.youtube.com`
+  - `https://m.youtube.com`
+- Cookie-Merge behaelt bestehende PREF-Teile und setzt/ersetzt nur `f6=400`.
+- WebView-Hintergrund auf schwarz gesetzt, um helle Zwischenframes zu reduzieren.
+
+### Nicht enthalten (absichtlich)
+- Keine CSS-/DOM-Injections fuer Dark Mode
+- Kein aggressives Forcen per Algorithmic-Darkening

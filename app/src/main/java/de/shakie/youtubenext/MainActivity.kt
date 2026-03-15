@@ -937,6 +937,7 @@ class MainActivity : AppCompatActivity() {
             tab.loadingStartedAtMs = now
         }
         val generation = tab.pageLoadGeneration
+        tab.loadingLastSignalAtMs = now
         tab.loadingOverlayVisible = true
         tab.loadingProgress = 8
         if (selectedTabId == tabId) {
@@ -951,10 +952,12 @@ class MainActivity : AppCompatActivity() {
             if (elapsed < LOADING_OVERLAY_FAILSAFE_MS) return@postDelayed
             completeTabLoading(tabId, generation)
         }, LOADING_OVERLAY_FAILSAFE_MS)
+        scheduleOverlayStallWatchdog(tabId, generation)
     }
 
     private fun onTabProgress(tabId: String, progress: Int) {
         val tab = browserTabs[tabId] ?: return
+        tab.loadingLastSignalAtMs = SystemClock.uptimeMillis()
         if (progress in 1..99) {
             tab.loadingOverlayVisible = true
             tab.loadingProgress = progress.coerceAtLeast(8)
@@ -977,9 +980,26 @@ class MainActivity : AppCompatActivity() {
         if (tab.pageLoadGeneration != targetGeneration) return
         tab.loadingOverlayVisible = false
         tab.loadingStartedAtMs = 0L
+        tab.loadingLastSignalAtMs = 0L
         if (selectedTabId == tabId) {
             hideLoadingOverlay()
         }
+    }
+
+    private fun scheduleOverlayStallWatchdog(tabId: String, generation: Long) {
+        val tab = browserTabs[tabId] ?: return
+        tab.webView.postDelayed({
+            val currentTab = browserTabs[tabId] ?: return@postDelayed
+            if (currentTab.pageLoadGeneration != generation) return@postDelayed
+            if (!currentTab.loadingOverlayVisible) return@postDelayed
+            val now = SystemClock.uptimeMillis()
+            val lastSignal = currentTab.loadingLastSignalAtMs
+            if (lastSignal > 0L && now - lastSignal >= LOADING_OVERLAY_STALL_TIMEOUT_MS) {
+                completeTabLoading(tabId, generation)
+                return@postDelayed
+            }
+            scheduleOverlayStallWatchdog(tabId, generation)
+        }, LOADING_OVERLAY_WATCHDOG_INTERVAL_MS)
     }
 
     private fun refreshLoadingOverlayForSelectedTab() {
@@ -1460,5 +1480,7 @@ class MainActivity : AppCompatActivity() {
         private const val WATCH_QUIET_RETRY_DELAY_MS = 180L
         private const val WATCH_QUIET_MAX_ATTEMPTS = 12
         private const val LOADING_OVERLAY_FAILSAFE_MS = 15000L
+        private const val LOADING_OVERLAY_STALL_TIMEOUT_MS = 6500L
+        private const val LOADING_OVERLAY_WATCHDOG_INTERVAL_MS = 900L
     }
 }

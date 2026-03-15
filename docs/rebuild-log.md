@@ -34,3 +34,25 @@ Status: `in RC1 bereits vorhanden` (kein Code-Delta zu RC2 in diesen Kernpunkten
 - Nur wenn Login-Session aus alten Builds sichtbar „haengt“, einmalig:
   1. Android App-Info -> Speicher -> Cache leeren.
   2. **Storage nur als letzte Option**, da Login/Cookies verloren gehen.
+
+## Block B: Punkt 5 minimal (kompakte Kopfzeile), Punkt 6 vorerst ausgesetzt
+Status: `umgesetzt`
+
+### Umgesetzt
+- Einzeilige Kopfzeile mit:
+  - URL-Text (nur Anzeige)
+  - Reload-Button
+  - Tab-Button mit Tab-Anzahl-Badge
+- Sichtbare `TabLayout`-Leiste bleibt ausgeblendet.
+- Tab-Button oeffnet aktuell einen einfachen Tab-Dialog (Neuer Tab + Tab-Auswahl), **kein** Bottom-Sheet/Preview-Manager.
+
+### Nicht enthalten (absichtlich)
+- Kein Tab-Overview-Bottom-Sheet
+- Keine Tab-Previews / Multi-Select / Reorder-UI
+- Keine Overlay/Settle-Erweiterungen
+
+### Test-Checkliste (manuell)
+1. Kopfzeile ist einzeilig; URL sichtbar; Reload und Tab-Button funktionieren.
+2. Tab-Anzahl-Badge zaehlt korrekt bei Neu/Schliessen/Duplizieren.
+3. Fullscreen-Video weiterhin funktionsfaehig.
+4. Watch-Navigation und Back-Verlauf unveraendert stabil.

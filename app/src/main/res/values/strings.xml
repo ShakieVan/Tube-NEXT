@@ -11,4 +11,7 @@
     <string name="link_open_new">In neuem Tab</string>
     <string name="tab_closed_message">Tab wurde geschlossen</string>
     <string name="page_load_error">Seite konnte nicht geladen werden</string>
+    <string name="tab_switcher_title">%1$d Tabs</string>
+    <string name="tab_switcher_button">Tabs</string>
+    <string name="url_copied">Link kopiert</string>
 </resources>

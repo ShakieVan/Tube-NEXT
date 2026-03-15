@@ -17,6 +17,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.FrameLayout
+import android.widget.ImageButton
+import android.widget.TextView
 import androidx.core.content.getSystemService
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
@@ -36,6 +38,10 @@ import de.shakie.youtubenext.tabs.TabSession
 class MainActivity : AppCompatActivity() {
     private lateinit var toolbar: MaterialToolbar
     private lateinit var tabLayout: TabLayout
+    private lateinit var urlTextView: TextView
+    private lateinit var reloadButton: ImageButton
+    private lateinit var tabSwitcherButton: FrameLayout
+    private lateinit var tabCountBadge: TextView
     private lateinit var webViewContainer: FrameLayout
     private lateinit var fullscreenContainer: FrameLayout
     private lateinit var tabManager: TabManager
@@ -54,6 +60,10 @@ class MainActivity : AppCompatActivity() {
 
         toolbar = findViewById(R.id.toolbar)
         tabLayout = findViewById(R.id.tabLayout)
+        urlTextView = findViewById(R.id.urlText)
+        reloadButton = findViewById(R.id.reloadButton)
+        tabSwitcherButton = findViewById(R.id.tabSwitcherButton)
+        tabCountBadge = findViewById(R.id.tabCountBadge)
         webViewContainer = findViewById(R.id.webViewContainer)
         fullscreenContainer = findViewById(R.id.fullscreenContainer)
         tabManager = TabManager(TabPersistence(this))
@@ -109,6 +119,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupToolbar() {
         toolbar.title = null
+        toolbar.subtitle = null
+        reloadButton.setOnClickListener {
+            currentTab()?.webView?.reload()
+        }
+        tabSwitcherButton.setOnClickListener {
+            showSimpleTabSwitcher()
+        }
         toolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 R.id.action_new_tab -> {
@@ -370,6 +387,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun syncTabLayout() {
         val sessions = tabManager.all()
+        tabCountBadge.text = sessions.size.coerceAtMost(99).toString()
         tabSelectionUpdateInProgress = true
         tabLayout.removeAllTabs()
         sessions.forEach { session ->
@@ -439,7 +457,35 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateToolbarState() {
         val current = currentTab()
-        toolbar.subtitle = current?.url?.takeIf { it.isNotBlank() }?.let(::formatToolbarUrl)
+        urlTextView.text = current?.url?.takeIf { it.isNotBlank() }?.let(::formatToolbarUrl).orEmpty()
+    }
+
+    private fun showSimpleTabSwitcher() {
+        val sessions = tabManager.all()
+        val items = mutableListOf<String>()
+        val itemTabIds = mutableListOf<String?>()
+        items += getString(R.string.menu_new_tab)
+        itemTabIds += null
+        sessions.forEach { session ->
+            val label = session.title.ifBlank {
+                session.url.takeIf { it.isNotBlank() }?.let(::formatToolbarUrl)
+                    ?: getString(R.string.default_tab_title)
+            }
+            val prefix = if (session.id == selectedTabId) "\u2022 " else ""
+            items += (prefix + label).take(64)
+            itemTabIds += session.id
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.tab_switcher_title, sessions.size))
+            .setItems(items.toTypedArray()) { _, which ->
+                val tabId = itemTabIds[which]
+                if (tabId == null) {
+                    createAndSelectTab(DEFAULT_URL)
+                } else {
+                    selectTab(tabId)
+                }
+            }
+            .show()
     }
 
     private fun formatToolbarUrl(url: String): String {
@@ -664,7 +710,7 @@ class MainActivity : AppCompatActivity() {
             isCurrentTabWatchPage()
         val hideChrome = isCustomFullscreen || landscapeVideoModeActive || isLandscapeWatch
         toolbar.visibility = if (hideChrome) View.GONE else View.VISIBLE
-        tabLayout.visibility = if (hideChrome) View.GONE else View.VISIBLE
+        tabLayout.visibility = View.GONE
     }
 
     private fun isCurrentTabWatchPage(): Boolean {
@@ -1080,7 +1126,7 @@ class MainActivity : AppCompatActivity() {
     private fun copyToClipboard(url: String) {
         val clipboard = getSystemService<ClipboardManager>() ?: return
         clipboard.setPrimaryClip(ClipData.newPlainText("url", url))
-        Snackbar.make(webViewContainer, "Link kopiert", Snackbar.LENGTH_SHORT).show()
+        Snackbar.make(webViewContainer, R.string.url_copied, Snackbar.LENGTH_SHORT).show()
     }
 
     private fun openExternalUrl(uri: Uri) {

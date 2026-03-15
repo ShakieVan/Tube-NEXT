@@ -17,4 +17,7 @@
     <string name="tab_overview_title">Tabs</string>
     <string name="tab_overview_close">Tab-Uebersicht schliessen</string>
     <string name="tab_overview_close_others">Andere Tabs schliessen</string>
+    <string name="url_edit_title">URL bearbeiten</string>
+    <string name="url_edit_hint">Adresse eingeben</string>
+    <string name="action_open">Oeffnen</string>
 </resources>

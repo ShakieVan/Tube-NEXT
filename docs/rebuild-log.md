@@ -86,3 +86,19 @@ Status: `umgesetzt`
    - Duplizieren dupliziert aktiven Tab
    - Andere Tabs schliessen laesst nur aktiven Tab uebrig
 5. Danach Watch + Fullscreen erneut pruefen.
+
+## Block D: Punkt 7 (URL kopieren / editieren)
+Status: `umgesetzt`
+
+### Umgesetzt
+- Kurzklick auf URL in der Kopfzeile:
+  - kopiert aktuelle URL in die Zwischenablage
+  - bestaetigt per Snackbar
+- Langklick auf URL:
+  - oeffnet Dialog mit vorausgefuellter URL
+  - bestaetigtes Eingabefeld wird im aktuellen Tab geladen
+
+### Test-Checkliste (manuell)
+1. Kurzklick auf URL -> Snackbar "Link kopiert".
+2. Langklick auf URL -> Dialog erscheint mit aktueller URL.
+3. URL aendern und "Oeffnen" -> Seite laedt im aktuellen Tab.

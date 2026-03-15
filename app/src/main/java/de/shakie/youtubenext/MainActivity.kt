@@ -18,6 +18,7 @@ import android.view.ViewConfiguration
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.TextView
@@ -131,6 +132,13 @@ class MainActivity : AppCompatActivity() {
         }
         tabSwitcherButton.setOnClickListener {
             showTabOverview()
+        }
+        urlTextView.setOnClickListener {
+            currentTab()?.url?.takeIf { it.isNotBlank() }?.let(::copyToClipboard)
+        }
+        urlTextView.setOnLongClickListener {
+            promptForUrlEdit()
+            true
         }
         toolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
@@ -568,6 +576,26 @@ class MainActivity : AppCompatActivity() {
                 append(uri.encodedQuery)
             }
         }
+    }
+
+    private fun promptForUrlEdit() {
+        val currentUrl = currentTab()?.url.orEmpty()
+        val input = EditText(this).apply {
+            hint = getString(R.string.url_edit_hint)
+            setText(currentUrl)
+            setSelection(text.length)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.url_edit_title)
+            .setView(input)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.action_open) { _, _ ->
+                val enteredUrl = input.text?.toString().orEmpty().trim()
+                if (enteredUrl.isNotBlank()) {
+                    loadInCurrentTab(enteredUrl)
+                }
+            }
+            .show()
     }
 
     private fun configureLongPressMenu(tab: BrowserTab) {

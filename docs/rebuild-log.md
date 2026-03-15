@@ -102,3 +102,11 @@ Status: `umgesetzt`
 1. Kurzklick auf URL -> Snackbar "Link kopiert".
 2. Langklick auf URL -> Dialog erscheint mit aktueller URL.
 3. URL aendern und "Oeffnen" -> Seite laedt im aktuellen Tab.
+
+## Block E: URL-Bereinigung ohne `app=desktop`
+Status: `umgesetzt`
+
+### Umgesetzt
+- Interne YouTube-URL-Normalisierung fuegt `app=desktop` nicht mehr hinzu.
+- Vorhandene `app`- und `persist_app`-Parameter werden entfernt.
+- Watch/Desktop bleibt ueber WebView-Modus (User-Agent) gesteuert.

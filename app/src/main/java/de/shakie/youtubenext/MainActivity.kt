@@ -271,8 +271,10 @@ class MainActivity : AppCompatActivity() {
             },
             onMainUrlUpdated = { url ->
                 applyBrowsingMode(session.id, url)
-                stabilizeYouTubeViewport(session.id, url)
                 updateTabState(session.id, newUrl = url)
+            },
+            onMainPageFinished = { url ->
+                scheduleWatchViewportStabilization(session.id, url)
             },
             onMainTitleUpdated = { title ->
                 updateTabState(session.id, newTitle = title)
@@ -812,7 +814,30 @@ class MainActivity : AppCompatActivity() {
     private fun isCurrentTabWatchPage(): Boolean {
         val tab = currentTab() ?: return false
         val url = tab.webView.url ?: tab.url
-        return url.contains("/watch")
+        return isWatchYouTubeUrl(url)
+    }
+
+    private fun isWatchYouTubeUrl(url: String): Boolean {
+        if (url.isBlank()) return false
+        val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return false
+        val host = uri.host?.lowercase().orEmpty()
+        if (!host.contains("youtube.com") && host != "youtu.be") return false
+        return host == "youtu.be" || uri.path.orEmpty().startsWith("/watch")
+    }
+
+    private fun scheduleWatchViewportStabilization(tabId: String, finishedUrl: String) {
+        val tab = browserTabs[tabId] ?: return
+        tab.watchStabilizationGeneration += 1
+        val generation = tab.watchStabilizationGeneration
+        if (!isWatchYouTubeUrl(finishedUrl)) return
+
+        tab.webView.postDelayed({
+            val currentTab = browserTabs[tabId] ?: return@postDelayed
+            if (currentTab.watchStabilizationGeneration != generation) return@postDelayed
+            val currentUrl = currentTab.webView.url ?: currentTab.url
+            if (!isWatchYouTubeUrl(currentUrl)) return@postDelayed
+            stabilizeYouTubeViewport(tabId, currentUrl)
+        }, WATCH_VIEWPORT_STABILIZE_DELAY_MS)
     }
 
     private fun applyBrowsingMode(tabId: String, url: String) {
@@ -1266,5 +1291,6 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val DEFAULT_URL = "https://www.youtube.com/"
         private const val MAX_TAB_LABEL_LENGTH = 24
+        private const val WATCH_VIEWPORT_STABILIZE_DELAY_MS = 1000L
     }
 }

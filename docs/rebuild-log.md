@@ -124,3 +124,17 @@ Status: `umgesetzt`
 ### Nicht enthalten (absichtlich)
 - Keine CSS-/DOM-Injections fuer Dark Mode
 - Kein aggressives Forcen per Algorithmic-Darkening
+
+## Block G: Watch-Seite nach `onPageFinished` verzoegert stabilisieren
+Status: `umgesetzt`
+
+### Umgesetzt
+- Watch-Viewport-Stabilisierung wird nicht mehr sofort bei URL-Update ausgefuehrt.
+- Neue Ausloesung:
+  - erst nach `onPageFinished`
+  - plus `1000ms` Wartezeit
+- Pro Tab wird ein kleiner Generation-Counter verwendet, damit aeltere Delays keine neuere Navigation ueberschreiben.
+
+### Ziel
+- Nachgeladene YouTube-Skripte bekommen Zeit, bevor die visuelle Korrektur greift.
+- Weniger abgeschnittene Pixel links/rechts im Watch-Layout.

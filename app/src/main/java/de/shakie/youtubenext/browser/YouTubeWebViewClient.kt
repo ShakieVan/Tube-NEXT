@@ -14,6 +14,7 @@ class YouTubeWebViewClient(
     private val normalizeInternalUrl: (String) -> String,
     private val onBeforeMainFrameNavigation: (String) -> Unit,
     private val onMainUrlUpdated: (String) -> Unit,
+    private val onMainPageFinished: (String) -> Unit,
     private val onMainTitleUpdated: (String) -> Unit,
     private val onViewportDebug: (String, String) -> Unit,
     private val onLoadError: () -> Unit
@@ -99,6 +100,7 @@ class YouTubeWebViewClient(
         val currentUrl = url ?: return
         view?.scrollTo(0, 0)
         onMainUrlUpdated(currentUrl)
+        onMainPageFinished(currentUrl)
         val title = view?.title.orEmpty()
         if (title.isNotBlank()) {
             onMainTitleUpdated(title)

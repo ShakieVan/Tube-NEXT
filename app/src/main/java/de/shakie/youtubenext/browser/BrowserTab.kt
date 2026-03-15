@@ -11,5 +11,6 @@ data class BrowserTab(
     var url: String = "",
     val navigationHistory: MutableList<String> = mutableListOf(),
     var historyIndex: Int = -1,
-    var pendingHistoryNavigation: Boolean = false
+    var pendingHistoryNavigation: Boolean = false,
+    var watchStabilizationGeneration: Long = 0L
 )

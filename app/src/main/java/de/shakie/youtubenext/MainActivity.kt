@@ -1057,33 +1057,27 @@ class MainActivity : AppCompatActivity() {
             }
         }
         if (shouldUseDesktopMode(url) && host == "m.youtube.com") {
-            return sanitizeYouTubeQuery(uri.buildUpon().authority("www.youtube.com").build(), keepDesktopApp = true)
-                .toString()
+            return sanitizeYouTubeQuery(uri.buildUpon().authority("www.youtube.com").build()).toString()
         }
         if (!shouldUseDesktopMode(url) && host == "www.youtube.com") {
-            return sanitizeYouTubeQuery(uri.buildUpon().authority("m.youtube.com").build(), keepDesktopApp = false)
-                .toString()
+            return sanitizeYouTubeQuery(uri.buildUpon().authority("m.youtube.com").build()).toString()
         }
         if (host.contains("youtube.com")) {
-            return sanitizeYouTubeQuery(uri, keepDesktopApp = isWatch).toString()
+            return sanitizeYouTubeQuery(uri).toString()
         }
         return url
     }
 
-    private fun sanitizeYouTubeQuery(uri: Uri, keepDesktopApp: Boolean): Uri {
+    private fun sanitizeYouTubeQuery(uri: Uri): Uri {
         return uri.buildUpon()
             .clearQuery()
             .apply {
                 uri.queryParameterNames.forEach { key ->
                     if (key == "persist_app") return@forEach
-                    if (key == "app" && !keepDesktopApp) return@forEach
+                    if (key == "app") return@forEach
                     uri.getQueryParameters(key).forEach { value ->
-                        if (key == "app" && keepDesktopApp && value != "desktop") return@forEach
                         appendQueryParameter(key, value)
                     }
-                }
-                if (keepDesktopApp && uri.getQueryParameter("app") != "desktop") {
-                    appendQueryParameter("app", "desktop")
                 }
             }
             .build()

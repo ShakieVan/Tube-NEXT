@@ -251,6 +251,8 @@ class MainActivity : AppCompatActivity() {
             normalizeInternalUrl = ::normalizeInternalYouTubeUrl,
             onBeforeMainFrameNavigation = { url ->
                 applyBrowsingMode(session.id, url)
+            },
+            onMainPageStarted = { _ ->
                 onTabMainNavigationStarted(session.id)
             },
             onMainUrlUpdated = { url ->
@@ -924,11 +926,18 @@ class MainActivity : AppCompatActivity() {
     private fun onTabMainNavigationStarted(tabId: String) {
         val tab = browserTabs[tabId] ?: return
         tab.pageLoadGeneration += 1
+        val generation = tab.pageLoadGeneration
         tab.loadingOverlayVisible = true
         tab.loadingProgress = 8
         if (selectedTabId == tabId) {
             showLoadingOverlay(tab.loadingProgress)
         }
+        tab.webView.postDelayed({
+            val currentTab = browserTabs[tabId] ?: return@postDelayed
+            if (currentTab.pageLoadGeneration != generation) return@postDelayed
+            if (!currentTab.loadingOverlayVisible) return@postDelayed
+            completeTabLoading(tabId, generation)
+        }, LOADING_OVERLAY_FAILSAFE_MS)
     }
 
     private fun onTabProgress(tabId: String, progress: Int) {
@@ -1436,5 +1445,6 @@ class MainActivity : AppCompatActivity() {
         private const val WATCH_QUIET_REQUIRED_MS = 650.0
         private const val WATCH_QUIET_RETRY_DELAY_MS = 180L
         private const val WATCH_QUIET_MAX_ATTEMPTS = 12
+        private const val LOADING_OVERLAY_FAILSAFE_MS = 15000L
     }
 }

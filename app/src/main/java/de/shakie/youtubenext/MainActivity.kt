@@ -931,9 +931,7 @@ class MainActivity : AppCompatActivity() {
     private fun onTabMainNavigationStarted(tabId: String) {
         val tab = browserTabs[tabId] ?: return
         val now = SystemClock.uptimeMillis()
-        val chainInProgress = tab.loadingOverlayVisible &&
-            tab.loadingStartedAtMs > 0L &&
-            now - tab.loadingStartedAtMs <= OVERLAY_REDIRECT_CHAIN_WINDOW_MS
+        val chainInProgress = tab.loadingOverlayVisible && tab.loadingStartedAtMs > 0L
         if (!chainInProgress) {
             tab.pageLoadGeneration += 1
             tab.loadingStartedAtMs = now
@@ -1462,6 +1460,5 @@ class MainActivity : AppCompatActivity() {
         private const val WATCH_QUIET_RETRY_DELAY_MS = 180L
         private const val WATCH_QUIET_MAX_ATTEMPTS = 12
         private const val LOADING_OVERLAY_FAILSAFE_MS = 15000L
-        private const val OVERLAY_REDIRECT_CHAIN_WINDOW_MS = 2500L
     }
 }

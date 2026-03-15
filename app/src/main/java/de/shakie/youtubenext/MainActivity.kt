@@ -845,7 +845,7 @@ class MainActivity : AppCompatActivity() {
         val generation = tab.watchStabilizationGeneration
         val pageLoadGeneration = tab.pageLoadGeneration
         if (!isWatchYouTubeUrl(finishedUrl)) {
-            scheduleNonWatchOverlayCompletion(tabId, pageLoadGeneration)
+            completeTabLoading(tabId, pageLoadGeneration)
             return
         }
 
@@ -885,20 +885,9 @@ class MainActivity : AppCompatActivity() {
                 showLoadingOverlay(tab.loadingProgress)
             }
             if (!isWatchYouTubeUrl(tab.webView.url ?: tab.url)) {
-                scheduleNonWatchOverlayCompletion(tabId, tab.pageLoadGeneration)
+                completeTabLoading(tabId, tab.pageLoadGeneration)
             }
         }
-    }
-
-    private fun scheduleNonWatchOverlayCompletion(tabId: String, generation: Long) {
-        val tab = browserTabs[tabId] ?: return
-        tab.webView.postDelayed({
-            val currentTab = browserTabs[tabId] ?: return@postDelayed
-            if (currentTab.pageLoadGeneration != generation) return@postDelayed
-            val currentUrl = currentTab.webView.url ?: currentTab.url
-            if (isWatchYouTubeUrl(currentUrl)) return@postDelayed
-            completeTabLoading(tabId, generation)
-        }, NON_WATCH_OVERLAY_HIDE_DELAY_MS)
     }
 
     private fun completeTabLoading(tabId: String, generation: Long?) {
@@ -907,7 +896,12 @@ class MainActivity : AppCompatActivity() {
         if (tab.pageLoadGeneration != targetGeneration) return
         tab.loadingOverlayVisible = false
         if (selectedTabId == tabId) {
-            hideLoadingOverlay()
+            loadingOverlay.postDelayed({
+                val currentTab = browserTabs[tabId] ?: return@postDelayed
+                if (currentTab.pageLoadGeneration != targetGeneration) return@postDelayed
+                if (currentTab.loadingOverlayVisible) return@postDelayed
+                hideLoadingOverlay()
+            }, OVERLAY_HIDE_DELAY_MS)
         }
     }
 
@@ -1384,6 +1378,6 @@ class MainActivity : AppCompatActivity() {
         private const val DEFAULT_URL = "https://www.youtube.com/"
         private const val MAX_TAB_LABEL_LENGTH = 24
         private const val WATCH_VIEWPORT_STABILIZE_DELAY_MS = 1000L
-        private const val NON_WATCH_OVERLAY_HIDE_DELAY_MS = 650L
+        private const val OVERLAY_HIDE_DELAY_MS = 2000L
     }
 }

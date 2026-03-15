@@ -1,145 +1,193 @@
-# AGENTS.md – YouTube App (Android)
+# AGENTS.md - YouTube-NEXT
 
-## Ziel
-Eine Android-App, die die **Desktop-Version von YouTube** in einer für **Touch optimierten** WebView darstellt, mit folgenden Funktionen:
-- **Fullscreen-Video mit Pinch-to-Zoom und "Tilt" des Gerätes in Querformat**
-- **Alle Features der Youtube Desktop-Browser-Version**
-  -- Kommentare schreiben, ändern, löschen
-  -- Audiospuren auswählen, wenn angeboten (z.B. für Übersetzungen)
-  -- Untertitel (incl. Übersetzungsmöglichkeit)
-  -- Videoqualität
-  -- Geschwindigkeit
-  -- Gleichbleibende Lautstärke
-- **Tabs** ähnlich dem Samsung Browser
-- **Automatisches Öffnen von YouTube-Links** in der App
-- **Login speichern**
-  -- dauerhaft eingeloggt bleiben
-  -- Multiple Accounts (Accounts zwischen denen man hin- und herschalten kann)
-  -- LoggedIn-Switch (Einfach zwischen "eingeloggtem" und "nicht eingeloggt" hin- und herschalten; wohlmöglich in Zusammenhang mit den "Multiple Accounts")
-- **Geringerer Akkuverbrauch** als die offizielle YouTube-App
+## Zweck
+Dieses Repository dient als Startpunkt fuer eine Android-App, die YouTube moeglichst nah an der Desktop-Erfahrung in einer touchfreundlichen App abbildet.
 
----
+Die App soll keine eigene Video-Plattform sein, sondern primaer eine robuste, tabfaehige WebView-basierte YouTube-App mit Fokus auf Bedienbarkeit, Persistenz und alltagstauglicher Performance.
 
-## Architektur
-- **Sprache:** Kotlin
-- **Min SDK:** 29 (Android 10.0)
-- **Target SDK:** 34+
-- **UI-Komponenten:** Android WebView + TabLayout + ViewPager2
-- **Speicher:** Persistente Cookies + DOM Storage
-- **Vollbild-Handling:** Pseudo-Fullscreen-Layer statt nativer Vollbildmodus
-- **Gestensteuerung:** Pinch-to-Zoom, Doppeltipp-Zoom
+## Produktziel
+Baue eine Android-App, die:
+- die YouTube-Desktop-Seite in einer WebView nutzt
+- fuer Touch-Bedienung und grosse Smartphone-Displays optimiert ist
+- mehrere Tabs wie ein mobiler Browser unterstuetzt
+- YouTube-Links direkt in der App oeffnen kann
+- Logins, Cookies und Sitzungen verlaesslich beibehaelt
+- im Videomodus moeglichst immersiv wirkt
 
----
+## Nicht-Ziele
+Folgendes soll nicht implementiert oder vorbereitet werden:
+- Umgehung von DRM
+- Download-Funktionen fuer YouTube-Inhalte
+- Ad-Blocking oder andere Eingriffe, die klar gegen YouTube-Richtlinien laufen
+- Reverse Engineering nativer YouTube-Player-Funktionen, wenn dieselben Daten nur ueber inoffizielle APIs verfuegbar waeren
 
-## Hauptmodule
-### 1. `MainActivity`
-- Initialisiert **WebView** und Tab-Manager
-- Implementiert Intent-Filter-Handler (YouTube-Links)
-- Steuert die Toolbar (Navigation, Tabs, Einstellungen)
+## Technische Leitplanken
+- Sprache: Kotlin
+- Plattform: Android
+- Min SDK: 29
+- Target SDK: aktuelle stabile Android-SDK-Version des Projekts
+- UI-Grundlage: WebView-basierte App mit eigener Tab-Verwaltung
+- Architektur: lieber einfach, testbar und modular als zu frueh komplex
 
-### 2. `CustomWebView`
-- Setzt **Desktop User-Agent**
-- Aktiviert:
-  - `JavaScriptEnabled`
-  - `DomStorageEnabled`
-  - `setAcceptThirdPartyCookies`
-  - `setMixedContentMode(ALWAYS_ALLOW)`
-- Behandelt **Pseudo-Fullscreen** und Gesten
-- Lädt Desktop-Version von YouTube
+Wenn spaetere Entscheidungen zu Konflikten fuehren, gelten diese Prioritaeten:
+1. Stabilitaet
+2. Login- und Sitzungs-Persistenz
+3. Gute Bedienbarkeit auf Touch-Geraeten
+4. Performance und Akkuverbrauch
+5. Zusatzeffekte und Komfortfunktionen
 
-### 3. `TabManager`
-- Verwalten mehrerer Tabs
-- Tabs anlegen, schließen, duplizieren
-- Wischen zwischen Tabs
-- Speicherung offener Tabs beim Beenden (SharedPreferences/JSON)
+## Kernfunktionen
 
-### 4. `FullScreenHandler`
-- Simuliert Vollbild in einem **Overlay-Container**
-- Ermöglicht **Pinch-to-Zoom** im Video
-- Optional: Doppeltipp für Zoom-Stufen
+### 1. YouTube in Desktop-Darstellung
+- Verwende einen Desktop User Agent.
+- Aktiviere JavaScript, DOM Storage und Cookies.
+- Unterstuetze YouTube-Features, soweit sie in der Desktop-Webseite innerhalb einer Android-WebView stabil funktionieren.
 
-### 5. `LinkInterceptor`
-- Erkennt `youtube.com` und `youtu.be` Links
-- Öffnet diese direkt im aktuellen oder neuen Tab
-- Blockiert Standardbrowser, wenn App als Standard gesetzt ist
+### 2. Login und Account-Nutzung
+- Login soll App-Neustarts ueberleben.
+- Cookies und WebView-Daten duerfen nicht unnoetig geloescht werden.
+- Mehrere Accounts muessen mindestens ueber die normale YouTube-Account-Umschaltung benutzbar bleiben.
+- Ein expliziter "eingeloggt / nicht eingeloggt"-Modus ist optional und nur sinnvoll, wenn er technisch sauber ohne fragile Workarounds umsetzbar ist.
 
----
+### 3. Tabs
+- Mehrere gleichzeitig offene YouTube-Seiten.
+- Neuen Tab oeffnen, schliessen, wechseln, optional duplizieren.
+- Offene Tabs und deren letzte URLs sollen bei App-Neustart wiederherstellbar sein.
 
-## Funktionen im Detail
-1. **Login-Persistenz**
-   - Aktivieren von `CookieManager.getInstance().setAcceptCookie(true)`
-   - `setAcceptThirdPartyCookies(webView, true)`
-   - WebView-Daten nicht bei App-Exit löschen
+### 4. Link-Handling
+- `youtube.com`, `m.youtube.com` und `youtu.be` Links sollen von der App verarbeitet werden koennen.
+- Externe YouTube-Links sollen wahlweise im aktuellen oder in einem neuen Tab landen.
 
-2. **Tabs**
-   - Layout ähnlich Samsung Browser (oben Tab-Leiste)
-   - Klick auf „+“ erstellt neuen Tab
-   - Langes Drücken auf Tab für Duplizieren/Schließen
-   - Tabs in SharedPreferences sichern
+### 5. Video- und Vollbild-Erlebnis
+- Normales HTML5-Video innerhalb der WebView muss sauber funktionieren.
+- Vollbild soll fuer den Nutzer immersiv wirken.
+- Pinch-to-Zoom und optionale Doppeltipp-Zoom-Interaktionen sind wuenschenswert, aber nur dann, wenn sie das eigentliche Playback nicht destabilisieren.
+- Geraeterotation und Landscape-Nutzung sollen sinnvoll unterstuetzt werden.
 
-3. **Pseudo-Fullscreen**
-   - Video wird in einem Overlay-Container vergrößert
-   - Pinch-to-Zoom & Doppeltipp-Zoom aktiviert
-   - UI-Elemente (Toolbar) ausgeblendet
+### 6. Picture-in-Picture
+- PiP ist ein Soll-Ziel, falls die eingesetzte Android/WebView-Kombination dies fuer YouTube im Projektkontext stabil zulaesst.
+- Wenn PiP unzuverlaessig ist, hat Stabilitaet Vorrang vor einer halbfertigen Aktivierung.
 
-4. **Picture-in-Picture**
-   - Aktiv bei Home-Button oder Back in Fullscreen
-   - PiP-Controls: Play/Pause (wenn unterstützt)
+## Architekturvorschlag
 
-5. **Akkusparen**
-   - Hardwarebeschleunigung aktiviert
-   - Optional: maximale Videoauflösung erzwingen (via JS)
+### `MainActivity`
+Verantwortlich fuer:
+- App-Start
+- Toolbar und globale Navigation
+- Weiterleitung eingehender Intents
+- Verbindung zwischen UI, Tabs und aktivem WebView
 
----
+### `BrowserTab` oder `TabSession`
+Empfohlene Abstraktion pro Tab:
+- eindeutige ID
+- Titel
+- letzte URL
+- WebView-Zustand
+- optional Snapshot oder Vorschaudaten
 
-## Intent-Filter (AndroidManifest.xml)
-```xml
-<intent-filter>
-    <action android:name="android.intent.action.VIEW"/>
-    <category android:name="android.intent.category.DEFAULT"/>
-    <category android:name="android.intent.category.BROWSABLE"/>
-    <data android:scheme="https" android:host="www.youtube.com"/>
-    <data android:scheme="https" android:host="youtube.com"/>
-    <data android:scheme="https" android:host="m.youtube.com"/>
-    <data android:scheme="https" android:host="youtu.be"/>
-</intent-filter>
-```
+### `WebViewFactory`
+Zentrale Erstellung und Konfiguration neuer WebViews:
+- Desktop User Agent
+- JavaScript
+- DOM Storage
+- Cookie-Verhalten
+- sichere Defaults fuer Dateizugriffe und Medienwiedergabe
 
----
+### `TabManager`
+Verantwortlich fuer:
+- Anlegen und Schliessen von Tabs
+- Tab-Wechsel
+- Persistenz der Tab-Liste
+- Wiederherstellung beim Start
 
-## Bekannte Einschränkungen
-- **Andere Tonspuren** nur, wenn YouTube-Desktop dies direkt anbietet
-- **Echtes Vollbild-Zoom** nicht möglich (nur Pseudo-Fullscreen)
-- Änderungen an YouTube-UI können Touch-Optimierungen brechen
-- PiP & Hintergrund-Audio hängen vom YouTube-Player ab
+### `YouTubeWebViewClient`
+Verantwortlich fuer:
+- URL-Steuerung
+- Erkennen interner und externer YouTube-Links
+- Navigation innerhalb der App
+- Fehlerbehandlung beim Laden
 
----
+### `YouTubeWebChromeClient`
+Verantwortlich fuer:
+- Vollbild-Callbacks
+- Video-bezogene Browser-Events
+- Titel-Updates
+- Fortschritt und optionale Datei-/Permission-Integrationen
 
-## ToDo / Erweiterungen
-- Qualitätsschnellauswahl (per JS Injection)
-- Audio-Only Modus (Video ausblenden, nur Ton streamen)
-- Gestensteuerung für „nächstes/vorheriges Video“
-- Dark-Theme-Umschalter unabhängig von YouTube-Theme
-- Eigenes Startbildschirm-Layout mit Suchfeld + Tabs
+### `LinkInterceptor`
+Kann als eigene Klasse oder als Teil des `WebViewClient` umgesetzt werden:
+- Erkennung unterstuetzter Hosts
+- Entscheidung aktueller Tab vs. neuer Tab
+- Weitergabe externer, nicht zu YouTube gehoerender Links an den Standardbrowser
 
----
+## Wichtige Implementierungsdetails
 
-## Entwicklungsschritte
-1. **Projekt in Android Studio anlegen**  
-   - Min SDK 26, Target 34  
-   - Standard-Empty-Activity  
-2. **WebView einrichten**
-   - Settings konfigurieren (UA, JS, Cookies, DOM)
-3. **Tab-Manager implementieren**
-4. **FullScreenHandler** einbauen
-5. **Intent-Filter** ins Manifest eintragen
-6. **CSS/JS Injection** für Touch-Optimierung
-7. **PiP-Mode** aktivieren
-8. Testen auf Samsung S24 Ultra
+### WebView-Konfiguration
+Mindestens pruefen und sinnvoll setzen:
+- `javaScriptEnabled`
+- `domStorageEnabled`
+- `mediaPlaybackRequiresUserGesture`
+- `setAcceptCookie(true)`
+- `setAcceptThirdPartyCookies(...)`
+- geeignete Cache-Strategie
 
----
+Keine unsicheren WebView-Settings ohne klaren Grund aktivieren.
 
-## Lizenz / Rechtliches
-- Diese App greift auf die **offizielle YouTube-Webseite** zu und verändert lediglich deren Darstellung im WebView.
-- Keine Umgehung von DRM oder YouTube-ToS-fremden Zugriffen.
-- Nutzung im Rahmen der YouTube-Nutzungsbedingungen sicherstellen.
+### Persistenz
+- Session- und Cookie-Persistenz haben hohen Stellenwert.
+- Offene Tabs sollen in einer klaren, einfachen Struktur gespeichert werden.
+- Bevorzuge nachvollziehbare Persistenz mit `DataStore` oder sauber gekapselten `SharedPreferences`, statt frueh komplexe Datenhaltung einzufuehren.
+
+### Performance
+- Vermeide unnoetige JavaScript-Injections.
+- Vermeide dauernde Neuinitialisierung von WebViews, wenn Tabs nur gewechselt werden.
+- Halte Speicherverbrauch im Blick, da mehrere WebViews teuer sein koennen.
+
+### Touch-Optimierung
+- CSS- oder JS-Injections nur sparsam und gekapselt einsetzen.
+- Jede Injection muss optional abschaltbar und robust gegen Aenderungen der YouTube-DOM bleiben.
+- Keine Loesung bauen, die bei kleinen UI-Aenderungen von YouTube sofort komplett bricht.
+
+## Empfohlene Reihenfolge der Umsetzung
+1. Grundprojekt in Android Studio anlegen
+2. Einzelne WebView mit Desktop-YouTube stabil zum Laufen bringen
+3. Login- und Cookie-Persistenz verifizieren
+4. Intent-Filter fuer YouTube-Links integrieren
+5. Tab-System aufbauen
+6. Vollbild- und Rotationsverhalten verbessern
+7. Optionale Touch-Optimierungen hinzufuegen
+8. PiP evaluieren
+9. Akku- und Speicherverhalten optimieren
+
+## Akzeptanzkriterien
+Eine erste brauchbare Version ist erreicht, wenn:
+- YouTube in Desktop-Darstellung laedt
+- Login nach App-Neustart erhalten bleibt
+- mindestens zwei Tabs stabil nutzbar sind
+- YouTube-Links aus anderen Apps in dieser App landen koennen
+- Video-Wiedergabe inklusive Vollbild-Nutzung im Alltag funktioniert
+- keine offensichtlichen Abstuerze bei Rotation, Hintergrund/Vordergrund und Tab-Wechsel auftreten
+
+## Bekannte Risiken
+- YouTube kann DOM, Layout und Verhalten jederzeit aendern.
+- WebView-Verhalten kann sich je nach Android-System-WebView-Version unterscheiden.
+- Manche Desktop-Funktionen von YouTube koennen in einer mobilen WebView eingeschraenkt oder instabil sein.
+- Zu aggressive Touch-Optimierungen koennen Bedienung oder Playback verschlechtern.
+
+## Manifest-Hinweis
+Fuer Link-Oeffnung sind Intent-Filter fuer mindestens folgende Hosts relevant:
+- `www.youtube.com`
+- `youtube.com`
+- `m.youtube.com`
+- `youtu.be`
+
+## Rechtliches
+- Die App nutzt die offizielle YouTube-Webseite in einer WebView.
+- Vor jeder Funktion mit moeglichem Compliance-Risiko ist zu pruefen, ob sie mit den Nutzungsbedingungen und Plattformrichtlinien vereinbar ist.
+- Im Zweifel konservativ entscheiden und die stabilere, regelkonforme Variante bevorzugen.
+
+## Arbeitsweise fuer Codex oder andere Agenten
+- Bevorzuge kleine, nachvollziehbare Schritte statt grosser ungetesteter Umbauten.
+- Dokumentiere Annahmen direkt im Code oder in kurzen Projekt-Notizen.
+- Wenn technische Grenzen von WebView oder YouTube die Wunschfunktion blockieren, benenne die Einschraenkung klar statt fragilen Workaround-Code zu bauen.
+- Schlage nur dann komplexere Architektur vor, wenn ein konkreter Engpass sichtbar ist.

@@ -1,0 +1,1098 @@
+package de.shakie.youtubenext
+
+import android.app.PictureInPictureParams
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.content.res.Configuration
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.util.Log
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
+import android.view.ViewConfiguration
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
+import android.widget.FrameLayout
+import androidx.core.content.getSystemService
+import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.snackbar.Snackbar
+import com.google.android.material.tabs.TabLayout
+import de.shakie.youtubenext.browser.BrowserTab
+import de.shakie.youtubenext.browser.LinkInterceptor
+import de.shakie.youtubenext.browser.WebViewFactory
+import de.shakie.youtubenext.browser.YouTubeWebChromeClient
+import de.shakie.youtubenext.browser.YouTubeWebViewClient
+import de.shakie.youtubenext.tabs.TabManager
+import de.shakie.youtubenext.tabs.TabPersistence
+import de.shakie.youtubenext.tabs.TabSession
+
+class MainActivity : AppCompatActivity() {
+    private lateinit var toolbar: MaterialToolbar
+    private lateinit var tabLayout: TabLayout
+    private lateinit var webViewContainer: FrameLayout
+    private lateinit var fullscreenContainer: FrameLayout
+    private lateinit var tabManager: TabManager
+
+    private val browserTabs = linkedMapOf<String, BrowserTab>()
+    private var selectedTabId: String? = null
+    private var tabSelectionUpdateInProgress = false
+    private var landscapeVideoModeActive = false
+    private var landscapeVideoScale = 1f
+    private var landscapeVideoTranslationX = 0f
+    private var landscapeVideoTranslationY = 0f
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        toolbar = findViewById(R.id.toolbar)
+        tabLayout = findViewById(R.id.tabLayout)
+        webViewContainer = findViewById(R.id.webViewContainer)
+        fullscreenContainer = findViewById(R.id.fullscreenContainer)
+        tabManager = TabManager(TabPersistence(this))
+
+        setupToolbar()
+        setupTabs()
+        setupBackNavigation()
+        restoreOrCreateInitialTab()
+        handleIncomingIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingIntent(intent)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        tabManager.persist()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            enterLandscapeVideoModeIfNeeded()
+        } else if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT) {
+            currentTab()?.chromeClient?.exitFullscreenIfNeeded()
+            disableLandscapeVideoMode()
+        }
+        updateBrowserChromeVisibility()
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isInPictureInPictureMode) {
+            val currentUrl = currentTab()?.url.orEmpty()
+            if (currentUrl.contains("youtube.com/watch")) {
+                enterPictureInPictureMode(PictureInPictureParams.Builder().build())
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        browserTabs.values.forEach { tab ->
+            webViewContainer.removeView(tab.webView)
+            tab.webView.stopLoading()
+            tab.webView.destroy()
+        }
+        browserTabs.clear()
+    }
+
+    private fun setupToolbar() {
+        toolbar.title = null
+        toolbar.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                R.id.action_new_tab -> {
+                    createAndSelectTab(DEFAULT_URL)
+                    true
+                }
+
+                R.id.action_duplicate_tab -> {
+                    duplicateCurrentTab()
+                    true
+                }
+
+                R.id.action_close_tab -> {
+                    closeCurrentTab()
+                    true
+                }
+
+                R.id.action_reload -> {
+                    currentTab()?.webView?.reload()
+                    true
+                }
+
+                else -> false
+            }
+        }
+    }
+
+    private fun setupTabs() {
+        tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) {
+                if (tabSelectionUpdateInProgress) return
+                val tabId = tab.tag as? String ?: return
+                selectTab(tabId)
+            }
+
+            override fun onTabUnselected(tab: TabLayout.Tab) = Unit
+
+            override fun onTabReselected(tab: TabLayout.Tab) = Unit
+        })
+    }
+
+    private fun setupBackNavigation() {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val current = currentTab()
+                if (current?.chromeClient?.isInCustomView == true) {
+                    current.chromeClient.exitFullscreenIfNeeded()
+                    return
+                }
+                if (landscapeVideoModeActive) {
+                    disableLandscapeVideoMode()
+                    return
+                }
+                if (current != null && navigateBackInTabHistory(current)) {
+                    return
+                }
+                if (current?.webView?.canGoBack() == true) {
+                    current.webView.goBack()
+                } else {
+                    finish()
+                }
+            }
+        })
+    }
+
+    private fun restoreOrCreateInitialTab() {
+        val restored = tabManager.restore()
+        if (restored.isEmpty()) {
+            createAndSelectTab(DEFAULT_URL)
+            return
+        }
+        restored.forEach { session ->
+            createBrowserTab(session)
+        }
+        syncTabLayout()
+        val selectedId = tabManager.selectedTabId() ?: restored.first().id
+        selectTab(selectedId, persistSelection = false)
+    }
+
+    private fun handleIncomingIntent(intent: Intent?) {
+        val data = intent?.data ?: return
+        if (intent.action != Intent.ACTION_VIEW) return
+        if (!LinkInterceptor.isYouTubeUri(data)) return
+        val url = data.toString()
+        val current = currentTab()
+        if (current == null) {
+            createAndSelectTab(url)
+            return
+        }
+        if (current.url.isBlank() || current.url == DEFAULT_URL) {
+            loadInCurrentTab(url)
+            return
+        }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.link_open_title)
+            .setPositiveButton(R.string.link_open_current) { _, _ ->
+                loadInCurrentTab(url)
+            }
+            .setNegativeButton(R.string.link_open_new) { _, _ ->
+                createAndSelectTab(url)
+            }
+            .show()
+    }
+
+    private fun createAndSelectTab(url: String): BrowserTab {
+        val normalizedUrl = WebViewFactory.normalizeStartUrl(url)
+        val targetUrl = normalizeInternalYouTubeUrl(normalizedUrl)
+        val session = tabManager.create(targetUrl, "")
+        val browserTab = createBrowserTab(session)
+        syncTabLayout()
+        selectTab(browserTab.id, persistSelection = false)
+        return browserTab
+    }
+
+    private fun createBrowserTab(session: TabSession): BrowserTab {
+        val webView = WebViewFactory.create(this)
+        webView.layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
+        webView.visibility = View.GONE
+
+        webView.webViewClient = YouTubeWebViewClient(
+            onOpenExternalUrl = ::openExternalUrl,
+            normalizeInternalUrl = ::normalizeInternalYouTubeUrl,
+            onBeforeMainFrameNavigation = { url ->
+                applyBrowsingMode(session.id, url)
+            },
+            onMainUrlUpdated = { url ->
+                applyBrowsingMode(session.id, url)
+                stabilizeYouTubeViewport(session.id, url)
+                updateTabState(session.id, newUrl = url)
+            },
+            onMainTitleUpdated = { title ->
+                updateTabState(session.id, newTitle = title)
+            },
+            onViewportDebug = { pageUrl, metrics ->
+                Log.i("YTNEXT_VIEWPORT", "url=$pageUrl metrics=$metrics")
+            },
+            onLoadError = {
+                Snackbar.make(webViewContainer, R.string.page_load_error, Snackbar.LENGTH_SHORT).show()
+            }
+        )
+        val chromeClient = YouTubeWebChromeClient(
+            activity = this,
+            container = fullscreenContainer,
+            onTitleChanged = { title ->
+                updateTabState(session.id, newTitle = title)
+            },
+            onProgressChanged = { _ -> updateToolbarState() },
+            onNewTabRequest = { targetUrl ->
+                createAndSelectTab(targetUrl)
+            },
+            onPopupUrlRequest = { targetUrl ->
+                browserTabs[session.id]?.webView?.loadUrl(normalizeInternalYouTubeUrl(targetUrl))
+            },
+            onFullscreenChanged = { isFullscreen ->
+                if (isFullscreen) {
+                    disableLandscapeVideoMode()
+                }
+                updateBrowserChromeVisibility()
+            }
+        )
+        webView.webChromeClient = chromeClient
+
+        val browserTab = BrowserTab(
+            id = session.id,
+            webView = webView,
+            chromeClient = chromeClient,
+            isDesktopMode = shouldUseDesktopMode(session.url),
+            title = session.title,
+            url = session.url
+        )
+        WebViewFactory.setDesktopMode(webView, browserTab.isDesktopMode)
+        configureLongPressMenu(browserTab)
+        browserTabs[session.id] = browserTab
+        webViewContainer.addView(webView)
+        if (session.url.isNotBlank()) {
+            webView.loadUrl(session.url)
+        }
+        return browserTab
+    }
+
+    private fun updateTabState(tabId: String, newUrl: String? = null, newTitle: String? = null) {
+        val tab = browserTabs[tabId] ?: return
+        val updatedUrl = newUrl ?: tab.url
+        val updatedTitle = newTitle ?: tab.title
+        if (updatedUrl == tab.url && updatedTitle == tab.title) return
+
+        recordTabHistory(tab, updatedUrl)
+        tab.url = updatedUrl
+        tab.title = updatedTitle
+        tabManager.update(tabId, updatedUrl, updatedTitle)
+        syncTabLayout()
+        if (selectedTabId == tabId) {
+            if (!updatedUrl.contains("/watch")) {
+                disableLandscapeVideoMode()
+            } else if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                enterLandscapeVideoModeIfNeeded()
+            }
+            updateToolbarState()
+            updateBrowserChromeVisibility()
+        }
+    }
+
+    private fun selectTab(tabId: String, persistSelection: Boolean = true) {
+        if (!browserTabs.containsKey(tabId)) return
+        selectedTabId = tabId
+        browserTabs.forEach { (id, tab) ->
+            tab.webView.visibility = if (id == tabId) View.VISIBLE else View.GONE
+        }
+        updateToolbarState()
+        if (persistSelection) {
+            tabManager.select(tabId)
+        }
+        if (!isCurrentTabWatchPage()) {
+            disableLandscapeVideoMode()
+        } else if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            enterLandscapeVideoModeIfNeeded()
+        }
+        updateBrowserChromeVisibility()
+        syncTabLayout()
+    }
+
+    private fun closeCurrentTab() {
+        val tabId = selectedTabId ?: return
+        val tab = browserTabs.remove(tabId) ?: return
+        webViewContainer.removeView(tab.webView)
+        tab.webView.stopLoading()
+        tab.webView.destroy()
+
+        val nextTabId = tabManager.close(tabId)
+        if (browserTabs.isEmpty()) {
+            createAndSelectTab(DEFAULT_URL)
+            return
+        }
+        syncTabLayout()
+        if (nextTabId != null) {
+            selectTab(nextTabId, persistSelection = false)
+        }
+        Snackbar.make(webViewContainer, R.string.tab_closed_message, Snackbar.LENGTH_SHORT).show()
+    }
+
+    private fun duplicateCurrentTab() {
+        val currentId = selectedTabId ?: return
+        val duplicatedSession = tabManager.duplicate(currentId) ?: return
+        createBrowserTab(duplicatedSession)
+        syncTabLayout()
+        selectTab(duplicatedSession.id, persistSelection = false)
+    }
+
+    private fun loadInCurrentTab(url: String) {
+        val tab = currentTab() ?: createAndSelectTab(url)
+        val normalizedUrl = WebViewFactory.normalizeStartUrl(url)
+        val targetUrl = normalizeInternalYouTubeUrl(normalizedUrl)
+        tab.webView.loadUrl(targetUrl)
+    }
+
+    private fun syncTabLayout() {
+        val sessions = tabManager.all()
+        tabSelectionUpdateInProgress = true
+        tabLayout.removeAllTabs()
+        sessions.forEach { session ->
+            val title = session.title.ifBlank {
+                if (session.url.isBlank() || session.url == DEFAULT_URL) {
+                    getString(R.string.default_tab_title)
+                } else {
+                    Uri.parse(session.url).host ?: getString(R.string.default_tab_title)
+                }
+            }
+            tabLayout.addTab(
+                tabLayout.newTab()
+                    .setText(title.take(MAX_TAB_LABEL_LENGTH))
+                    .setTag(session.id),
+                false
+            )
+        }
+        val activeId = selectedTabId ?: tabManager.selectedTabId()
+        val index = sessions.indexOfFirst { it.id == activeId }
+        if (index >= 0) {
+            tabLayout.getTabAt(index)?.select()
+        }
+        tabSelectionUpdateInProgress = false
+    }
+
+    private fun currentTab(): BrowserTab? {
+        return selectedTabId?.let { browserTabs[it] }
+    }
+
+    private fun navigateBackInTabHistory(tab: BrowserTab): Boolean {
+        if (tab.historyIndex <= 0) return false
+        tab.historyIndex -= 1
+        tab.pendingHistoryNavigation = true
+        tab.webView.loadUrl(tab.navigationHistory[tab.historyIndex])
+        return true
+    }
+
+    private fun recordTabHistory(tab: BrowserTab, url: String) {
+        val canonicalUrl = canonicalHistoryUrl(url)
+        if (canonicalUrl.isBlank()) return
+
+        if (tab.pendingHistoryNavigation) {
+            tab.pendingHistoryNavigation = false
+            if (tab.historyIndex !in tab.navigationHistory.indices) {
+                tab.navigationHistory.clear()
+                tab.navigationHistory.add(canonicalUrl)
+                tab.historyIndex = 0
+                return
+            }
+            tab.navigationHistory[tab.historyIndex] = canonicalUrl
+            return
+        }
+
+        val currentUrl = tab.navigationHistory.getOrNull(tab.historyIndex)
+        if (currentUrl == canonicalUrl) return
+
+        if (tab.historyIndex < tab.navigationHistory.lastIndex) {
+            tab.navigationHistory.subList(tab.historyIndex + 1, tab.navigationHistory.size).clear()
+        }
+        tab.navigationHistory.add(canonicalUrl)
+        tab.historyIndex = tab.navigationHistory.lastIndex
+    }
+
+    private fun canonicalHistoryUrl(url: String): String {
+        return normalizeInternalYouTubeUrl(url)
+    }
+
+    private fun updateToolbarState() {
+        val current = currentTab()
+        toolbar.subtitle = current?.url?.takeIf { it.isNotBlank() }?.let(::formatToolbarUrl)
+    }
+
+    private fun formatToolbarUrl(url: String): String {
+        val uri = Uri.parse(url)
+        val host = uri.host.orEmpty().removePrefix("www.")
+        val path = uri.encodedPath.orEmpty().ifBlank { "/" }
+        return buildString {
+            append(host)
+            append(path)
+            if (!uri.encodedQuery.isNullOrBlank()) {
+                append("?")
+                append(uri.encodedQuery)
+            }
+        }
+    }
+
+    private fun configureLongPressMenu(tab: BrowserTab) {
+        tab.webView.setOnLongClickListener {
+            val result = tab.webView.hitTestResult ?: return@setOnLongClickListener false
+            val target = result.extra ?: return@setOnLongClickListener false
+            if (!target.startsWith("http://") && !target.startsWith("https://")) {
+                return@setOnLongClickListener false
+            }
+
+            val actions = listOf(
+                "Link im aktuellen Tab oeffnen" to { loadInCurrentTab(target) },
+                "Link in neuem Tab oeffnen" to { createAndSelectTab(target) },
+                "Im Browser oeffnen" to { openExternalUrl(Uri.parse(target)) },
+                "Link teilen" to { shareLink(target) },
+                "Link kopieren" to { copyToClipboard(target) }
+            )
+            MaterialAlertDialogBuilder(this)
+                .setTitle(Uri.parse(target).host ?: target)
+                .setItems(actions.map { it.first }.toTypedArray()) { _, which ->
+                    actions[which].second.invoke()
+                }
+                .show()
+            true
+        }
+    }
+
+    private fun enterLandscapeVideoModeIfNeeded() {
+        val tab = currentTab() ?: return
+        if (!isCurrentTabWatchPage()) return
+        if (tab.chromeClient.isInCustomView) return
+        enableLandscapeVideoMode()
+    }
+
+    private fun enableLandscapeVideoMode() {
+        val tab = currentTab() ?: return
+        tab.webView.evaluateJavascript(
+            """
+            (function() {
+              const player = document.querySelector('video');
+              if (!player) return false;
+              const styleId = 'yt_next_landscape_mode';
+              const scriptId = 'yt_next_landscape_script';
+              let style = document.getElementById(styleId);
+              if (!style) {
+                style = document.createElement('style');
+                style.id = styleId;
+                style.textContent = `
+                  html, body {
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    width: 100vw !important;
+                    height: 100vh !important;
+                    overflow: hidden !important;
+                    background: #000 !important;
+                  }
+                  ytd-app, ytd-page-manager, ytd-watch-flexy, #content, #primary {
+                    width: 100vw !important;
+                    max-width: none !important;
+                  }
+                  ytd-watch-flexy #below,
+                  ytd-watch-flexy #secondary,
+                  ytd-watch-flexy #comments,
+                  ytd-watch-flexy #related,
+                  ytd-watch-flexy #meta,
+                  ytd-watch-flexy #chat,
+                  ytd-watch-flexy #panels,
+                  #masthead-container,
+                  ytd-mini-guide-renderer,
+                  tp-yt-app-drawer,
+                  ytd-popup-container {
+                    display: none !important;
+                  }
+                  #player-full-bleed-container,
+                  #player-container-outer,
+                  #player-container-inner,
+                  #player {
+                    position: fixed !important;
+                    inset: 0 !important;
+                    width: 100vw !important;
+                    height: 100vh !important;
+                    max-width: none !important;
+                    max-height: none !important;
+                    background: #000 !important;
+                    z-index: 2147483646 !important;
+                  }
+                  .ytp-fullscreen-button {
+                    opacity: 0.35 !important;
+                  }
+                  .ytp-settings-menu,
+                  .ytp-panel-menu,
+                  .ytp-popup {
+                    max-height: 70vh !important;
+                    overflow-y: auto !important;
+                    -webkit-overflow-scrolling: touch !important;
+                    touch-action: pan-y !important;
+                  }
+                `;
+                document.documentElement.appendChild(style);
+              }
+
+              if (!document.getElementById(scriptId)) {
+                const script = document.createElement('script');
+                script.id = scriptId;
+                script.type = 'text/javascript';
+                script.text = `
+                  (function() {
+                    const isFullscreenControl = (target) => {
+                      if (!target || !target.closest) return false;
+                      if (target.closest('.ytp-fullscreen-button')) return true;
+                      const button = target.closest('button');
+                      if (!button) return false;
+                      const candidates = [
+                        button.getAttribute('aria-label') || '',
+                        button.getAttribute('title') || '',
+                        button.getAttribute('aria-keyshortcuts') || '',
+                        button.className || ''
+                      ].join(' ').toLowerCase();
+                      return candidates.includes('fullscreen') ||
+                        candidates.includes('full screen') ||
+                        candidates.includes('vollbild') ||
+                        candidates.includes('bildschirm');
+                    };
+                    const blockNativeFs = (event) => {
+                      const target = event && event.target;
+                      const isDoubleClick = event && event.type === 'dblclick';
+                      const isShortcut = event && event.type === 'keydown' &&
+                        ((event.key || '').toLowerCase() === 'f');
+                      if (isFullscreenControl(target) || isDoubleClick || isShortcut) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        event.stopImmediatePropagation();
+                        return false;
+                      }
+                      return true;
+                    };
+                    const onFsChange = () => {
+                      if (document.fullscreenElement && document.exitFullscreen) {
+                        document.exitFullscreen().catch(() => {});
+                      }
+                    };
+                    document.addEventListener('click', blockNativeFs, true);
+                    document.addEventListener('dblclick', blockNativeFs, true);
+                    document.addEventListener('keydown', blockNativeFs, true);
+                    document.addEventListener('fullscreenchange', onFsChange, true);
+                    window.__ytNextR2fHandlers = { blockNativeFs, onFsChange };
+                  })();
+                `;
+                document.documentElement.appendChild(script);
+              }
+              window.scrollTo(0, 0);
+              return true;
+            })();
+            """.trimIndent(),
+            null
+        )
+        landscapeVideoModeActive = true
+        enableSystemImmersiveMode()
+        attachLandscapePinchToWebView(tab.webView)
+        updateBrowserChromeVisibility()
+    }
+
+    private fun disableLandscapeVideoMode() {
+        val wasActive = landscapeVideoModeActive
+        val tab = currentTab()
+        landscapeVideoModeActive = false
+        landscapeVideoScale = 1f
+        landscapeVideoTranslationX = 0f
+        landscapeVideoTranslationY = 0f
+        browserTabs.values.forEach { browserTab ->
+            browserTab.webView.setOnTouchListener(null)
+            browserTab.webView.scaleX = 1f
+            browserTab.webView.scaleY = 1f
+            browserTab.webView.translationX = 0f
+            browserTab.webView.translationY = 0f
+        }
+        tab?.webView?.evaluateJavascript(
+            """
+            (function() {
+              const styleNode = document.getElementById('yt_next_landscape_mode');
+              if (styleNode) styleNode.remove();
+              const scriptNode = document.getElementById('yt_next_landscape_script');
+              if (scriptNode) scriptNode.remove();
+              if (window.__ytNextR2fHandlers) {
+                document.removeEventListener('click', window.__ytNextR2fHandlers.blockNativeFs, true);
+                document.removeEventListener('dblclick', window.__ytNextR2fHandlers.blockNativeFs, true);
+                document.removeEventListener('keydown', window.__ytNextR2fHandlers.blockNativeFs, true);
+                document.removeEventListener('fullscreenchange', window.__ytNextR2fHandlers.onFsChange, true);
+                window.__ytNextR2fHandlers = null;
+              }
+              document.documentElement.style.removeProperty('overflow');
+              document.body.style.removeProperty('overflow');
+              return true;
+            })();
+            """.trimIndent(),
+            null
+        )
+        if (wasActive) {
+            disableSystemImmersiveMode()
+        }
+        updateBrowserChromeVisibility()
+    }
+
+    private fun updateBrowserChromeVisibility() {
+        val tab = currentTab()
+        val isCustomFullscreen = tab?.chromeClient?.isInCustomView == true
+        val isLandscapeWatch = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE &&
+            isCurrentTabWatchPage()
+        val hideChrome = isCustomFullscreen || landscapeVideoModeActive || isLandscapeWatch
+        toolbar.visibility = if (hideChrome) View.GONE else View.VISIBLE
+        tabLayout.visibility = if (hideChrome) View.GONE else View.VISIBLE
+    }
+
+    private fun isCurrentTabWatchPage(): Boolean {
+        val tab = currentTab() ?: return false
+        val url = tab.webView.url ?: tab.url
+        return url.contains("/watch")
+    }
+
+    private fun applyBrowsingMode(tabId: String, url: String) {
+        val tab = browserTabs[tabId] ?: return
+        val useDesktopMode = shouldUseDesktopMode(url)
+        if (tab.isDesktopMode == useDesktopMode) return
+        tab.isDesktopMode = useDesktopMode
+        WebViewFactory.setDesktopMode(tab.webView, useDesktopMode)
+    }
+
+    private fun stabilizeYouTubeViewport(tabId: String, url: String) {
+        val tab = browserTabs[tabId] ?: return
+        val parsed = Uri.parse(url)
+        val host = parsed.host?.lowercase().orEmpty()
+        if (!host.contains("youtube.com")) return
+        val isWatch = parsed.path?.startsWith("/watch") == true
+        if (!isWatch) return
+        val shouldNormalizeWatchPlayer = isWatch &&
+            !landscapeVideoModeActive &&
+            resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE
+        tab.webView.evaluateJavascript(
+            """
+            (function() {
+              if (document.documentElement) {
+                document.documentElement.style.zoom = '1';
+                document.documentElement.style.width = '100%';
+              }
+              if (document.body) {
+                document.body.style.zoom = '1';
+                document.body.style.width = '100%';
+              }
+              const isWatch = ${if (isWatch) "true" else "false"};
+              const normalizeWatchPlayer = ${if (shouldNormalizeWatchPlayer) "true" else "false"};
+                if (isWatch) {
+                if (document.documentElement) {
+                  document.documentElement.style.overflowX = 'hidden';
+                }
+                if (document.body) {
+                  document.body.style.overflowX = 'hidden';
+                  document.body.style.maxWidth = '100vw';
+                }
+                const app = document.querySelector('ytd-app');
+                if (app) {
+                  app.style.maxWidth = '100vw';
+                  app.style.minWidth = '0';
+                  app.style.overflowX = 'hidden';
+                }
+                const primary = document.querySelector('#primary');
+                if (primary) {
+                  primary.style.maxWidth = '100vw';
+                  primary.style.minWidth = '0';
+                }
+                const player = document.querySelector('#player');
+                if (player) {
+                  player.style.maxWidth = '100vw';
+                  player.style.marginLeft = 'auto';
+                  player.style.marginRight = 'auto';
+                }
+                const flexy = document.querySelector('ytd-watch-flexy');
+                if (flexy) {
+                  flexy.style.maxWidth = '100vw';
+                }
+                if (normalizeWatchPlayer) {
+                  const moviePlayer = document.querySelector('#movie_player');
+                  if (moviePlayer) {
+                    moviePlayer.style.setProperty('transform', 'none', 'important');
+                    moviePlayer.style.setProperty('left', '0px', 'important');
+                    moviePlayer.style.setProperty('right', 'auto', 'important');
+                    moviePlayer.style.setProperty('margin-left', '0px', 'important');
+                    moviePlayer.style.setProperty('margin-right', '0px', 'important');
+                    moviePlayer.style.setProperty('width', '100vw', 'important');
+                    moviePlayer.style.setProperty('max-width', '100vw', 'important');
+                  }
+                  const html5Player = document.querySelector('.html5-video-player');
+                  if (html5Player) {
+                    html5Player.style.setProperty('transform', 'none', 'important');
+                    html5Player.style.setProperty('left', '0px', 'important');
+                    html5Player.style.setProperty('right', 'auto', 'important');
+                    html5Player.style.setProperty('margin-left', '0px', 'important');
+                    html5Player.style.setProperty('margin-right', '0px', 'important');
+                    html5Player.style.setProperty('width', '100vw', 'important');
+                    html5Player.style.setProperty('max-width', '100vw', 'important');
+                  }
+                  const html5Container = document.querySelector('.html5-video-container');
+                  if (html5Container) {
+                    html5Container.style.setProperty('transform', 'none', 'important');
+                    html5Container.style.setProperty('left', '0px', 'important');
+                    html5Container.style.setProperty('right', 'auto', 'important');
+                    html5Container.style.setProperty('margin-left', '0px', 'important');
+                    html5Container.style.setProperty('margin-right', '0px', 'important');
+                    html5Container.style.setProperty('width', '100vw', 'important');
+                    html5Container.style.setProperty('max-width', '100vw', 'important');
+                  }
+                  const video = document.querySelector('video');
+                  if (video) {
+                    video.style.setProperty('transform', 'none', 'important');
+                    video.style.setProperty('left', '0px', 'important');
+                    video.style.setProperty('right', 'auto', 'important');
+                    video.style.setProperty('margin-left', '0px', 'important');
+                    video.style.setProperty('margin-right', '0px', 'important');
+                    video.style.setProperty('width', '100vw', 'important');
+                    video.style.setProperty('max-width', '100vw', 'important');
+                    video.style.setProperty('object-fit', 'contain', 'important');
+                  }
+                }
+              }
+              window.scrollTo(0, 0);
+              return true;
+            })();
+            """.trimIndent(),
+            null
+        )
+        if (shouldNormalizeWatchPlayer) {
+            tab.webView.postDelayed({
+                tab.webView.evaluateJavascript(
+                    """
+                    (function() {
+                      const enforce = function() {
+                        const moviePlayer = document.querySelector('#movie_player');
+                        const html5Player = document.querySelector('.html5-video-player');
+                        const html5Container = document.querySelector('.html5-video-container');
+                        const video = document.querySelector('video');
+                        if (!moviePlayer) return false;
+                        const force = function(node) {
+                          if (!node) return;
+                          node.style.setProperty('transform', 'none', 'important');
+                          node.style.setProperty('left', '0px', 'important');
+                          node.style.setProperty('right', 'auto', 'important');
+                          node.style.setProperty('margin-left', '0px', 'important');
+                          node.style.setProperty('margin-right', '0px', 'important');
+                          node.style.setProperty('width', '100vw', 'important');
+                          node.style.setProperty('max-width', '100vw', 'important');
+                        };
+                        force(moviePlayer);
+                        force(html5Player);
+                        force(html5Container);
+                        if (video) {
+                          force(video);
+                          video.style.setProperty('object-fit', 'contain', 'important');
+                        }
+                        return true;
+                      };
+                      enforce();
+                      window.requestAnimationFrame(function() {
+                        enforce();
+                        window.requestAnimationFrame(enforce);
+                      });
+                      window.setTimeout(enforce, 200);
+                      window.setTimeout(enforce, 800);
+                      return true;
+                    })();
+                    """.trimIndent(),
+                    null
+                )
+            }, 120L)
+        }
+        if (isWatch && !landscapeVideoModeActive) {
+            tab.webView.post {
+                tab.webView.translationX = 0f
+                tab.webView.translationY = 0f
+                tab.webView.scaleX = 1f
+                tab.webView.scaleY = 1f
+            }
+        }
+        if (shouldNormalizeWatchPlayer) {
+            tab.webView.postDelayed({
+                tab.webView.evaluateJavascript(
+                    """
+                    (function() {
+                      const moviePlayer = document.querySelector('#movie_player');
+                      if (!moviePlayer) return 'no-player';
+                      const rect = moviePlayer.getBoundingClientRect();
+                      return JSON.stringify({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+                    })();
+                    """.trimIndent()
+                ) { rectJson ->
+                    Log.i("YTNEXT_WATCH_FIX", "post-fix moviePlayerRect=$rectJson")
+                }
+            }, 950L)
+        }
+        if (shouldNormalizeWatchPlayer) {
+            tab.webView.postDelayed({
+                tab.webView.evaluateJavascript(
+                    """
+                    (function() {
+                      const moviePlayer = document.querySelector('#movie_player');
+                      const video = document.querySelector('video');
+                      if (!moviePlayer) return false;
+                      const rect = moviePlayer.getBoundingClientRect();
+                      if (!rect || Math.abs(rect.x) < 1) return false;
+                      const offset = -rect.x;
+                      moviePlayer.style.setProperty('transform', 'translateX(' + offset + 'px)', 'important');
+                      if (video) {
+                        video.style.setProperty('transform', 'translateX(' + offset + 'px)', 'important');
+                      }
+                      return true;
+                    })();
+                    """.trimIndent(),
+                    null
+                )
+            }, 1100L)
+        }
+    }
+
+    private fun shouldUseDesktopMode(url: String): Boolean {
+        if (url.isBlank()) return false
+        val uri = Uri.parse(url)
+        val host = uri.host?.lowercase().orEmpty()
+        val path = uri.path.orEmpty()
+        val isYouTubeHost = host.contains("youtube.com") || host == "youtu.be"
+        if (!isYouTubeHost) return false
+        return host == "youtu.be" || path.startsWith("/watch")
+    }
+
+    private fun normalizeYouTubeHostForMode(url: String, desktopMode: Boolean): String {
+        val uri = Uri.parse(url)
+        val host = uri.host?.lowercase() ?: return url
+        val isYouTubeHost = host.contains("youtube.com")
+        if (!isYouTubeHost) return url
+        val targetHost = if (desktopMode) "www.youtube.com" else "m.youtube.com"
+        if (host == targetHost) return url
+        return uri.buildUpon().authority(targetHost).build().toString()
+    }
+
+    private fun normalizeInternalYouTubeUrl(url: String): String {
+        if (url.isBlank()) return url
+        val uri = Uri.parse(url)
+        val host = uri.host?.lowercase().orEmpty()
+        if (isYouTubeAuthenticationPath(uri)) {
+            return url
+        }
+        val path = uri.path.orEmpty()
+        val isWatch = path.startsWith("/watch")
+        if (host == "youtu.be") {
+            val videoId = uri.lastPathSegment.orEmpty()
+            if (videoId.isNotBlank()) {
+                return Uri.parse("https://www.youtube.com/watch")
+                    .buildUpon()
+                    .appendQueryParameter("v", videoId)
+                    .build()
+                    .toString()
+            }
+        }
+        if (shouldUseDesktopMode(url) && host == "m.youtube.com") {
+            return sanitizeYouTubeQuery(uri.buildUpon().authority("www.youtube.com").build(), keepDesktopApp = true)
+                .toString()
+        }
+        if (!shouldUseDesktopMode(url) && host == "www.youtube.com") {
+            return sanitizeYouTubeQuery(uri.buildUpon().authority("m.youtube.com").build(), keepDesktopApp = false)
+                .toString()
+        }
+        if (host.contains("youtube.com")) {
+            return sanitizeYouTubeQuery(uri, keepDesktopApp = isWatch).toString()
+        }
+        return url
+    }
+
+    private fun sanitizeYouTubeQuery(uri: Uri, keepDesktopApp: Boolean): Uri {
+        return uri.buildUpon()
+            .clearQuery()
+            .apply {
+                uri.queryParameterNames.forEach { key ->
+                    if (key == "persist_app") return@forEach
+                    if (key == "app" && !keepDesktopApp) return@forEach
+                    uri.getQueryParameters(key).forEach { value ->
+                        if (key == "app" && keepDesktopApp && value != "desktop") return@forEach
+                        appendQueryParameter(key, value)
+                    }
+                }
+                if (keepDesktopApp && uri.getQueryParameter("app") != "desktop") {
+                    appendQueryParameter("app", "desktop")
+                }
+            }
+            .build()
+    }
+
+    private fun isYouTubeAuthenticationPath(uri: Uri): Boolean {
+        val host = uri.host?.lowercase().orEmpty()
+        if (!host.contains("youtube.com")) return false
+        val path = uri.path.orEmpty().lowercase()
+        return path.startsWith("/signin") ||
+            path.startsWith("/accounts") ||
+            path.startsWith("/o/oauth")
+    }
+
+    private fun attachLandscapePinchToWebView(webView: WebView) {
+        var downX = 0f
+        var downY = 0f
+        var startTranslationX = 0f
+        var startTranslationY = 0f
+        var isPanning = false
+        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop.toFloat()
+
+        val detector = ScaleGestureDetector(
+            this,
+            object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                override fun onScale(scaleDetector: ScaleGestureDetector): Boolean {
+                    landscapeVideoScale = (landscapeVideoScale * scaleDetector.scaleFactor)
+                        .coerceIn(1f, 3f)
+                    val maxX = ((landscapeVideoScale - 1f) * webView.width) / 2f
+                    val maxY = ((landscapeVideoScale - 1f) * webView.height) / 2f
+                    landscapeVideoTranslationX = landscapeVideoTranslationX.coerceIn(-maxX, maxX)
+                    landscapeVideoTranslationY = landscapeVideoTranslationY.coerceIn(-maxY, maxY)
+                    webView.pivotX = webView.width / 2f
+                    webView.pivotY = webView.height / 2f
+                    webView.scaleX = landscapeVideoScale
+                    webView.scaleY = landscapeVideoScale
+                    webView.translationX = landscapeVideoTranslationX
+                    webView.translationY = landscapeVideoTranslationY
+                    return true
+                }
+            }
+        )
+        webView.setOnTouchListener { _, event ->
+            if (!landscapeVideoModeActive) return@setOnTouchListener false
+            detector.onTouchEvent(event)
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.rawX
+                    downY = event.rawY
+                    startTranslationX = landscapeVideoTranslationX
+                    startTranslationY = landscapeVideoTranslationY
+                    isPanning = false
+                    false
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    if (event.pointerCount > 1) {
+                        isPanning = false
+                        return@setOnTouchListener true
+                    }
+                    if (landscapeVideoScale <= 1.01f) {
+                        return@setOnTouchListener false
+                    }
+                    val dx = event.rawX - downX
+                    val dy = event.rawY - downY
+                    if (!isPanning) {
+                        if (kotlin.math.abs(dx) < touchSlop && kotlin.math.abs(dy) < touchSlop) {
+                            return@setOnTouchListener false
+                        }
+                        isPanning = true
+                    }
+                    val maxX = ((landscapeVideoScale - 1f) * webView.width) / 2f
+                    val maxY = ((landscapeVideoScale - 1f) * webView.height) / 2f
+                    landscapeVideoTranslationX = (startTranslationX + dx).coerceIn(-maxX, maxX)
+                    landscapeVideoTranslationY = (startTranslationY + dy).coerceIn(-maxY, maxY)
+                    webView.translationX = landscapeVideoTranslationX
+                    webView.translationY = landscapeVideoTranslationY
+                    true
+                }
+
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (landscapeVideoScale < 1.02f) {
+                        landscapeVideoScale = 1f
+                        landscapeVideoTranslationX = 0f
+                        landscapeVideoTranslationY = 0f
+                        webView.scaleX = 1f
+                        webView.scaleY = 1f
+                        webView.translationX = 0f
+                        webView.translationY = 0f
+                    }
+                    val consumed = isPanning
+                    isPanning = false
+                    consumed
+                }
+
+                else -> event.pointerCount > 1
+            }
+        }
+    }
+
+    private fun enableSystemImmersiveMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.insetsController?.hide(
+                android.view.WindowInsets.Type.statusBars() or
+                    android.view.WindowInsets.Type.navigationBars()
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility =
+                View.SYSTEM_UI_FLAG_FULLSCREEN or
+                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        }
+    }
+
+    private fun disableSystemImmersiveMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.insetsController?.show(
+                android.view.WindowInsets.Type.statusBars() or
+                    android.view.WindowInsets.Type.navigationBars()
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+        }
+    }
+
+    private fun shareLink(url: String) {
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, url)
+        }
+        startActivity(Intent.createChooser(shareIntent, null))
+    }
+
+    private fun copyToClipboard(url: String) {
+        val clipboard = getSystemService<ClipboardManager>() ?: return
+        clipboard.setPrimaryClip(ClipData.newPlainText("url", url))
+        Snackbar.make(webViewContainer, "Link kopiert", Snackbar.LENGTH_SHORT).show()
+    }
+
+    private fun openExternalUrl(uri: Uri) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, uri))
+        } catch (_: ActivityNotFoundException) {
+            Snackbar.make(webViewContainer, uri.toString(), Snackbar.LENGTH_SHORT).show()
+        }
+    }
+
+    companion object {
+        private const val DEFAULT_URL = "https://www.youtube.com/"
+        private const val MAX_TAB_LABEL_LENGTH = 24
+    }
+}

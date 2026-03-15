@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">YouTube NEXT</string>
+    <string name="menu_new_tab">Neuer Tab</string>
+    <string name="menu_duplicate_tab">Tab duplizieren</string>
+    <string name="menu_close_tab">Tab schliessen</string>
+    <string name="menu_reload">Neu laden</string>
+    <string name="default_tab_title">Neuer Tab</string>
+    <string name="link_open_title">YouTube-Link oeffnen</string>
+    <string name="link_open_current">Im aktuellen Tab</string>
+    <string name="link_open_new">In neuem Tab</string>
+    <string name="tab_closed_message">Tab wurde geschlossen</string>
+    <string name="page_load_error">Seite konnte nicht geladen werden</string>
+</resources>

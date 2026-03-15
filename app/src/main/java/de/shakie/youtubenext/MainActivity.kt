@@ -147,31 +147,6 @@ class MainActivity : AppCompatActivity() {
             promptForUrlEdit()
             true
         }
-        toolbar.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                R.id.action_new_tab -> {
-                    createAndSelectTab(DEFAULT_URL)
-                    true
-                }
-
-                R.id.action_duplicate_tab -> {
-                    duplicateCurrentTab()
-                    true
-                }
-
-                R.id.action_close_tab -> {
-                    closeCurrentTab()
-                    true
-                }
-
-                R.id.action_reload -> {
-                    currentTab()?.webView?.reload()
-                    true
-                }
-
-                else -> false
-            }
-        }
     }
 
     private fun setupTabs() {

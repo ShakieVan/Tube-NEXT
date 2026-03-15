@@ -342,7 +342,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateTabState(tabId: String, newUrl: String? = null, newTitle: String? = null) {
         val tab = browserTabs[tabId] ?: return
         val updatedUrl = newUrl ?: tab.url
-        val updatedTitle = newTitle ?: tab.title
+        val updatedTitle = normalizeTabTitle(newTitle ?: tab.title)
         if (updatedUrl == tab.url && updatedTitle == tab.title) return
 
         recordTabHistory(tab, updatedUrl)
@@ -410,7 +410,7 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     Uri.parse(session.url).host ?: getString(R.string.default_tab_title)
                 }
-            }
+            }.let(::normalizeTabTitle)
             tabLayout.addTab(
                 tabLayout.newTab()
                     .setText(title.take(MAX_TAB_LABEL_LENGTH))
@@ -556,7 +556,7 @@ class MainActivity : AppCompatActivity() {
             val displayTitle = session.title.ifBlank {
                 session.url.takeIf { it.isNotBlank() }?.let(::formatToolbarUrl)
                     ?: getString(R.string.default_tab_title)
-            }
+            }.let(::normalizeTabTitle)
             TabOverviewItem(
                 id = session.id,
                 title = displayTitle,
@@ -888,6 +888,11 @@ class MainActivity : AppCompatActivity() {
                 completeTabLoading(tabId, tab.pageLoadGeneration)
             }
         }
+    }
+
+    private fun normalizeTabTitle(rawTitle: String): String {
+        val cleaned = rawTitle.replace(LEADING_COUNT_PREFIX_REGEX, "").trim()
+        return if (cleaned.isBlank()) rawTitle.trim() else cleaned
     }
 
     private fun completeTabLoading(tabId: String, generation: Long?) {
@@ -1379,5 +1384,6 @@ class MainActivity : AppCompatActivity() {
         private const val MAX_TAB_LABEL_LENGTH = 24
         private const val WATCH_VIEWPORT_STABILIZE_DELAY_MS = 1000L
         private const val OVERLAY_HIDE_DELAY_MS = 2000L
+        private val LEADING_COUNT_PREFIX_REGEX = Regex("^\\(\\d+\\)\\s*")
     }
 }

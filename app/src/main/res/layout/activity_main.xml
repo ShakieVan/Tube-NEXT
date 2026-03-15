@@ -107,19 +107,19 @@
                 android:id="@+id/loadingOverlay"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="#B3000000"
+                android:background="?attr/colorSurface"
                 android:clickable="true"
                 android:focusable="true"
                 android:visibility="gone">
 
                 <LinearLayout
-                    android:layout_width="280dp"
-                    android:layout_height="wrap_content"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
                     android:layout_gravity="center"
-                    android:background="?attr/colorSurface"
                     android:gravity="center_horizontal"
                     android:orientation="vertical"
-                    android:padding="16dp">
+                    android:paddingStart="24dp"
+                    android:paddingEnd="24dp">
 
                     <ProgressBar
                         android:id="@+id/loadingSpinner"
@@ -139,7 +139,7 @@
                     <ProgressBar
                         android:id="@+id/loadingProgress"
                         style="?android:attr/progressBarStyleHorizontal"
-                        android:layout_width="match_parent"
+                        android:layout_width="280dp"
                         android:layout_height="8dp"
                         android:layout_marginTop="14dp"
                         android:indeterminate="false"

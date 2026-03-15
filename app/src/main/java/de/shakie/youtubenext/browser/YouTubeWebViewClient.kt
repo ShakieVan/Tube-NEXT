@@ -13,7 +13,6 @@ class YouTubeWebViewClient(
     private val onOpenExternalUrl: (Uri) -> Unit,
     private val normalizeInternalUrl: (String) -> String,
     private val onBeforeMainFrameNavigation: (String) -> Unit,
-    private val onMainPageStarted: (String) -> Unit,
     private val onMainUrlUpdated: (String) -> Unit,
     private val onMainPageFinished: (String) -> Unit,
     private val onMainTitleUpdated: (String) -> Unit,
@@ -71,7 +70,6 @@ class YouTubeWebViewClient(
     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
         if (!url.isNullOrBlank()) {
-            onMainPageStarted(url)
             onMainUrlUpdated(url)
         }
     }

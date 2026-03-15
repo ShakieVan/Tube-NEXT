@@ -737,11 +737,37 @@ class MainActivity : AppCompatActivity() {
                         document.exitFullscreen().catch(() => {});
                       }
                     };
+                    const preventNativeDrag = (event) => {
+                      const target = event && event.target;
+                      if (!target || !target.closest) return;
+                      if (
+                        target.closest('video') ||
+                        target.closest('img') ||
+                        target.closest('.html5-video-player') ||
+                        target.closest('#movie_player')
+                      ) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        event.stopImmediatePropagation();
+                      }
+                    };
+                    const markNonDraggable = () => {
+                      document.querySelectorAll('video, img').forEach((node) => {
+                        node.setAttribute('draggable', 'false');
+                        node.style.webkitUserDrag = 'none';
+                        node.style.userSelect = 'none';
+                      });
+                    };
                     document.addEventListener('click', blockNativeFs, true);
                     document.addEventListener('dblclick', blockNativeFs, true);
                     document.addEventListener('keydown', blockNativeFs, true);
                     document.addEventListener('fullscreenchange', onFsChange, true);
-                    window.__ytNextR2fHandlers = { blockNativeFs, onFsChange };
+                    document.addEventListener('dragstart', preventNativeDrag, true);
+                    document.addEventListener('drop', preventNativeDrag, true);
+                    markNonDraggable();
+                    window.setTimeout(markNonDraggable, 300);
+                    window.setTimeout(markNonDraggable, 900);
+                    window.__ytNextR2fHandlers = { blockNativeFs, onFsChange, preventNativeDrag };
                   })();
                 `;
                 document.documentElement.appendChild(script);
@@ -784,6 +810,8 @@ class MainActivity : AppCompatActivity() {
                 document.removeEventListener('dblclick', window.__ytNextR2fHandlers.blockNativeFs, true);
                 document.removeEventListener('keydown', window.__ytNextR2fHandlers.blockNativeFs, true);
                 document.removeEventListener('fullscreenchange', window.__ytNextR2fHandlers.onFsChange, true);
+                document.removeEventListener('dragstart', window.__ytNextR2fHandlers.preventNativeDrag, true);
+                document.removeEventListener('drop', window.__ytNextR2fHandlers.preventNativeDrag, true);
                 window.__ytNextR2fHandlers = null;
               }
               document.documentElement.style.removeProperty('overflow');

@@ -12,5 +12,8 @@ data class BrowserTab(
     val navigationHistory: MutableList<String> = mutableListOf(),
     var historyIndex: Int = -1,
     var pendingHistoryNavigation: Boolean = false,
-    var watchStabilizationGeneration: Long = 0L
+    var watchStabilizationGeneration: Long = 0L,
+    var pageLoadGeneration: Long = 0L,
+    var loadingOverlayVisible: Boolean = false,
+    var loadingProgress: Int = 0
 )

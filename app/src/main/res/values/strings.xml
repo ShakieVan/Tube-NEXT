@@ -20,4 +20,5 @@
     <string name="url_edit_title">URL bearbeiten</string>
     <string name="url_edit_hint">Adresse eingeben</string>
     <string name="action_open">Oeffnen</string>
+    <string name="loading_page">Seite wird aufbereitet…</string>
 </resources>

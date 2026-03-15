@@ -138,3 +138,17 @@ Status: `umgesetzt`
 ### Ziel
 - Nachgeladene YouTube-Skripte bekommen Zeit, bevor die visuelle Korrektur greift.
 - Weniger abgeschnittene Pixel links/rechts im Watch-Layout.
+
+## Block H: Punkt 10 (Lade-Overlay mit Progress + Throbber)
+Status: `umgesetzt`
+
+### Umgesetzt
+- Neues Vollflaechen-Overlay (halbtransparent) ueber dem Web-Inhalt:
+  - Spinner (Throbber)
+  - Textstatus
+  - horizontaler Fortschrittsbalken
+- Overlay-Trigger:
+  - bei Main-Frame-Navigation und Fortschritt 1..99 sichtbar
+  - bei Watch-Seiten erst ausblenden, nachdem die 1s-verzoegerte Stabilisierung gelaufen ist
+  - bei Nicht-Watch-Seiten ausblenden bei Ladefortschritt >= 100
+- Overlay ist tab-spezifisch und folgt dem aktiven Tab beim Wechsel.

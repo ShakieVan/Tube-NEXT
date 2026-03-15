@@ -21,6 +21,7 @@ import android.webkit.WebView
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageButton
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.content.getSystemService
 import androidx.activity.OnBackPressedCallback
@@ -49,6 +50,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var reloadButton: ImageButton
     private lateinit var tabSwitcherButton: FrameLayout
     private lateinit var tabCountBadge: TextView
+    private lateinit var loadingOverlay: FrameLayout
+    private lateinit var loadingProgress: ProgressBar
+    private lateinit var loadingLabel: TextView
     private lateinit var webViewContainer: FrameLayout
     private lateinit var fullscreenContainer: FrameLayout
     private lateinit var tabManager: TabManager
@@ -71,6 +75,9 @@ class MainActivity : AppCompatActivity() {
         reloadButton = findViewById(R.id.reloadButton)
         tabSwitcherButton = findViewById(R.id.tabSwitcherButton)
         tabCountBadge = findViewById(R.id.tabCountBadge)
+        loadingOverlay = findViewById(R.id.loadingOverlay)
+        loadingProgress = findViewById(R.id.loadingProgress)
+        loadingLabel = findViewById(R.id.loadingLabel)
         webViewContainer = findViewById(R.id.webViewContainer)
         fullscreenContainer = findViewById(R.id.fullscreenContainer)
         tabManager = TabManager(TabPersistence(this))
@@ -268,6 +275,7 @@ class MainActivity : AppCompatActivity() {
             normalizeInternalUrl = ::normalizeInternalYouTubeUrl,
             onBeforeMainFrameNavigation = { url ->
                 applyBrowsingMode(session.id, url)
+                onTabMainNavigationStarted(session.id)
             },
             onMainUrlUpdated = { url ->
                 applyBrowsingMode(session.id, url)
@@ -283,6 +291,7 @@ class MainActivity : AppCompatActivity() {
                 Log.i("YTNEXT_VIEWPORT", "url=$pageUrl metrics=$metrics")
             },
             onLoadError = {
+                completeTabLoading(session.id, browserTabs[session.id]?.pageLoadGeneration)
                 Snackbar.make(webViewContainer, R.string.page_load_error, Snackbar.LENGTH_SHORT).show()
             }
         )
@@ -292,7 +301,10 @@ class MainActivity : AppCompatActivity() {
             onTitleChanged = { title ->
                 updateTabState(session.id, newTitle = title)
             },
-            onProgressChanged = { _ -> updateToolbarState() },
+            onProgressChanged = { progress ->
+                updateToolbarState()
+                onTabProgress(session.id, progress)
+            },
             onNewTabRequest = { targetUrl ->
                 createAndSelectTab(targetUrl)
             },
@@ -302,6 +314,7 @@ class MainActivity : AppCompatActivity() {
             onFullscreenChanged = { isFullscreen ->
                 if (isFullscreen) {
                     disableLandscapeVideoMode()
+                    hideLoadingOverlay()
                 }
                 updateBrowserChromeVisibility()
             }
@@ -358,6 +371,7 @@ class MainActivity : AppCompatActivity() {
         if (persistSelection) {
             tabManager.select(tabId)
         }
+        refreshLoadingOverlayForSelectedTab()
         if (!isCurrentTabWatchPage()) {
             disableLandscapeVideoMode()
         } else if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
@@ -829,6 +843,7 @@ class MainActivity : AppCompatActivity() {
         val tab = browserTabs[tabId] ?: return
         tab.watchStabilizationGeneration += 1
         val generation = tab.watchStabilizationGeneration
+        val pageLoadGeneration = tab.pageLoadGeneration
         if (!isWatchYouTubeUrl(finishedUrl)) return
 
         tab.webView.postDelayed({
@@ -837,7 +852,70 @@ class MainActivity : AppCompatActivity() {
             val currentUrl = currentTab.webView.url ?: currentTab.url
             if (!isWatchYouTubeUrl(currentUrl)) return@postDelayed
             stabilizeYouTubeViewport(tabId, currentUrl)
+            completeTabLoading(tabId, pageLoadGeneration)
         }, WATCH_VIEWPORT_STABILIZE_DELAY_MS)
+    }
+
+    private fun onTabMainNavigationStarted(tabId: String) {
+        val tab = browserTabs[tabId] ?: return
+        tab.pageLoadGeneration += 1
+        tab.loadingOverlayVisible = true
+        tab.loadingProgress = 8
+        if (selectedTabId == tabId) {
+            showLoadingOverlay(tab.loadingProgress)
+        }
+    }
+
+    private fun onTabProgress(tabId: String, progress: Int) {
+        val tab = browserTabs[tabId] ?: return
+        if (progress in 1..99) {
+            tab.loadingOverlayVisible = true
+            tab.loadingProgress = progress.coerceAtLeast(8)
+            if (selectedTabId == tabId) {
+                showLoadingOverlay(tab.loadingProgress)
+            }
+            return
+        }
+        if (progress >= 100) {
+            tab.loadingProgress = 100
+            if (selectedTabId == tabId && tab.loadingOverlayVisible) {
+                showLoadingOverlay(tab.loadingProgress)
+            }
+            if (!isWatchYouTubeUrl(tab.webView.url ?: tab.url)) {
+                completeTabLoading(tabId, tab.pageLoadGeneration)
+            }
+        }
+    }
+
+    private fun completeTabLoading(tabId: String, generation: Long?) {
+        val tab = browserTabs[tabId] ?: return
+        val targetGeneration = generation ?: tab.pageLoadGeneration
+        if (tab.pageLoadGeneration != targetGeneration) return
+        tab.loadingOverlayVisible = false
+        if (selectedTabId == tabId) {
+            hideLoadingOverlay()
+        }
+    }
+
+    private fun refreshLoadingOverlayForSelectedTab() {
+        val tab = currentTab()
+        if (tab?.loadingOverlayVisible == true) {
+            showLoadingOverlay(tab.loadingProgress.coerceAtLeast(8))
+        } else {
+            hideLoadingOverlay()
+        }
+    }
+
+    private fun showLoadingOverlay(progress: Int) {
+        if (currentTab()?.chromeClient?.isInCustomView == true) return
+        loadingOverlay.bringToFront()
+        loadingOverlay.visibility = View.VISIBLE
+        loadingProgress.progress = progress.coerceIn(8, 100)
+        loadingLabel.text = getString(R.string.loading_page)
+    }
+
+    private fun hideLoadingOverlay() {
+        loadingOverlay.visibility = View.GONE
     }
 
     private fun applyBrowsingMode(tabId: String, url: String) {

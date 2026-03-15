@@ -11,6 +11,7 @@ import android.graphics.Canvas
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
@@ -252,8 +253,12 @@ class MainActivity : AppCompatActivity() {
             onBeforeMainFrameNavigation = { url ->
                 applyBrowsingMode(session.id, url)
             },
-            onMainPageStarted = { _ ->
-                onTabMainNavigationStarted(session.id)
+            onMainPageStarted = { startedUrl ->
+                val startedUri = runCatching { Uri.parse(startedUrl) }.getOrNull()
+                val scheme = startedUri?.scheme?.lowercase().orEmpty()
+                if (scheme == "http" || scheme == "https") {
+                    onTabMainNavigationStarted(session.id)
+                }
             },
             onMainUrlUpdated = { url ->
                 applyBrowsingMode(session.id, url)
@@ -925,7 +930,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun onTabMainNavigationStarted(tabId: String) {
         val tab = browserTabs[tabId] ?: return
-        tab.pageLoadGeneration += 1
+        val now = SystemClock.uptimeMillis()
+        val chainInProgress = tab.loadingOverlayVisible &&
+            tab.loadingStartedAtMs > 0L &&
+            now - tab.loadingStartedAtMs <= OVERLAY_REDIRECT_CHAIN_WINDOW_MS
+        if (!chainInProgress) {
+            tab.pageLoadGeneration += 1
+            tab.loadingStartedAtMs = now
+        }
         val generation = tab.pageLoadGeneration
         tab.loadingOverlayVisible = true
         tab.loadingProgress = 8
@@ -936,6 +948,9 @@ class MainActivity : AppCompatActivity() {
             val currentTab = browserTabs[tabId] ?: return@postDelayed
             if (currentTab.pageLoadGeneration != generation) return@postDelayed
             if (!currentTab.loadingOverlayVisible) return@postDelayed
+            if (currentTab.loadingStartedAtMs <= 0L) return@postDelayed
+            val elapsed = SystemClock.uptimeMillis() - currentTab.loadingStartedAtMs
+            if (elapsed < LOADING_OVERLAY_FAILSAFE_MS) return@postDelayed
             completeTabLoading(tabId, generation)
         }, LOADING_OVERLAY_FAILSAFE_MS)
     }
@@ -963,6 +978,7 @@ class MainActivity : AppCompatActivity() {
         val targetGeneration = generation ?: tab.pageLoadGeneration
         if (tab.pageLoadGeneration != targetGeneration) return
         tab.loadingOverlayVisible = false
+        tab.loadingStartedAtMs = 0L
         if (selectedTabId == tabId) {
             hideLoadingOverlay()
         }
@@ -1446,5 +1462,6 @@ class MainActivity : AppCompatActivity() {
         private const val WATCH_QUIET_RETRY_DELAY_MS = 180L
         private const val WATCH_QUIET_MAX_ATTEMPTS = 12
         private const val LOADING_OVERLAY_FAILSAFE_MS = 15000L
+        private const val OVERLAY_REDIRECT_CHAIN_WINDOW_MS = 2500L
     }
 }

@@ -39,6 +39,7 @@ import de.shakie.youtubenext.browser.YouTubeWebChromeClient
 import de.shakie.youtubenext.browser.YouTubeWebViewClient
 import de.shakie.youtubenext.tabs.TabManager
 import de.shakie.youtubenext.tabs.TabPersistence
+import de.shakie.youtubenext.tabs.TabPreviewStore
 import de.shakie.youtubenext.tabs.TabSession
 import de.shakie.youtubenext.ui.TabOverviewAdapter
 import de.shakie.youtubenext.ui.TabOverviewItem
@@ -56,6 +57,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webViewContainer: FrameLayout
     private lateinit var fullscreenContainer: FrameLayout
     private lateinit var tabManager: TabManager
+    private lateinit var tabPreviewStore: TabPreviewStore
 
     private val browserTabs = linkedMapOf<String, BrowserTab>()
     private var selectedTabId: String? = null
@@ -81,6 +83,7 @@ class MainActivity : AppCompatActivity() {
         webViewContainer = findViewById(R.id.webViewContainer)
         fullscreenContainer = findViewById(R.id.fullscreenContainer)
         tabManager = TabManager(TabPersistence(this))
+        tabPreviewStore = TabPreviewStore(this)
 
         setupToolbar()
         setupTabs()
@@ -214,6 +217,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun restoreOrCreateInitialTab() {
         val restored = tabManager.restore()
+        tabPreviewStore.prune(restored.map { it.id }.toSet())
         if (restored.isEmpty()) {
             createAndSelectTab(DEFAULT_URL)
             return
@@ -478,6 +482,7 @@ class MainActivity : AppCompatActivity() {
         webViewContainer.removeView(tab.webView)
         tab.webView.stopLoading()
         tab.webView.destroy()
+        tabPreviewStore.delete(tabId)
 
         val nextTabId = tabManager.close(tabId)
         if (browserTabs.isEmpty()) {
@@ -557,10 +562,11 @@ class MainActivity : AppCompatActivity() {
                 session.url.takeIf { it.isNotBlank() }?.let(::formatToolbarUrl)
                     ?: getString(R.string.default_tab_title)
             }.let(::normalizeTabTitle)
+            val previewBitmap = tab?.let(::captureTabPreview) ?: tabPreviewStore.load(session.id)
             TabOverviewItem(
                 id = session.id,
                 title = displayTitle,
-                preview = tab?.let(::captureTabPreview),
+                preview = previewBitmap,
                 isActive = session.id == selectedTabId
             )
         }
@@ -577,6 +583,7 @@ class MainActivity : AppCompatActivity() {
         val scale = previewWidth / width.toFloat()
         canvas.scale(scale, scale)
         tab.webView.draw(canvas)
+        tabPreviewStore.save(tab.id, bitmap)
         return bitmap
     }
 

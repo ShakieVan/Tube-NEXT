@@ -26,7 +26,7 @@ object WebViewFactory {
         settings.setSupportMultipleWindows(true)
         settings.domStorageEnabled = true
         settings.loadsImagesAutomatically = true
-        settings.mediaPlaybackRequiresUserGesture = false
+        settings.mediaPlaybackRequiresUserGesture = true
         settings.cacheMode = WebSettings.LOAD_DEFAULT
         settings.textZoom = 100
         settings.useWideViewPort = false

@@ -1,0 +1,20 @@
+package de.shakie.youtubenext.engine
+
+import android.view.View
+
+interface EngineTab {
+    val id: String
+    val view: View
+    var title: String
+    var url: String
+
+    fun loadUrl(url: String)
+    fun reload()
+    fun canGoBack(): Boolean
+    fun goBack()
+    fun stopLoading()
+    fun destroy()
+    fun evaluateJavascript(script: String, callback: ((String?) -> Unit)? = null)
+    fun onPause()
+    fun onResume()
+}

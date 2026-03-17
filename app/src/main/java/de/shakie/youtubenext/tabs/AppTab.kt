@@ -1,11 +1,10 @@
-package de.shakie.youtubenext.browser
+package de.shakie.youtubenext.tabs
 
-import android.webkit.WebView
+import de.shakie.youtubenext.engine.EngineTab
 
-data class BrowserTab(
+data class AppTab(
     val id: String,
-    val webView: WebView,
-    val chromeClient: YouTubeWebChromeClient,
+    val engineTab: EngineTab,
     var isDesktopMode: Boolean = false,
     var title: String = "",
     var url: String = "",
@@ -16,4 +15,5 @@ data class BrowserTab(
     var pageLoadGeneration: Long = 0L,
     var loadingOverlayVisible: Boolean = false,
     var loadingProgress: Int = 0
-)
+) {
+}

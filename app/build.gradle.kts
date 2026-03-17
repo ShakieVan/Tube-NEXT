@@ -44,5 +44,5 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("androidx.constraintlayout:constraintlayout:2.2.1")
     implementation("androidx.recyclerview:recyclerview:1.4.0")
-    implementation("androidx.webkit:webkit:1.12.1")
+    implementation("org.mozilla.geckoview:geckoview:136.0.20250317200840")
 }

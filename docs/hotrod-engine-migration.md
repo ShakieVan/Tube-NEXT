@@ -27,6 +27,12 @@ Die App-Shell (Toolbar, Tabs, Persistenz, Link-Einstieg) bleibt erhalten.
 - `MainActivity` nur noch gegen `EngineTab` programmieren.
 - Keine direkten `WebView`-Typannahmen mehr in `MainActivity`.
 
+Status:
+- Erledigt als Hard-Cut-Variante.
+- Laufzeit ist auf Gecko umgestellt.
+- Der alte WebView-Engine-Pfad wurde entfernt.
+- Einzelne UX-Funktionen, die vorher von WebView-HitTest abhaengig waren, sind vorerst reduziert.
+
 ## Phase 2
 - GeckoView als zweite Implementierung von `BrowserEngine` integrieren.
 - Session-, URL-, Titel- und Fortschritts-Callbacks auf App-Shell durchreichen.

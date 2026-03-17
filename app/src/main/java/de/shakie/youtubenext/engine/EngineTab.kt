@@ -14,6 +14,9 @@ interface EngineTab {
     fun goBack()
     fun stopLoading()
     fun destroy()
+    fun setDesktopMode(enabled: Boolean)
+    fun isInCustomView(): Boolean
+    fun exitFullscreenIfNeeded()
     fun evaluateJavascript(script: String, callback: ((String?) -> Unit)? = null)
     fun onPause()
     fun onResume()

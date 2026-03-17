@@ -17,7 +17,6 @@ import android.view.ScaleGestureDetector
 import android.view.ViewConfiguration
 import android.view.View
 import android.view.ViewGroup
-import android.webkit.WebView
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageButton
@@ -32,11 +31,12 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
-import de.shakie.youtubenext.browser.BrowserTab
 import de.shakie.youtubenext.browser.LinkInterceptor
-import de.shakie.youtubenext.browser.WebViewFactory
-import de.shakie.youtubenext.browser.YouTubeWebChromeClient
-import de.shakie.youtubenext.browser.YouTubeWebViewClient
+import de.shakie.youtubenext.engine.BrowserEngine
+import de.shakie.youtubenext.engine.EngineCallbacks
+import de.shakie.youtubenext.engine.EngineType
+import de.shakie.youtubenext.engine.gecko.GeckoBrowserEngine
+import de.shakie.youtubenext.tabs.AppTab
 import de.shakie.youtubenext.tabs.TabManager
 import de.shakie.youtubenext.tabs.TabPersistence
 import de.shakie.youtubenext.tabs.TabPreviewStore
@@ -56,10 +56,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var loadingLabel: TextView
     private lateinit var webViewContainer: FrameLayout
     private lateinit var fullscreenContainer: FrameLayout
+    private lateinit var browserEngine: BrowserEngine
     private lateinit var tabManager: TabManager
     private lateinit var tabPreviewStore: TabPreviewStore
 
-    private val browserTabs = linkedMapOf<String, BrowserTab>()
+    private val browserTabs = linkedMapOf<String, AppTab>()
     private var selectedTabId: String? = null
     private var tabSelectionUpdateInProgress = false
     private var landscapeVideoModeActive = false
@@ -82,6 +83,11 @@ class MainActivity : AppCompatActivity() {
         loadingLabel = findViewById(R.id.loadingLabel)
         webViewContainer = findViewById(R.id.webViewContainer)
         fullscreenContainer = findViewById(R.id.fullscreenContainer)
+        browserEngine = GeckoBrowserEngine(
+            activity = this,
+            normalizeInternalUrl = ::normalizeInternalYouTubeUrl,
+            shouldUseDesktopMode = ::shouldUseDesktopMode
+        )
         tabManager = TabManager(TabPersistence(this))
         tabPreviewStore = TabPreviewStore(this)
 
@@ -108,7 +114,7 @@ class MainActivity : AppCompatActivity() {
         if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
             enterLandscapeVideoModeIfNeeded()
         } else if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT) {
-            currentTab()?.chromeClient?.exitFullscreenIfNeeded()
+            currentTab()?.engineTab?.exitFullscreenIfNeeded()
             disableLandscapeVideoMode()
         }
         updateBrowserChromeVisibility()
@@ -127,18 +133,19 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         browserTabs.values.forEach { tab ->
-            webViewContainer.removeView(tab.webView)
-            tab.webView.stopLoading()
-            tab.webView.destroy()
+            webViewContainer.removeView(tab.engineTab.view)
+            tab.engineTab.stopLoading()
+            tab.engineTab.destroy()
         }
         browserTabs.clear()
+        browserEngine.shutdown()
     }
 
     private fun setupToolbar() {
         toolbar.title = null
         toolbar.subtitle = null
         reloadButton.setOnClickListener {
-            currentTab()?.webView?.reload()
+            currentTab()?.engineTab?.reload()
         }
         tabSwitcherButton.setOnClickListener {
             showTabOverview()
@@ -168,7 +175,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 R.id.action_reload -> {
-                    currentTab()?.webView?.reload()
+                    currentTab()?.engineTab?.reload()
                     true
                 }
 
@@ -195,8 +202,8 @@ class MainActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 val current = currentTab()
-                if (current?.chromeClient?.isInCustomView == true) {
-                    current.chromeClient.exitFullscreenIfNeeded()
+                if (current?.engineTab?.isInCustomView() == true) {
+                    current.engineTab.exitFullscreenIfNeeded()
                     return
                 }
                 if (landscapeVideoModeActive) {
@@ -206,8 +213,8 @@ class MainActivity : AppCompatActivity() {
                 if (current != null && navigateBackInTabHistory(current)) {
                     return
                 }
-                if (current?.webView?.canGoBack() == true) {
-                    current.webView.goBack()
+                if (current?.engineTab?.canGoBack() == true) {
+                    current.engineTab.goBack()
                 } else {
                     finish()
                 }
@@ -256,8 +263,8 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun createAndSelectTab(url: String): BrowserTab {
-        val normalizedUrl = WebViewFactory.normalizeStartUrl(url)
+    private fun createAndSelectTab(url: String): AppTab {
+        val normalizedUrl = normalizeStartUrl(url)
         val targetUrl = normalizeInternalYouTubeUrl(normalizedUrl)
         val session = tabManager.create(targetUrl, "")
         val browserTab = createBrowserTab(session)
@@ -266,80 +273,64 @@ class MainActivity : AppCompatActivity() {
         return browserTab
     }
 
-    private fun createBrowserTab(session: TabSession): BrowserTab {
-        val webView = WebViewFactory.create(this)
-        webView.layoutParams = ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        )
-        webView.visibility = View.GONE
-
-        webView.webViewClient = YouTubeWebViewClient(
-            onOpenExternalUrl = ::openExternalUrl,
-            normalizeInternalUrl = ::normalizeInternalYouTubeUrl,
-            onBeforeMainFrameNavigation = { url ->
-                applyBrowsingMode(session.id, url)
-                onTabMainNavigationStarted(session.id)
-            },
-            onMainUrlUpdated = { url ->
-                applyBrowsingMode(session.id, url)
-                updateTabState(session.id, newUrl = url)
-            },
-            onMainPageFinished = { url ->
-                scheduleWatchViewportStabilization(session.id, url)
-            },
-            onMainTitleUpdated = { title ->
-                updateTabState(session.id, newTitle = title)
-            },
-            onViewportDebug = { pageUrl, metrics ->
-                Log.i("YTNEXT_VIEWPORT", "url=$pageUrl metrics=$metrics")
-            },
-            onLoadError = {
-                completeTabLoading(session.id, browserTabs[session.id]?.pageLoadGeneration)
-                Snackbar.make(webViewContainer, R.string.page_load_error, Snackbar.LENGTH_SHORT).show()
-            }
-        )
-        val chromeClient = YouTubeWebChromeClient(
-            activity = this,
-            container = fullscreenContainer,
-            onTitleChanged = { title ->
-                updateTabState(session.id, newTitle = title)
-            },
-            onProgressChanged = { progress ->
-                updateToolbarState()
-                onTabProgress(session.id, progress)
-            },
-            onNewTabRequest = { targetUrl ->
-                createAndSelectTab(targetUrl)
-            },
-            onPopupUrlRequest = { targetUrl ->
-                browserTabs[session.id]?.webView?.loadUrl(normalizeInternalYouTubeUrl(targetUrl))
-            },
-            onFullscreenChanged = { isFullscreen ->
-                if (isFullscreen) {
-                    disableLandscapeVideoMode()
-                    hideLoadingOverlay()
+    private fun createBrowserTab(session: TabSession): AppTab {
+        val engineTab = browserEngine.createTab(
+            tabId = session.id,
+            initialUrl = session.url,
+            title = session.title,
+            callbacks = EngineCallbacks(
+                onOpenExternalUrl = ::openExternalUrl,
+                onMainNavigationStarted = { tabId, url ->
+                    applyBrowsingMode(tabId, url)
+                    onTabMainNavigationStarted(tabId)
+                },
+                onMainUrlUpdated = { tabId, url ->
+                    applyBrowsingMode(tabId, url)
+                    updateTabState(tabId, newUrl = url)
+                },
+                onMainTitleUpdated = { tabId, title ->
+                    updateTabState(tabId, newTitle = title)
+                },
+                onMainPageFinished = { tabId, url ->
+                    scheduleWatchViewportStabilization(tabId, url)
+                },
+                onProgressChanged = { tabId, progress ->
+                    updateToolbarState()
+                    onTabProgress(tabId, progress)
+                },
+                onNewTabRequest = { targetUrl ->
+                    createAndSelectTab(targetUrl)
+                },
+                onFullscreenChanged = { _, isFullscreen ->
+                    if (isFullscreen) {
+                        disableLandscapeVideoMode()
+                        hideLoadingOverlay()
+                    }
+                    updateBrowserChromeVisibility()
+                },
+                onLoadError = { tabId ->
+                    completeTabLoading(tabId, browserTabs[tabId]?.pageLoadGeneration)
+                    Snackbar.make(webViewContainer, R.string.page_load_error, Snackbar.LENGTH_SHORT).show()
                 }
-                updateBrowserChromeVisibility()
-            }
+            )
         )
-        webView.webChromeClient = chromeClient
 
-        val browserTab = BrowserTab(
+        val browserTab = AppTab(
             id = session.id,
-            webView = webView,
-            chromeClient = chromeClient,
+            engineTab = engineTab,
             isDesktopMode = shouldUseDesktopMode(session.url),
             title = session.title,
             url = session.url
         )
-        WebViewFactory.setDesktopMode(webView, browserTab.isDesktopMode)
+        browserTab.engineTab.setDesktopMode(browserTab.isDesktopMode)
+        browserTab.engineTab.view.layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
+        browserTab.engineTab.view.visibility = View.GONE
         configureLongPressMenu(browserTab)
         browserTabs[session.id] = browserTab
-        webViewContainer.addView(webView)
-        if (session.url.isNotBlank()) {
-            webView.loadUrl(session.url)
-        }
+        webViewContainer.addView(browserTab.engineTab.view)
         return browserTab
     }
 
@@ -369,7 +360,7 @@ class MainActivity : AppCompatActivity() {
         if (!browserTabs.containsKey(tabId)) return
         selectedTabId = tabId
         browserTabs.forEach { (id, tab) ->
-            tab.webView.visibility = if (id == tabId) View.VISIBLE else View.GONE
+            tab.engineTab.view.visibility = if (id == tabId) View.VISIBLE else View.GONE
         }
         updateToolbarState()
         if (persistSelection) {
@@ -397,9 +388,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadInCurrentTab(url: String) {
         val tab = currentTab() ?: createAndSelectTab(url)
-        val normalizedUrl = WebViewFactory.normalizeStartUrl(url)
+        val normalizedUrl = normalizeStartUrl(url)
         val targetUrl = normalizeInternalYouTubeUrl(normalizedUrl)
-        tab.webView.loadUrl(targetUrl)
+        tab.engineTab.loadUrl(targetUrl)
     }
 
     private fun syncTabLayout() {
@@ -430,19 +421,19 @@ class MainActivity : AppCompatActivity() {
         tabSelectionUpdateInProgress = false
     }
 
-    private fun currentTab(): BrowserTab? {
+    private fun currentTab(): AppTab? {
         return selectedTabId?.let { browserTabs[it] }
     }
 
-    private fun navigateBackInTabHistory(tab: BrowserTab): Boolean {
+    private fun navigateBackInTabHistory(tab: AppTab): Boolean {
         if (tab.historyIndex <= 0) return false
         tab.historyIndex -= 1
         tab.pendingHistoryNavigation = true
-        tab.webView.loadUrl(tab.navigationHistory[tab.historyIndex])
+        tab.engineTab.loadUrl(tab.navigationHistory[tab.historyIndex])
         return true
     }
 
-    private fun recordTabHistory(tab: BrowserTab, url: String) {
+    private fun recordTabHistory(tab: AppTab, url: String) {
         val canonicalUrl = canonicalHistoryUrl(url)
         if (canonicalUrl.isBlank()) return
 
@@ -479,9 +470,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun closeTabById(tabId: String, showMessage: Boolean = true) {
         val tab = browserTabs.remove(tabId) ?: return
-        webViewContainer.removeView(tab.webView)
-        tab.webView.stopLoading()
-        tab.webView.destroy()
+        webViewContainer.removeView(tab.engineTab.view)
+        tab.engineTab.stopLoading()
+        tab.engineTab.destroy()
         tabPreviewStore.delete(tabId)
 
         val nextTabId = tabManager.close(tabId)
@@ -573,16 +564,17 @@ class MainActivity : AppCompatActivity() {
         adapter.submitList(items)
     }
 
-    private fun captureTabPreview(tab: BrowserTab): Bitmap? {
-        val width = tab.webView.width.takeIf { it > 0 } ?: return null
-        val height = tab.webView.height.takeIf { it > 0 } ?: return null
+    private fun captureTabPreview(tab: AppTab): Bitmap? {
+        val contentView = tab.engineTab.view
+        val width = contentView.width.takeIf { it > 0 } ?: return null
+        val height = contentView.height.takeIf { it > 0 } ?: return null
         val previewWidth = 192
         val previewHeight = 108
         val bitmap = Bitmap.createBitmap(previewWidth, previewHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val scale = previewWidth / width.toFloat()
         canvas.scale(scale, scale)
-        tab.webView.draw(canvas)
+        contentView.draw(canvas)
         tabPreviewStore.save(tab.id, bitmap)
         return bitmap
     }
@@ -621,41 +613,22 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun configureLongPressMenu(tab: BrowserTab) {
-        tab.webView.setOnLongClickListener {
-            val result = tab.webView.hitTestResult ?: return@setOnLongClickListener false
-            val target = result.extra ?: return@setOnLongClickListener false
-            if (!target.startsWith("http://") && !target.startsWith("https://")) {
-                return@setOnLongClickListener false
-            }
-
-            val actions = listOf(
-                "Link im aktuellen Tab oeffnen" to { loadInCurrentTab(target) },
-                "Link in neuem Tab oeffnen" to { createAndSelectTab(target) },
-                "Im Browser oeffnen" to { openExternalUrl(Uri.parse(target)) },
-                "Link teilen" to { shareLink(target) },
-                "Link kopieren" to { copyToClipboard(target) }
-            )
-            MaterialAlertDialogBuilder(this)
-                .setTitle(Uri.parse(target).host ?: target)
-                .setItems(actions.map { it.first }.toTypedArray()) { _, which ->
-                    actions[which].second.invoke()
-                }
-                .show()
-            true
-        }
+    private fun configureLongPressMenu(tab: AppTab) {
+        // GeckoView does not expose WebView-like hit test link metadata.
+        tab.engineTab.view.setOnLongClickListener { false }
     }
 
     private fun enterLandscapeVideoModeIfNeeded() {
+        if (!supportsLegacyWatchTweaks()) return
         val tab = currentTab() ?: return
         if (!isCurrentTabWatchPage()) return
-        if (tab.chromeClient.isInCustomView) return
+        if (tab.engineTab.isInCustomView()) return
         enableLandscapeVideoMode()
     }
 
     private fun enableLandscapeVideoMode() {
         val tab = currentTab() ?: return
-        tab.webView.evaluateJavascript(
+        tab.engineTab.evaluateJavascript(
             """
             (function() {
               const player = document.querySelector('video');
@@ -777,7 +750,7 @@ class MainActivity : AppCompatActivity() {
         )
         landscapeVideoModeActive = true
         enableSystemImmersiveMode()
-        attachLandscapePinchToWebView(tab.webView)
+        attachLandscapePinchToEngineView(tab.engineTab.view)
         updateBrowserChromeVisibility()
     }
 
@@ -789,13 +762,13 @@ class MainActivity : AppCompatActivity() {
         landscapeVideoTranslationX = 0f
         landscapeVideoTranslationY = 0f
         browserTabs.values.forEach { browserTab ->
-            browserTab.webView.setOnTouchListener(null)
-            browserTab.webView.scaleX = 1f
-            browserTab.webView.scaleY = 1f
-            browserTab.webView.translationX = 0f
-            browserTab.webView.translationY = 0f
+            browserTab.engineTab.view.setOnTouchListener(null)
+            browserTab.engineTab.view.scaleX = 1f
+            browserTab.engineTab.view.scaleY = 1f
+            browserTab.engineTab.view.translationX = 0f
+            browserTab.engineTab.view.translationY = 0f
         }
-        tab?.webView?.evaluateJavascript(
+        tab?.engineTab?.evaluateJavascript(
             """
             (function() {
               const styleNode = document.getElementById('yt_next_landscape_mode');
@@ -824,7 +797,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateBrowserChromeVisibility() {
         val tab = currentTab()
-        val isCustomFullscreen = tab?.chromeClient?.isInCustomView == true
+        val isCustomFullscreen = tab?.engineTab?.isInCustomView() == true
         val isLandscapeWatch = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE &&
             isCurrentTabWatchPage()
         val hideChrome = isCustomFullscreen || landscapeVideoModeActive || isLandscapeWatch
@@ -834,7 +807,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun isCurrentTabWatchPage(): Boolean {
         val tab = currentTab() ?: return false
-        val url = tab.webView.url ?: tab.url
+        val url = tab.url
         return isWatchYouTubeUrl(url)
     }
 
@@ -856,10 +829,10 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        tab.webView.postDelayed({
+        tab.engineTab.view.postDelayed({
             val currentTab = browserTabs[tabId] ?: return@postDelayed
             if (currentTab.watchStabilizationGeneration != generation) return@postDelayed
-            val currentUrl = currentTab.webView.url ?: currentTab.url
+            val currentUrl = currentTab.url
             if (!isWatchYouTubeUrl(currentUrl)) return@postDelayed
             stabilizeYouTubeViewport(tabId, currentUrl)
             completeTabLoading(tabId, pageLoadGeneration)
@@ -891,7 +864,7 @@ class MainActivity : AppCompatActivity() {
             if (selectedTabId == tabId && tab.loadingOverlayVisible) {
                 showLoadingOverlay(tab.loadingProgress)
             }
-            if (!isWatchYouTubeUrl(tab.webView.url ?: tab.url)) {
+            if (!supportsLegacyWatchTweaks() || !isWatchYouTubeUrl(tab.url)) {
                 completeTabLoading(tabId, tab.pageLoadGeneration)
             }
         }
@@ -927,7 +900,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showLoadingOverlay(progress: Int) {
-        if (currentTab()?.chromeClient?.isInCustomView == true) return
+        if (currentTab()?.engineTab?.isInCustomView() == true) return
         loadingOverlay.bringToFront()
         loadingOverlay.visibility = View.VISIBLE
         loadingProgress.progress = progress.coerceIn(8, 100)
@@ -943,10 +916,11 @@ class MainActivity : AppCompatActivity() {
         val useDesktopMode = shouldUseDesktopMode(url)
         if (tab.isDesktopMode == useDesktopMode) return
         tab.isDesktopMode = useDesktopMode
-        WebViewFactory.setDesktopMode(tab.webView, useDesktopMode)
+        tab.engineTab.setDesktopMode(useDesktopMode)
     }
 
     private fun stabilizeYouTubeViewport(tabId: String, url: String) {
+        if (!supportsLegacyWatchTweaks()) return
         val tab = browserTabs[tabId] ?: return
         val parsed = Uri.parse(url)
         val host = parsed.host?.lowercase().orEmpty()
@@ -956,7 +930,7 @@ class MainActivity : AppCompatActivity() {
         val shouldNormalizeWatchPlayer = isWatch &&
             !landscapeVideoModeActive &&
             resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE
-        tab.webView.evaluateJavascript(
+        tab.engineTab.evaluateJavascript(
             """
             (function() {
               if (document.documentElement) {
@@ -1049,8 +1023,8 @@ class MainActivity : AppCompatActivity() {
             null
         )
         if (shouldNormalizeWatchPlayer) {
-            tab.webView.postDelayed({
-                tab.webView.evaluateJavascript(
+            tab.engineTab.view.postDelayed({
+                tab.engineTab.evaluateJavascript(
                     """
                     (function() {
                       const enforce = function() {
@@ -1093,16 +1067,16 @@ class MainActivity : AppCompatActivity() {
             }, 120L)
         }
         if (isWatch && !landscapeVideoModeActive) {
-            tab.webView.post {
-                tab.webView.translationX = 0f
-                tab.webView.translationY = 0f
-                tab.webView.scaleX = 1f
-                tab.webView.scaleY = 1f
+            tab.engineTab.view.post {
+                tab.engineTab.view.translationX = 0f
+                tab.engineTab.view.translationY = 0f
+                tab.engineTab.view.scaleX = 1f
+                tab.engineTab.view.scaleY = 1f
             }
         }
         if (shouldNormalizeWatchPlayer) {
-            tab.webView.postDelayed({
-                tab.webView.evaluateJavascript(
+            tab.engineTab.view.postDelayed({
+                tab.engineTab.evaluateJavascript(
                     """
                     (function() {
                       const moviePlayer = document.querySelector('#movie_player');
@@ -1117,8 +1091,8 @@ class MainActivity : AppCompatActivity() {
             }, 950L)
         }
         if (shouldNormalizeWatchPlayer) {
-            tab.webView.postDelayed({
-                tab.webView.evaluateJavascript(
+            tab.engineTab.view.postDelayed({
+                tab.engineTab.evaluateJavascript(
                     """
                     (function() {
                       const moviePlayer = document.querySelector('#movie_player');
@@ -1148,6 +1122,16 @@ class MainActivity : AppCompatActivity() {
         val isYouTubeHost = host.contains("youtube.com") || host == "youtu.be"
         if (!isYouTubeHost) return false
         return host == "youtu.be" || path.startsWith("/watch")
+    }
+
+    private fun normalizeStartUrl(rawUrl: String?): String {
+        if (rawUrl.isNullOrBlank()) return DEFAULT_URL
+        val uri = Uri.parse(rawUrl)
+        return if (uri.scheme.isNullOrBlank()) {
+            "https://$rawUrl"
+        } else {
+            rawUrl
+        }
     }
 
     private fun normalizeYouTubeHostForMode(url: String, desktopMode: Boolean): String {
@@ -1215,7 +1199,8 @@ class MainActivity : AppCompatActivity() {
             path.startsWith("/o/oauth")
     }
 
-    private fun attachLandscapePinchToWebView(webView: WebView) {
+    private fun attachLandscapePinchToEngineView(contentView: View) {
+        if (!supportsLegacyWatchTweaks()) return
         var downX = 0f
         var downY = 0f
         var startTranslationX = 0f
@@ -1231,21 +1216,21 @@ class MainActivity : AppCompatActivity() {
                 override fun onScale(scaleDetector: ScaleGestureDetector): Boolean {
                     landscapeVideoScale = (landscapeVideoScale * scaleDetector.scaleFactor)
                         .coerceIn(1f, 3f)
-                    val maxX = ((landscapeVideoScale - 1f) * webView.width) / 2f
-                    val maxY = ((landscapeVideoScale - 1f) * webView.height) / 2f
+                    val maxX = ((landscapeVideoScale - 1f) * contentView.width) / 2f
+                    val maxY = ((landscapeVideoScale - 1f) * contentView.height) / 2f
                     landscapeVideoTranslationX = landscapeVideoTranslationX.coerceIn(-maxX, maxX)
                     landscapeVideoTranslationY = landscapeVideoTranslationY.coerceIn(-maxY, maxY)
-                    webView.pivotX = webView.width / 2f
-                    webView.pivotY = webView.height / 2f
-                    webView.scaleX = landscapeVideoScale
-                    webView.scaleY = landscapeVideoScale
-                    webView.translationX = landscapeVideoTranslationX
-                    webView.translationY = landscapeVideoTranslationY
+                    contentView.pivotX = contentView.width / 2f
+                    contentView.pivotY = contentView.height / 2f
+                    contentView.scaleX = landscapeVideoScale
+                    contentView.scaleY = landscapeVideoScale
+                    contentView.translationX = landscapeVideoTranslationX
+                    contentView.translationY = landscapeVideoTranslationY
                     return true
                 }
             }
         )
-        webView.setOnTouchListener { _, event ->
+        contentView.setOnTouchListener { _, event ->
             if (!landscapeVideoModeActive) return@setOnTouchListener false
             detector.onTouchEvent(event)
             when (event.actionMasked) {
@@ -1265,7 +1250,7 @@ class MainActivity : AppCompatActivity() {
                         if (!cancelSent) {
                             MotionEvent.obtain(event).also { cancelEvent ->
                                 cancelEvent.action = MotionEvent.ACTION_CANCEL
-                                webView.onTouchEvent(cancelEvent)
+                                contentView.onTouchEvent(cancelEvent)
                                 cancelEvent.recycle()
                             }
                             cancelSent = true
@@ -1287,18 +1272,18 @@ class MainActivity : AppCompatActivity() {
                     if (!cancelSent) {
                         MotionEvent.obtain(event).also { cancelEvent ->
                             cancelEvent.action = MotionEvent.ACTION_CANCEL
-                            webView.onTouchEvent(cancelEvent)
+                            contentView.onTouchEvent(cancelEvent)
                             cancelEvent.recycle()
                         }
                         cancelSent = true
                     }
                     gestureCaptured = true
-                    val maxX = ((landscapeVideoScale - 1f) * webView.width) / 2f
-                    val maxY = ((landscapeVideoScale - 1f) * webView.height) / 2f
+                    val maxX = ((landscapeVideoScale - 1f) * contentView.width) / 2f
+                    val maxY = ((landscapeVideoScale - 1f) * contentView.height) / 2f
                     landscapeVideoTranslationX = (startTranslationX + dx).coerceIn(-maxX, maxX)
                     landscapeVideoTranslationY = (startTranslationY + dy).coerceIn(-maxY, maxY)
-                    webView.translationX = landscapeVideoTranslationX
-                    webView.translationY = landscapeVideoTranslationY
+                    contentView.translationX = landscapeVideoTranslationX
+                    contentView.translationY = landscapeVideoTranslationY
                     true
                 }
 
@@ -1306,7 +1291,7 @@ class MainActivity : AppCompatActivity() {
                     if (!cancelSent) {
                         MotionEvent.obtain(event).also { cancelEvent ->
                             cancelEvent.action = MotionEvent.ACTION_CANCEL
-                            webView.onTouchEvent(cancelEvent)
+                            contentView.onTouchEvent(cancelEvent)
                             cancelEvent.recycle()
                         }
                         cancelSent = true
@@ -1320,10 +1305,10 @@ class MainActivity : AppCompatActivity() {
                         landscapeVideoScale = 1f
                         landscapeVideoTranslationX = 0f
                         landscapeVideoTranslationY = 0f
-                        webView.scaleX = 1f
-                        webView.scaleY = 1f
-                        webView.translationX = 0f
-                        webView.translationY = 0f
+                        contentView.scaleX = 1f
+                        contentView.scaleY = 1f
+                        contentView.translationX = 0f
+                        contentView.translationY = 0f
                     }
                     val consumed = isPanning || gestureCaptured
                     isPanning = false
@@ -1392,5 +1377,9 @@ class MainActivity : AppCompatActivity() {
         private const val WATCH_VIEWPORT_STABILIZE_DELAY_MS = 1000L
         private const val OVERLAY_HIDE_DELAY_MS = 2000L
         private val LEADING_COUNT_PREFIX_REGEX = Regex("^\\(\\d+\\)\\s*")
+    }
+
+    private fun supportsLegacyWatchTweaks(): Boolean {
+        return browserEngine.type == EngineType.WEBVIEW
     }
 }

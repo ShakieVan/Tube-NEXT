@@ -162,7 +162,8 @@ class GeckoBrowserEngine(
             geckoView = geckoView,
             title = title,
             url = initialUrl,
-            canGoBackProvider = { canGoBack }
+            canGoBackProvider = { canGoBack },
+            shouldUseDesktopMode = shouldUseDesktopMode
         )
         if (initialUrl.isNotBlank()) {
             tab.loadUrl(initialUrl)
@@ -191,13 +192,15 @@ private data class GeckoEngineTab(
     val geckoView: GeckoView,
     override var title: String,
     override var url: String,
-    val canGoBackProvider: () -> Boolean
+    val canGoBackProvider: () -> Boolean,
+    val shouldUseDesktopMode: (String) -> Boolean
 ) : EngineTab {
     override val view: GeckoView = geckoView
     private var desktopMode: Boolean = true
 
     override fun loadUrl(url: String) {
         this.url = url
+        setDesktopMode(shouldUseDesktopMode(url))
         session.loadUri(url)
     }
 

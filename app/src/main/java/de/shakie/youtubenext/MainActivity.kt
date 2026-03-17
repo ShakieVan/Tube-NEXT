@@ -264,7 +264,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun createAndSelectTab(url: String): AppTab {
         val normalizedUrl = normalizeStartUrl(url)
-        val targetUrl = normalizeInternalYouTubeUrl(normalizedUrl)
+        val targetUrl = normalizedUrl
         val session = tabManager.create(targetUrl, "")
         val browserTab = createBrowserTab(session)
         syncTabLayout()
@@ -386,7 +386,7 @@ class MainActivity : AppCompatActivity() {
     private fun loadInCurrentTab(url: String) {
         val tab = currentTab() ?: createAndSelectTab(url)
         val normalizedUrl = normalizeStartUrl(url)
-        val targetUrl = normalizeInternalYouTubeUrl(normalizedUrl)
+        val targetUrl = normalizedUrl
         tab.engineTab.loadUrl(targetUrl)
     }
 
@@ -457,7 +457,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun canonicalHistoryUrl(url: String): String {
-        return normalizeInternalYouTubeUrl(url)
+        return url
     }
 
     private fun updateToolbarState() {
@@ -1126,71 +1126,6 @@ class MainActivity : AppCompatActivity() {
         } else {
             rawUrl
         }
-    }
-
-    private fun normalizeYouTubeHostForMode(url: String, desktopMode: Boolean): String {
-        val uri = Uri.parse(url)
-        val host = uri.host?.lowercase() ?: return url
-        val isYouTubeHost = host.contains("youtube.com")
-        if (!isYouTubeHost) return url
-        val targetHost = if (desktopMode) "www.youtube.com" else "m.youtube.com"
-        if (host == targetHost) return url
-        return uri.buildUpon().authority(targetHost).build().toString()
-    }
-
-    private fun normalizeInternalYouTubeUrl(url: String): String {
-        if (url.isBlank()) return url
-        val uri = Uri.parse(url)
-        val host = uri.host?.lowercase().orEmpty()
-        if (isYouTubeAuthenticationPath(uri)) {
-            return url
-        }
-        val path = uri.path.orEmpty()
-        val isWatch = path.startsWith("/watch")
-        if (host == "youtu.be") {
-            val videoId = uri.lastPathSegment.orEmpty()
-            if (videoId.isNotBlank()) {
-                return Uri.parse("https://www.youtube.com/watch")
-                    .buildUpon()
-                    .appendQueryParameter("v", videoId)
-                    .build()
-                    .toString()
-            }
-        }
-        if (shouldUseDesktopMode(url) && host == "m.youtube.com") {
-            return sanitizeYouTubeQuery(uri.buildUpon().authority("www.youtube.com").build()).toString()
-        }
-        if (!shouldUseDesktopMode(url) && host == "www.youtube.com") {
-            return sanitizeYouTubeQuery(uri.buildUpon().authority("m.youtube.com").build()).toString()
-        }
-        if (host.contains("youtube.com")) {
-            return sanitizeYouTubeQuery(uri).toString()
-        }
-        return url
-    }
-
-    private fun sanitizeYouTubeQuery(uri: Uri): Uri {
-        return uri.buildUpon()
-            .clearQuery()
-            .apply {
-                uri.queryParameterNames.forEach { key ->
-                    if (key == "persist_app") return@forEach
-                    if (key == "app") return@forEach
-                    uri.getQueryParameters(key).forEach { value ->
-                        appendQueryParameter(key, value)
-                    }
-                }
-            }
-            .build()
-    }
-
-    private fun isYouTubeAuthenticationPath(uri: Uri): Boolean {
-        val host = uri.host?.lowercase().orEmpty()
-        if (!host.contains("youtube.com")) return false
-        val path = uri.path.orEmpty().lowercase()
-        return path.startsWith("/signin") ||
-            path.startsWith("/accounts") ||
-            path.startsWith("/o/oauth")
     }
 
     private fun attachLandscapePinchToEngineView(contentView: View) {

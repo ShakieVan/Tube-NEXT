@@ -46,6 +46,7 @@ class GeckoBrowserEngine(
         var canGoBack = false
         var currentUrl = initialUrl
         var desktopMode = shouldUseDesktopMode(initialUrl)
+        var pendingModeReplayUri: String? = null
         session.settings.userAgentMode = if (desktopMode) {
             GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
         } else {
@@ -82,8 +83,21 @@ class GeckoBrowserEngine(
                 if (scheme != "http" && scheme != "https") {
                     return GeckoResult.fromValue(AllowOrDeny.ALLOW)
                 }
-                applyUserAgentForUrl(request.uri, "onLoadRequest")
+                val isReplay = pendingModeReplayUri == request.uri
+                if (isReplay) {
+                    pendingModeReplayUri = null
+                }
+                val uaChanged = applyUserAgentForUrl(request.uri, "onLoadRequest")
                 if (LinkInterceptor.isInternalFlowUri(targetUri)) {
+                    val shouldReplayWithNewMode = uaChanged &&
+                        !isReplay &&
+                        request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_CURRENT
+                    if (shouldReplayWithNewMode) {
+                        pendingModeReplayUri = request.uri
+                        callbacks.onMainNavigationStarted(tabId, request.uri)
+                        session.loadUri(request.uri)
+                        return GeckoResult.fromValue(AllowOrDeny.DENY)
+                    }
                     callbacks.onMainNavigationStarted(tabId, request.uri)
                     return GeckoResult.fromValue(AllowOrDeny.ALLOW)
                 }
@@ -139,7 +153,6 @@ class GeckoBrowserEngine(
                 val uri = currentItem.uri.orEmpty()
                 if (uri.isNotBlank()) {
                     currentUrl = uri
-                    applyUserAgentForUrl(uri, "onHistoryStateChange")
                     callbacks.onMainUrlUpdated(tabId, uri)
                 }
                 val title = currentItem.title.orEmpty()

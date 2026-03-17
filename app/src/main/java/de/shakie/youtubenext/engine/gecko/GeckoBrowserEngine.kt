@@ -18,7 +18,6 @@ import org.mozilla.geckoview.GeckoView
 
 class GeckoBrowserEngine(
     private val activity: Activity,
-    private val normalizeInternalUrl: (String) -> String,
     private val shouldUseDesktopMode: (String) -> Boolean
 ) : BrowserEngine {
 
@@ -47,7 +46,6 @@ class GeckoBrowserEngine(
         var canGoBack = false
         var currentUrl = initialUrl
         var desktopMode = shouldUseDesktopMode(initialUrl)
-        var reloadingForModeSwitch = false
         session.settings.userAgentMode = if (desktopMode) {
             GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
         } else {
@@ -83,15 +81,9 @@ class GeckoBrowserEngine(
                 if (scheme != "http" && scheme != "https") {
                     return GeckoResult.fromValue(AllowOrDeny.ALLOW)
                 }
-                val normalized = normalizeInternalUrl(request.uri)
-                applyUserAgentForUrl(normalized, "onLoadRequest")
+                applyUserAgentForUrl(request.uri, "onLoadRequest")
                 if (LinkInterceptor.isInternalFlowUri(targetUri)) {
-                    if (normalized != request.uri) {
-                        callbacks.onMainNavigationStarted(tabId, normalized)
-                        session.loadUri(normalized)
-                        return GeckoResult.fromValue(AllowOrDeny.DENY)
-                    }
-                    callbacks.onMainNavigationStarted(tabId, normalized)
+                    callbacks.onMainNavigationStarted(tabId, request.uri)
                     return GeckoResult.fromValue(AllowOrDeny.ALLOW)
                 }
                 callbacks.onOpenExternalUrl(targetUri)
@@ -110,15 +102,13 @@ class GeckoBrowserEngine(
 
         session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
-                val normalized = normalizeInternalUrl(url)
-                currentUrl = normalized
-                applyUserAgentForUrl(normalized, "onPageStart")
-                callbacks.onMainNavigationStarted(tabId, normalized)
-                callbacks.onMainUrlUpdated(tabId, normalized)
+                currentUrl = url
+                applyUserAgentForUrl(url, "onPageStart")
+                callbacks.onMainNavigationStarted(tabId, url)
+                callbacks.onMainUrlUpdated(tabId, url)
             }
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
-                reloadingForModeSwitch = false
                 callbacks.onMainPageFinished(tabId, currentUrl)
             }
 
@@ -134,10 +124,9 @@ class GeckoBrowserEngine(
                 lastVisitedURL: String?,
                 flags: Int
             ): GeckoResult<Boolean> {
-                val normalized = normalizeInternalUrl(url)
-                currentUrl = normalized
-                applyUserAgentForUrl(normalized, "onVisited")
-                callbacks.onMainUrlUpdated(tabId, normalized)
+                currentUrl = url
+                applyUserAgentForUrl(url, "onVisited")
+                callbacks.onMainUrlUpdated(tabId, url)
                 return GeckoResult.fromValue(true)
             }
 
@@ -150,16 +139,9 @@ class GeckoBrowserEngine(
                 val currentItem = history[index]
                 val uri = currentItem.uri.orEmpty()
                 if (uri.isNotBlank()) {
-                    val normalized = normalizeInternalUrl(uri)
-                    currentUrl = normalized
-                    val changed = applyUserAgentForUrl(normalized, "onHistoryStateChange")
-                    if (changed && !reloadingForModeSwitch) {
-                        reloadingForModeSwitch = true
-                        callbacks.onMainNavigationStarted(tabId, normalized)
-                        session.loadUri(normalized)
-                        return
-                    }
-                    callbacks.onMainUrlUpdated(tabId, normalized)
+                    currentUrl = uri
+                    applyUserAgentForUrl(uri, "onHistoryStateChange")
+                    callbacks.onMainUrlUpdated(tabId, uri)
                 }
                 val title = currentItem.title.orEmpty()
                 if (title.isNotBlank()) {
@@ -241,8 +223,6 @@ private data class GeckoEngineTab(
     override fun exitFullscreenIfNeeded() = Unit
 
     override fun evaluateJavascript(script: String, callback: ((String?) -> Unit)?) {
-        val uri = "javascript:(function(){${script}})();"
-        session.loadUri(uri)
         callback?.invoke(null)
     }
 

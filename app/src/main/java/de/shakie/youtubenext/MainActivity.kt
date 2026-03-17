@@ -85,7 +85,6 @@ class MainActivity : AppCompatActivity() {
         fullscreenContainer = findViewById(R.id.fullscreenContainer)
         browserEngine = GeckoBrowserEngine(
             activity = this,
-            normalizeInternalUrl = ::normalizeInternalYouTubeUrl,
             shouldUseDesktopMode = ::shouldUseDesktopMode
         )
         tabManager = TabManager(TabPersistence(this))
@@ -768,27 +767,29 @@ class MainActivity : AppCompatActivity() {
             browserTab.engineTab.view.translationX = 0f
             browserTab.engineTab.view.translationY = 0f
         }
-        tab?.engineTab?.evaluateJavascript(
-            """
-            (function() {
-              const styleNode = document.getElementById('yt_next_landscape_mode');
-              if (styleNode) styleNode.remove();
-              const scriptNode = document.getElementById('yt_next_landscape_script');
-              if (scriptNode) scriptNode.remove();
-              if (window.__ytNextR2fHandlers) {
-                document.removeEventListener('click', window.__ytNextR2fHandlers.blockNativeFs, true);
-                document.removeEventListener('dblclick', window.__ytNextR2fHandlers.blockNativeFs, true);
-                document.removeEventListener('keydown', window.__ytNextR2fHandlers.blockNativeFs, true);
-                document.removeEventListener('fullscreenchange', window.__ytNextR2fHandlers.onFsChange, true);
-                window.__ytNextR2fHandlers = null;
-              }
-              document.documentElement.style.removeProperty('overflow');
-              document.body.style.removeProperty('overflow');
-              return true;
-            })();
-            """.trimIndent(),
-            null
-        )
+        if (supportsLegacyWatchTweaks()) {
+            tab?.engineTab?.evaluateJavascript(
+                """
+                (function() {
+                  const styleNode = document.getElementById('yt_next_landscape_mode');
+                  if (styleNode) styleNode.remove();
+                  const scriptNode = document.getElementById('yt_next_landscape_script');
+                  if (scriptNode) scriptNode.remove();
+                  if (window.__ytNextR2fHandlers) {
+                    document.removeEventListener('click', window.__ytNextR2fHandlers.blockNativeFs, true);
+                    document.removeEventListener('dblclick', window.__ytNextR2fHandlers.blockNativeFs, true);
+                    document.removeEventListener('keydown', window.__ytNextR2fHandlers.blockNativeFs, true);
+                    document.removeEventListener('fullscreenchange', window.__ytNextR2fHandlers.onFsChange, true);
+                    window.__ytNextR2fHandlers = null;
+                  }
+                  document.documentElement.style.removeProperty('overflow');
+                  document.body.style.removeProperty('overflow');
+                  return true;
+                })();
+                """.trimIndent(),
+                null
+            )
+        }
         if (wasActive) {
             disableSystemImmersiveMode()
         }

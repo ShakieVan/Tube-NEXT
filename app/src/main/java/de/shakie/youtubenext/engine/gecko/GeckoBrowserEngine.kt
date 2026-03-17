@@ -15,6 +15,9 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
+import org.mozilla.geckoview.WebExtension
+import java.util.WeakHashMap
+import org.json.JSONObject
 
 class GeckoBrowserEngine(
     private val activity: Activity,
@@ -23,6 +26,13 @@ class GeckoBrowserEngine(
 
     override val type: EngineType = EngineType.GECKO
     private val runtime: GeckoRuntime = GeckoRuntime.create(activity)
+    private var navExtensionInstallRequested = false
+    private var navExtension: WebExtension? = null
+    private val navBridgeBySession = WeakHashMap<GeckoSession, NavBridge>()
+
+    init {
+        ensureNavigationExtensionInstalled()
+    }
 
     override fun createTab(
         tabId: String,
@@ -46,8 +56,6 @@ class GeckoBrowserEngine(
         var canGoBack = false
         var currentUrl = initialUrl
         var desktopMode = shouldUseDesktopMode(initialUrl)
-        var pendingModeReplayUri: String? = null
-        var pendingHistoryModeReplayUri: String? = null
         session.settings.userAgentMode = if (desktopMode) {
             GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
         } else {
@@ -84,21 +92,8 @@ class GeckoBrowserEngine(
                 if (scheme != "http" && scheme != "https") {
                     return GeckoResult.fromValue(AllowOrDeny.ALLOW)
                 }
-                val isReplay = pendingModeReplayUri == request.uri
-                if (isReplay) {
-                    pendingModeReplayUri = null
-                }
-                val uaChanged = applyUserAgentForUrl(request.uri, "onLoadRequest")
+                applyUserAgentForUrl(request.uri, "onLoadRequest")
                 if (LinkInterceptor.isInternalFlowUri(targetUri)) {
-                    val shouldReplayWithNewMode = uaChanged &&
-                        !isReplay &&
-                        request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_CURRENT
-                    if (shouldReplayWithNewMode) {
-                        pendingModeReplayUri = request.uri
-                        callbacks.onMainNavigationStarted(tabId, request.uri)
-                        session.loadUri(request.uri)
-                        return GeckoResult.fromValue(AllowOrDeny.DENY)
-                    }
                     callbacks.onMainNavigationStarted(tabId, request.uri)
                     return GeckoResult.fromValue(AllowOrDeny.ALLOW)
                 }
@@ -120,7 +115,6 @@ class GeckoBrowserEngine(
             override fun onPageStart(session: GeckoSession, url: String) {
                 currentUrl = url
                 callbacks.onMainNavigationStarted(tabId, url)
-                callbacks.onMainUrlUpdated(tabId, url)
             }
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
@@ -154,18 +148,6 @@ class GeckoBrowserEngine(
                 val uri = currentItem.uri.orEmpty()
                 if (uri.isNotBlank()) {
                     currentUrl = uri
-                    val isReplay = pendingHistoryModeReplayUri == uri
-                    if (isReplay) {
-                        pendingHistoryModeReplayUri = null
-                    }
-                    val uaChanged = applyUserAgentForUrl(uri, "onHistoryStateChange")
-                    if (uaChanged && !isReplay) {
-                        pendingHistoryModeReplayUri = uri
-                        callbacks.onMainNavigationStarted(tabId, uri)
-                        session.loadUri(uri)
-                        return
-                    }
-                    callbacks.onMainUrlUpdated(tabId, uri)
                 }
                 val title = currentItem.title.orEmpty()
                 if (title.isNotBlank()) {
@@ -181,6 +163,14 @@ class GeckoBrowserEngine(
         }
 
         session.open(runtime)
+        registerNavigationBridge(
+            session = session,
+            tabId = tabId,
+            callbacks = callbacks,
+            applyUserAgentForUrl = { url, source ->
+                applyUserAgentForUrl(url, source)
+            }
+        )
         val tab = GeckoEngineTab(
             id = tabId,
             session = session,
@@ -188,7 +178,8 @@ class GeckoBrowserEngine(
             title = title,
             url = initialUrl,
             canGoBackProvider = { canGoBack },
-            shouldUseDesktopMode = shouldUseDesktopMode
+            shouldUseDesktopMode = shouldUseDesktopMode,
+            onDestroy = { removeNavigationBridge(session) }
         )
         if (initialUrl.isNotBlank()) {
             tab.loadUrl(initialUrl)
@@ -196,7 +187,9 @@ class GeckoBrowserEngine(
         return tab
     }
 
-    override fun shutdown() = Unit
+    override fun shutdown() {
+        navBridgeBySession.clear()
+    }
 
     private fun shouldApplyUserAgentForUrl(url: String): Boolean {
         if (url.isBlank()) return false
@@ -209,6 +202,120 @@ class GeckoBrowserEngine(
             host == "m.youtube.com" ||
             host == "youtu.be"
     }
+
+    private fun ensureNavigationExtensionInstalled() {
+        if (navExtensionInstallRequested) return
+        navExtensionInstallRequested = true
+        runtime.webExtensionController
+            .installBuiltIn(NAV_EXTENSION_LOCATION)
+            .accept(
+                { extension ->
+                    if (extension == null) {
+                        Log.w("YTNEXT_NAV", "Navigation extension install returned null")
+                        return@accept
+                    }
+                    navExtension = extension
+                    Log.i("YTNEXT_NAV", "Navigation extension installed: ${extension.id}")
+                    bindAllNavigationBridges()
+                },
+                { throwable ->
+                    navExtensionInstallRequested = false
+                    Log.w(
+                        "YTNEXT_NAV",
+                        "Navigation extension install failed: ${throwable?.message}"
+                    )
+                }
+            )
+    }
+
+    private fun registerNavigationBridge(
+        session: GeckoSession,
+        tabId: String,
+        callbacks: EngineCallbacks,
+        applyUserAgentForUrl: (String, String) -> Boolean
+    ) {
+        navBridgeBySession[session] = NavBridge(tabId, callbacks, applyUserAgentForUrl)
+        ensureNavigationExtensionInstalled()
+        bindNavigationBridge(session)
+    }
+
+    private fun removeNavigationBridge(session: GeckoSession) {
+        navBridgeBySession.remove(session)
+    }
+
+    private fun bindAllNavigationBridges() {
+        navBridgeBySession.keys.toList().forEach { session ->
+            bindNavigationBridge(session)
+        }
+    }
+
+    private fun bindNavigationBridge(session: GeckoSession) {
+        val extension = navExtension ?: return
+        val bridge = navBridgeBySession[session] ?: return
+        session.webExtensionController.setMessageDelegate(
+            extension,
+            object : WebExtension.MessageDelegate {
+                override fun onMessage(
+                    nativeApp: String,
+                    message: Any,
+                    sender: WebExtension.MessageSender
+                ): GeckoResult<Any>? {
+                    if (sender.session != session || sender.isTopLevel().not()) {
+                        return GeckoResult.fromValue(null)
+                    }
+                    val intent = parseNavigationIntent(message)
+                    if (intent == null || intent.type != MODE_NAV_TYPE) {
+                        return GeckoResult.fromValue(null)
+                    }
+                    val targetUri = runCatching { Uri.parse(intent.url) }.getOrNull()
+                    if (targetUri == null || !LinkInterceptor.isInternalFlowUri(targetUri)) {
+                        Log.w("YTNEXT_UA", "Ignored invalid MODE_NAV url=${intent.url}")
+                        return GeckoResult.fromValue(null)
+                    }
+                    bridge.applyUserAgentForUrl(intent.url, "extension")
+                    Log.i("YTNEXT_NAV", "tab=${bridge.tabId} mode-nav url=${intent.url}")
+                    bridge.callbacks.onMainNavigationStarted(bridge.tabId, intent.url)
+                    session.loadUri(intent.url)
+                    return GeckoResult.fromValue(null)
+                }
+            },
+            NAV_NATIVE_APP_ID
+        )
+    }
+
+    private fun parseNavigationIntent(message: Any?): NavigationIntent? {
+        return when (message) {
+            is JSONObject -> {
+                val type = message.optString("type")
+                val url = message.optString("url")
+                if (type.isBlank() || url.isBlank()) null else NavigationIntent(type, url)
+            }
+            is Map<*, *> -> {
+                val type = message["type"] as? String
+                val url = message["url"] as? String
+                if (type.isNullOrBlank() || url.isNullOrBlank()) null else NavigationIntent(type, url)
+            }
+            else -> null
+        }
+    }
+
+    private data class NavBridge(
+        val tabId: String,
+        val callbacks: EngineCallbacks,
+        val applyUserAgentForUrl: (String, String) -> Boolean
+    )
+
+    private data class NavigationIntent(
+        val type: String,
+        val url: String
+    )
+
+    private companion object {
+        private const val NAV_EXTENSION_LOCATION =
+            "resource://android/assets/web_extensions/ytnext_nav_switch/"
+        private const val NAV_NATIVE_APP_ID = "ytnext_nav_switch"
+        private const val MODE_NAV_TYPE = "MODE_NAV"
+    }
 }
 
 private data class GeckoEngineTab(
@@ -218,7 +325,8 @@ private data class GeckoEngineTab(
     override var title: String,
     override var url: String,
     val canGoBackProvider: () -> Boolean,
-    val shouldUseDesktopMode: (String) -> Boolean
+    val shouldUseDesktopMode: (String) -> Boolean,
+    val onDestroy: () -> Unit
 ) : EngineTab {
     override val view: GeckoView = geckoView
     private var desktopMode: Boolean = true
@@ -244,6 +352,7 @@ private data class GeckoEngineTab(
     }
 
     override fun destroy() {
+        onDestroy()
         session.close()
     }
 

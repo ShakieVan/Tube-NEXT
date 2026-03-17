@@ -52,6 +52,7 @@ class GeckoBrowserEngine(
             GeckoSessionSettings.USER_AGENT_MODE_MOBILE
         }
         fun applyUserAgentForUrl(url: String, source: String): Boolean {
+            if (!shouldApplyUserAgentForUrl(url)) return false
             val targetDesktopMode = shouldUseDesktopMode(url)
             if (desktopMode == targetDesktopMode) return false
             desktopMode = targetDesktopMode
@@ -172,6 +173,18 @@ class GeckoBrowserEngine(
     }
 
     override fun shutdown() = Unit
+
+    private fun shouldApplyUserAgentForUrl(url: String): Boolean {
+        if (url.isBlank()) return false
+        val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return false
+        val scheme = uri.scheme?.lowercase().orEmpty()
+        if (scheme != "http" && scheme != "https") return false
+        val host = uri.host?.lowercase().orEmpty()
+        return host == "youtube.com" ||
+            host == "www.youtube.com" ||
+            host == "m.youtube.com" ||
+            host == "youtu.be"
+    }
 }
 
 private data class GeckoEngineTab(

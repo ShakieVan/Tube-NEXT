@@ -1120,7 +1120,10 @@ class MainActivity : AppCompatActivity() {
         val uri = Uri.parse(url)
         val host = uri.host?.lowercase().orEmpty()
         val path = uri.path.orEmpty()
-        val isYouTubeHost = host.contains("youtube.com") || host == "youtu.be"
+        val isYouTubeHost = host == "youtube.com" ||
+            host == "www.youtube.com" ||
+            host == "m.youtube.com" ||
+            host == "youtu.be"
         if (!isYouTubeHost) return false
         return host == "youtu.be" || path.startsWith("/watch")
     }

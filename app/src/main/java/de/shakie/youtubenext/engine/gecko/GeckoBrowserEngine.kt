@@ -47,6 +47,7 @@ class GeckoBrowserEngine(
         var currentUrl = initialUrl
         var desktopMode = shouldUseDesktopMode(initialUrl)
         var pendingModeReplayUri: String? = null
+        var pendingHistoryModeReplayUri: String? = null
         session.settings.userAgentMode = if (desktopMode) {
             GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
         } else {
@@ -153,6 +154,17 @@ class GeckoBrowserEngine(
                 val uri = currentItem.uri.orEmpty()
                 if (uri.isNotBlank()) {
                     currentUrl = uri
+                    val isReplay = pendingHistoryModeReplayUri == uri
+                    if (isReplay) {
+                        pendingHistoryModeReplayUri = null
+                    }
+                    val uaChanged = applyUserAgentForUrl(uri, "onHistoryStateChange")
+                    if (uaChanged && !isReplay) {
+                        pendingHistoryModeReplayUri = uri
+                        callbacks.onMainNavigationStarted(tabId, uri)
+                        session.loadUri(uri)
+                        return
+                    }
                     callbacks.onMainUrlUpdated(tabId, uri)
                 }
                 val title = currentItem.title.orEmpty()

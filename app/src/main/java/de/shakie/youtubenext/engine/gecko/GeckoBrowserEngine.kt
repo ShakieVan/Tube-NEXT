@@ -104,7 +104,6 @@ class GeckoBrowserEngine(
         session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
                 currentUrl = url
-                applyUserAgentForUrl(url, "onPageStart")
                 callbacks.onMainNavigationStarted(tabId, url)
                 callbacks.onMainUrlUpdated(tabId, url)
             }
@@ -126,7 +125,6 @@ class GeckoBrowserEngine(
                 flags: Int
             ): GeckoResult<Boolean> {
                 currentUrl = url
-                applyUserAgentForUrl(url, "onVisited")
                 callbacks.onMainUrlUpdated(tabId, url)
                 return GeckoResult.fromValue(true)
             }

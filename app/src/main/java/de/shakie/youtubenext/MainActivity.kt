@@ -280,11 +280,9 @@ class MainActivity : AppCompatActivity() {
             callbacks = EngineCallbacks(
                 onOpenExternalUrl = ::openExternalUrl,
                 onMainNavigationStarted = { tabId, url ->
-                    applyBrowsingMode(tabId, url)
                     onTabMainNavigationStarted(tabId)
                 },
                 onMainUrlUpdated = { tabId, url ->
-                    applyBrowsingMode(tabId, url)
                     updateTabState(tabId, newUrl = url)
                 },
                 onMainTitleUpdated = { tabId, title ->
@@ -910,14 +908,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun hideLoadingOverlay() {
         loadingOverlay.visibility = View.GONE
-    }
-
-    private fun applyBrowsingMode(tabId: String, url: String) {
-        val tab = browserTabs[tabId] ?: return
-        val useDesktopMode = shouldUseDesktopMode(url)
-        if (tab.isDesktopMode == useDesktopMode) return
-        tab.isDesktopMode = useDesktopMode
-        tab.engineTab.setDesktopMode(useDesktopMode)
     }
 
     private fun stabilizeYouTubeViewport(tabId: String, url: String) {

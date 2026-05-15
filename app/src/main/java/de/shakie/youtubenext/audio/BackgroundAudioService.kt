@@ -7,6 +7,8 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.Build
@@ -50,8 +52,14 @@ class BackgroundAudioService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_PLAY -> BackgroundAudioService.controller?.play()
-            ACTION_PAUSE -> BackgroundAudioService.controller?.pause()
+            ACTION_PLAY -> {
+                notificationState = notificationState?.copy(isPlaying = true)
+                BackgroundAudioService.controller?.play()
+            }
+            ACTION_PAUSE -> {
+                notificationState = notificationState?.copy(isPlaying = false)
+                BackgroundAudioService.controller?.pause()
+            }
             ACTION_STOP -> {
                 BackgroundAudioService.controller?.stop()
                 stopSelf()
@@ -64,6 +72,7 @@ class BackgroundAudioService : Service() {
             text = getString(R.string.background_audio_notification_text),
             isPlaying = false
         )
+        mediaSession.setMetadata(buildMetadata(state))
         mediaSession.setPlaybackState(buildPlaybackState(state.isPlaying))
         Log.i("YTNEXT_AUDIO", "service foreground playing=${state.isPlaying} title=${state.title}")
         startForeground(NOTIFICATION_ID, buildNotification(state))
@@ -108,6 +117,7 @@ class BackgroundAudioService : Service() {
 
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_media_play)
+            .setLargeIcon(state.artwork)
             .setContentTitle(state.title.ifBlank { getString(R.string.app_name) })
             .setContentText(state.text)
             .setContentIntent(contentIntent)
@@ -152,6 +162,18 @@ class BackgroundAudioService : Service() {
             .build()
     }
 
+    private fun buildMetadata(state: NotificationState): MediaMetadata {
+        val builder = MediaMetadata.Builder()
+            .putString(MediaMetadata.METADATA_KEY_TITLE, state.title)
+            .putString(MediaMetadata.METADATA_KEY_ARTIST, state.text)
+        state.artwork?.let { artwork ->
+            builder.putBitmap(MediaMetadata.METADATA_KEY_ART, artwork)
+            builder.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, artwork)
+            builder.putBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON, artwork)
+        }
+        return builder.build()
+    }
+
     private fun ensureChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = getSystemService(NotificationManager::class.java)
@@ -166,7 +188,8 @@ class BackgroundAudioService : Service() {
     data class NotificationState(
         val title: String,
         val text: String,
-        val isPlaying: Boolean
+        val isPlaying: Boolean,
+        val artwork: Bitmap? = null
     )
 
     interface Controller {

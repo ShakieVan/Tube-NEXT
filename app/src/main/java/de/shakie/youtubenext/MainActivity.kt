@@ -123,6 +123,11 @@ class MainActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         if (::backgroundAudioCoordinator.isInitialized) {
+            currentTab()?.let { tab ->
+                captureAndStoreTabPreview(tab) { bitmap ->
+                    backgroundAudioCoordinator.setArtwork(bitmap)
+                }
+            }
             backgroundAudioCoordinator.onAppBackgrounded()
         }
     }
@@ -995,7 +1000,11 @@ class MainActivity : AppCompatActivity() {
                 if (currentTab.pageLoadGeneration != targetGeneration) return@postDelayed
                 if (currentTab.loadingOverlayVisible) return@postDelayed
                 hideLoadingOverlay()
-                captureAndStoreTabPreview(currentTab)
+                captureAndStoreTabPreview(currentTab) { bitmap ->
+                    if (selectedTabId == currentTab.id && ::backgroundAudioCoordinator.isInitialized) {
+                        backgroundAudioCoordinator.setArtwork(bitmap)
+                    }
+                }
             }, OVERLAY_HIDE_DELAY_MS)
         }
     }

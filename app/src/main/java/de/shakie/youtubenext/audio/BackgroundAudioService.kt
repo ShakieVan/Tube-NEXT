@@ -13,12 +13,14 @@ import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 import de.shakie.youtubenext.MainActivity
 import de.shakie.youtubenext.R
 
 class BackgroundAudioService : Service() {
     private lateinit var mediaSession: MediaSession
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -72,14 +74,19 @@ class BackgroundAudioService : Service() {
             text = getString(R.string.background_audio_notification_text),
             isPlaying = false
         )
+        updateWakeLock(state.isPlaying)
         mediaSession.setMetadata(buildMetadata(state))
         mediaSession.setPlaybackState(buildPlaybackState(state.isPlaying))
-        Log.i("YTNEXT_AUDIO", "service foreground playing=${state.isPlaying} title=${state.title}")
+        Log.i(
+            "YTNEXT_AUDIO",
+            "service foreground playing=${state.isPlaying} artwork=${state.artwork != null} title=${state.title}"
+        )
         startForeground(NOTIFICATION_ID, buildNotification(state))
         return START_STICKY
     }
 
     override fun onDestroy() {
+        updateWakeLock(false)
         mediaSession.release()
         super.onDestroy()
     }
@@ -183,6 +190,23 @@ class BackgroundAudioService : Service() {
             NotificationManager.IMPORTANCE_LOW
         )
         manager.createNotificationChannel(channel)
+    }
+
+    private fun updateWakeLock(shouldHold: Boolean) {
+        if (!shouldHold) {
+            wakeLock?.takeIf { it.isHeld }?.release()
+            wakeLock = null
+            return
+        }
+        if (wakeLock?.isHeld == true) return
+        val powerManager = getSystemService(PowerManager::class.java)
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "$packageName:BackgroundAudio"
+        ).apply {
+            setReferenceCounted(false)
+            acquire()
+        }
     }
 
     data class NotificationState(

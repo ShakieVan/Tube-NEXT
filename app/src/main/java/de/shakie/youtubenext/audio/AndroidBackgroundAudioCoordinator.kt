@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import de.shakie.youtubenext.engine.EngineMediaControls
 import de.shakie.youtubenext.engine.EnginePlaybackState
@@ -15,18 +17,37 @@ class AndroidBackgroundAudioCoordinator(
     private var lastState: EnginePlaybackState? = null
     private var artwork: Bitmap? = null
     private var appInBackground = false
+    private var controlsGeneration = 0
+    private val handler = Handler(Looper.getMainLooper())
 
     fun setControls(controls: EngineMediaControls?) {
         this.controls = controls
+        controlsGeneration += 1
+        val generation = controlsGeneration
         BackgroundAudioService.controller = if (controls == null) null else this
         Log.i("YTNEXT_AUDIO", "controls=${controls != null}")
         if (controls == null) {
-            BackgroundAudioService.stop(context)
+            if (appInBackground && lastState?.isPlaying == true) {
+                handler.postDelayed({
+                    if (controlsGeneration == generation && this.controls == null && appInBackground) {
+                        Log.i("YTNEXT_AUDIO", "controls grace expired")
+                        BackgroundAudioService.stop(context)
+                    }
+                }, CONTROLS_LOST_GRACE_MS)
+            } else {
+                BackgroundAudioService.stop(context)
+            }
+        } else if (appInBackground) {
+            lastState?.let(::showNotification)
         }
     }
 
     fun setArtwork(bitmap: Bitmap?) {
         artwork = bitmap?.let(::createSoftArtwork)
+        Log.i(
+            "YTNEXT_AUDIO",
+            "artwork=${artwork != null} source=${bitmap?.width ?: 0}x${bitmap?.height ?: 0}"
+        )
         if (appInBackground) {
             lastState?.let(::showNotification)
         }
@@ -56,6 +77,7 @@ class AndroidBackgroundAudioCoordinator(
 
     override fun shutdown() {
         BackgroundAudioService.controller = null
+        handler.removeCallbacksAndMessages(null)
         BackgroundAudioService.stop(context)
     }
 
@@ -101,5 +123,9 @@ class AndroidBackgroundAudioCoordinator(
         }
         canvas.drawRect(0f, 0f, size.toFloat(), size.toFloat(), dimPaint)
         return artwork
+    }
+
+    private companion object {
+        private const val CONTROLS_LOST_GRACE_MS = 5_000L
     }
 }

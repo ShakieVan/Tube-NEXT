@@ -121,15 +121,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
-        super.onStop()
         if (::backgroundAudioCoordinator.isInitialized) {
-            currentTab()?.let { tab ->
-                captureAndStoreTabPreview(tab) { bitmap ->
-                    backgroundAudioCoordinator.setArtwork(bitmap)
-                }
-            }
+            prepareBackgroundAudioArtwork()
             backgroundAudioCoordinator.onAppBackgrounded()
         }
+        super.onStop()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -643,6 +639,16 @@ class MainActivity : AppCompatActivity() {
         }
         captureTabPreviewFallback(tab)?.let { preview ->
             onPreview?.invoke(preview)
+        }
+    }
+
+    private fun prepareBackgroundAudioArtwork() {
+        val tab = currentTab() ?: return
+        tabPreviewStore.load(tab.id)?.let { savedPreview ->
+            backgroundAudioCoordinator.setArtwork(savedPreview)
+        }
+        captureAndStoreTabPreview(tab) { bitmap ->
+            backgroundAudioCoordinator.setArtwork(bitmap)
         }
     }
 

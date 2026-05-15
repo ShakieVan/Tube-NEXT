@@ -17,7 +17,9 @@ class AndroidBackgroundAudioCoordinator(
     private var lastState: EnginePlaybackState? = null
     private var artwork: Bitmap? = null
     private var appInBackground = false
+    private var artworkVersion = 0
     private var controlsGeneration = 0
+    private var lastNotification: NotificationSnapshot? = null
     private val handler = Handler(Looper.getMainLooper())
 
     fun setControls(controls: EngineMediaControls?) {
@@ -44,18 +46,18 @@ class AndroidBackgroundAudioCoordinator(
 
     fun setArtwork(bitmap: Bitmap?) {
         artwork = bitmap?.let(::createSoftArtwork)
+        artworkVersion += 1
         Log.i(
             "YTNEXT_AUDIO",
             "artwork=${artwork != null} source=${bitmap?.width ?: 0}x${bitmap?.height ?: 0}"
         )
         if (appInBackground) {
-            lastState?.let(::showNotification)
+            lastState?.let { showNotification(it, force = true) }
         }
     }
 
     override fun onForegroundPlaybackState(state: EnginePlaybackState) {
         lastState = state
-        Log.i("YTNEXT_AUDIO", "state playing=${state.isPlaying} title=${state.title}")
         if (appInBackground && controls != null) {
             showNotification(state)
         }
@@ -65,12 +67,13 @@ class AndroidBackgroundAudioCoordinator(
         appInBackground = true
         Log.i("YTNEXT_AUDIO", "app backgrounded playing=${lastState?.isPlaying}")
         if (controls != null) {
-            lastState?.let(::showNotification)
+            lastState?.let { showNotification(it, force = true) }
         }
     }
 
     override fun onAppForegrounded() {
         appInBackground = false
+        lastNotification = null
         Log.i("YTNEXT_AUDIO", "app foregrounded")
         BackgroundAudioService.stop(context)
     }
@@ -101,13 +104,25 @@ class AndroidBackgroundAudioCoordinator(
         controls?.seekBackward()
     }
 
-    private fun showNotification(state: EnginePlaybackState) {
+    private fun showNotification(state: EnginePlaybackState, force: Boolean = false) {
+        val snapshot = NotificationSnapshot(
+            title = state.title.ifBlank { "YouTube" },
+            text = state.url,
+            isPlaying = state.isPlaying,
+            artworkVersion = artworkVersion
+        )
+        if (!force && snapshot == lastNotification) return
+        lastNotification = snapshot
+        Log.i(
+            "YTNEXT_AUDIO",
+            "notify playing=${snapshot.isPlaying} artwork=${artwork != null} title=${snapshot.title}"
+        )
         BackgroundAudioService.update(
             context,
             BackgroundAudioService.NotificationState(
-                title = state.title.ifBlank { "YouTube" },
-                text = state.url,
-                isPlaying = state.isPlaying,
+                title = snapshot.title,
+                text = snapshot.text,
+                isPlaying = snapshot.isPlaying,
                 artwork = artwork
             )
         )
@@ -128,4 +143,11 @@ class AndroidBackgroundAudioCoordinator(
     private companion object {
         private const val CONTROLS_LOST_GRACE_MS = 5_000L
     }
+
+    private data class NotificationSnapshot(
+        val title: String,
+        val text: String,
+        val isPlaying: Boolean,
+        val artworkVersion: Int
+    )
 }

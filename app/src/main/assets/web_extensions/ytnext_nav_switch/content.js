@@ -6,8 +6,13 @@
   var OPEN_NEW_TAB = "OPEN_NEW_TAB";
   var LANDSCAPE_STYLE_ID = "ytnext_landscape_watch_style";
   var TAP_CONFIRM_DELAY_MS = 320;
+  var LONG_TAP_SUPPRESS_MS = 650;
   var SEEK_STEP_SECONDS = 10;
   var pendingSingleTapTimer = null;
+  var cueModeActive = false;
+  var cueTime = null;
+  var cueOverlay = null;
+  var suppressPlayerTapUntil = 0;
 
   function isYouTubeHost(host) {
     var normalized = (host || "").toLowerCase();
@@ -134,6 +139,44 @@
       "html.ytnext-landscape-watch .ytp-fullscreen .ytp-chrome-bottom,",
       "html.ytnext-landscape-watch .ytp-fullscreen .ytp-chrome-top {",
       "  width: auto !important;",
+      "}",
+      "html.ytnext-landscape-watch .ytnext-cue-overlay {",
+      "  position: fixed !important;",
+      "  left: 18px !important;",
+      "  top: 50% !important;",
+      "  transform: translateY(-50%) !important;",
+      "  z-index: 2147483647 !important;",
+      "  display: flex !important;",
+      "  flex-direction: column !important;",
+      "  gap: 8px !important;",
+      "  align-items: flex-start !important;",
+      "  pointer-events: auto !important;",
+      "  font-family: sans-serif !important;",
+      "}",
+      "html.ytnext-landscape-watch .ytnext-cue-overlay button {",
+      "  appearance: none !important;",
+      "  border: 0 !important;",
+      "  border-radius: 999px !important;",
+      "  background: rgba(255, 255, 255, 0.92) !important;",
+      "  color: #111 !important;",
+      "  font: 700 15px/1 sans-serif !important;",
+      "  padding: 12px 16px !important;",
+      "  min-width: 68px !important;",
+      "  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;",
+      "}",
+      "html.ytnext-landscape-watch .ytnext-cue-overlay .ytnext-cue-close {",
+      "  min-width: 42px !important;",
+      "  padding: 10px 12px !important;",
+      "  background: rgba(0, 0, 0, 0.62) !important;",
+      "  color: #fff !important;",
+      "}",
+      "html.ytnext-landscape-watch .ytnext-cue-overlay .ytnext-cue-label {",
+      "  border-radius: 999px !important;",
+      "  background: rgba(0, 0, 0, 0.62) !important;",
+      "  color: #fff !important;",
+      "  font: 700 12px/1 sans-serif !important;",
+      "  padding: 8px 11px !important;",
+      "  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;",
       "}"
     ].join("\n");
     (document.documentElement || document.head || document.body).appendChild(style);
@@ -153,10 +196,12 @@
     if (isLandscapeWatch()) {
       ensureLandscapeWatchStyle();
       document.documentElement.classList.add("ytnext-landscape-watch");
+      updateCueOverlay();
       window.scrollTo(0, 0);
       return;
     }
     document.documentElement.classList.remove("ytnext-landscape-watch");
+    updateCueOverlay();
     removeLandscapeWatchStyle();
   }
 
@@ -182,12 +227,110 @@
       ".ytp-settings-menu",
       ".ytp-panel",
       ".ytp-ce-element",
-      ".ytp-cards-teaser"
+      ".ytp-cards-teaser",
+      ".ytnext-cue-overlay"
     ].join(","));
   }
 
+  function getPrimaryVideo() {
+    return document.querySelector("video");
+  }
+
+  function formatCueTime(seconds) {
+    if (!Number.isFinite(seconds)) {
+      return "--:--";
+    }
+    var total = Math.max(0, Math.floor(seconds));
+    var minutes = Math.floor(total / 60);
+    var secs = total % 60;
+    return String(minutes) + ":" + String(secs).padStart(2, "0");
+  }
+
+  function stopOverlayEvent(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") {
+      event.stopImmediatePropagation();
+    }
+  }
+
+  function ensureCueOverlay() {
+    if (cueOverlay && document.documentElement.contains(cueOverlay)) {
+      return cueOverlay;
+    }
+    cueOverlay = document.createElement("div");
+    cueOverlay.className = "ytnext-cue-overlay";
+
+    var cueButton = document.createElement("button");
+    cueButton.type = "button";
+    cueButton.className = "ytnext-cue-jump";
+    cueButton.textContent = "Cue";
+    cueButton.addEventListener("click", function (event) {
+      stopOverlayEvent(event);
+      jumpToCuePoint();
+    }, true);
+
+    var label = document.createElement("div");
+    label.className = "ytnext-cue-label";
+
+    var closeButton = document.createElement("button");
+    closeButton.type = "button";
+    closeButton.className = "ytnext-cue-close";
+    closeButton.textContent = "X";
+    closeButton.addEventListener("click", function (event) {
+      stopOverlayEvent(event);
+      deactivateCueMode();
+    }, true);
+
+    ["pointerdown", "pointerup", "touchstart", "touchend", "mousedown", "mouseup", "contextmenu"].forEach(function (type) {
+      cueOverlay.addEventListener(type, stopOverlayEvent, true);
+    });
+
+    cueOverlay.appendChild(cueButton);
+    cueOverlay.appendChild(label);
+    cueOverlay.appendChild(closeButton);
+    (document.body || document.documentElement).appendChild(cueOverlay);
+    return cueOverlay;
+  }
+
+  function updateCueOverlay() {
+    if (!cueOverlay && !cueModeActive) {
+      return;
+    }
+    var overlay = ensureCueOverlay();
+    overlay.style.setProperty("display", cueModeActive && isLandscapeWatch() ? "flex" : "none", "important");
+    var label = overlay.querySelector(".ytnext-cue-label");
+    if (label) {
+      label.textContent = "Cue " + formatCueTime(cueTime);
+    }
+  }
+
+  function setCuePointFromVideo() {
+    var video = getPrimaryVideo();
+    if (!video || !Number.isFinite(video.currentTime)) {
+      return;
+    }
+    cueTime = video.currentTime;
+    cueModeActive = true;
+    updateCueOverlay();
+  }
+
+  function jumpToCuePoint() {
+    var video = getPrimaryVideo();
+    if (!video || !Number.isFinite(cueTime)) {
+      return;
+    }
+    video.currentTime = Math.max(0, cueTime);
+  }
+
+  function deactivateCueMode() {
+    cueModeActive = false;
+    cueTime = null;
+    updateCueOverlay();
+  }
+
   function togglePrimaryVideo() {
-    var video = document.querySelector("video");
+    var video = getPrimaryVideo();
     if (!video) {
       return;
     }
@@ -199,7 +342,7 @@
   }
 
   function seekPrimaryVideo(deltaSeconds) {
-    var video = document.querySelector("video");
+    var video = getPrimaryVideo();
     if (!video || !Number.isFinite(video.duration)) {
       return;
     }
@@ -235,6 +378,9 @@
       return;
     }
     stopPlayerTapEvent(event);
+    if (Date.now() < suppressPlayerTapUntil) {
+      return;
+    }
     var zone = screenTapZone(event);
     if (event.detail > 1) {
       if (pendingSingleTapTimer) {
@@ -272,6 +418,22 @@
       window.clearTimeout(pendingSingleTapTimer);
       pendingSingleTapTimer = null;
     }
+  }
+
+  function handleLandscapeCueContextMenu(event) {
+    if (!isLandscapeWatch()) {
+      return;
+    }
+    if (event.defaultPrevented || isPlayerControlTarget(event.target)) {
+      return;
+    }
+    stopPlayerTapEvent(event);
+    suppressPlayerTapUntil = Date.now() + LONG_TAP_SUPPRESS_MS;
+    if (pendingSingleTapTimer) {
+      window.clearTimeout(pendingSingleTapTimer);
+      pendingSingleTapTimer = null;
+    }
+    setCuePointFromVideo();
   }
 
   function extractAnchor(target) {
@@ -379,6 +541,7 @@
   document.addEventListener("click", handleLandscapePlayerClick, true);
   document.addEventListener("click", handleDocumentClick, true);
   document.addEventListener("dblclick", handleLandscapePlayerDoubleClick, true);
+  document.addEventListener("contextmenu", handleLandscapeCueContextMenu, true);
   document.addEventListener("contextmenu", handleDocumentContextMenu, true);
   window.addEventListener("resize", scheduleLandscapeWatchMode, true);
   window.addEventListener("orientationchange", scheduleLandscapeWatchMode, true);

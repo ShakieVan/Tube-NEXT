@@ -25,7 +25,8 @@ object YouTubeNavigationPolicy {
 
     fun isUserVisibleUrl(url: String): Boolean {
         val uri = parseHttpUri(url) ?: return false
-        return !isTransientInternalUrl(uri)
+        val host = uri.host?.lowercase().orEmpty()
+        return isSupportedYouTubeHost(host) && !isTransientInternalUrl(uri)
     }
 
     fun isSupportedYouTubeUrl(url: String): Boolean {

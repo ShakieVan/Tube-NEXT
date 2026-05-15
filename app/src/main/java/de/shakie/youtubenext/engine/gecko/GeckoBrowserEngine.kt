@@ -83,6 +83,18 @@ class GeckoBrowserEngine(
                 canGoBack = value
             }
 
+            override fun onLocationChange(
+                session: GeckoSession,
+                url: String?,
+                perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
+                hasUserGesture: Boolean
+            ) {
+                val location = url.orEmpty()
+                if (location.isBlank()) return
+                currentUrl = location
+                callbacks.onMainUrlUpdated(tabId, location)
+            }
+
             override fun onLoadRequest(
                 session: GeckoSession,
                 request: GeckoSession.NavigationDelegate.LoadRequest
@@ -134,7 +146,6 @@ class GeckoBrowserEngine(
                 flags: Int
             ): GeckoResult<Boolean> {
                 currentUrl = url
-                callbacks.onMainUrlUpdated(tabId, url)
                 return GeckoResult.fromValue(true)
             }
 

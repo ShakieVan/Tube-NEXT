@@ -4,6 +4,7 @@
   var NATIVE_APP = "ytnext_nav_switch";
   var MODE_NAV = "MODE_NAV";
   var OPEN_NEW_TAB = "OPEN_NEW_TAB";
+  var WATCH_FIT_STYLE_ID = "ytnext_watch_fit_style";
   var LANDSCAPE_STYLE_ID = "ytnext_landscape_watch_style";
   var TAP_CONFIRM_DELAY_MS = 320;
   var LONG_PRESS_TRIGGER_MS = 520;
@@ -40,6 +41,105 @@
 
   function isLandscapeWatch() {
     return shouldUseDesktop(window.location.href) && window.innerWidth > window.innerHeight;
+  }
+
+  function isWatchPage() {
+    return shouldUseDesktop(window.location.href);
+  }
+
+  function ensureWatchFitStyle() {
+    if (document.getElementById(WATCH_FIT_STYLE_ID)) {
+      return;
+    }
+    var style = document.createElement("style");
+    style.id = WATCH_FIT_STYLE_ID;
+    style.textContent = [
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch),",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) body {",
+      "  width: 100% !important;",
+      "  max-width: 100vw !important;",
+      "  overflow-x: hidden !important;",
+      "  box-sizing: border-box !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) ytd-app,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) ytd-page-manager,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) ytd-watch-flexy,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #content,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #page-manager,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #columns,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #primary,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #primary-inner,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #secondary {",
+      "  width: 100vw !important;",
+      "  max-width: 100vw !important;",
+      "  min-width: 0 !important;",
+      "  margin-left: 0 !important;",
+      "  margin-right: 0 !important;",
+      "  padding-left: 0 !important;",
+      "  padding-right: 0 !important;",
+      "  box-sizing: border-box !important;",
+      "  overflow-x: hidden !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #columns {",
+      "  display: block !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #player,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #player-container,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #player-container-outer,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #player-container-inner,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #player-full-bleed-container,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #movie_player,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .html5-video-player,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .html5-video-container {",
+      "  left: 0 !important;",
+      "  right: auto !important;",
+      "  width: 100vw !important;",
+      "  max-width: 100vw !important;",
+      "  min-width: 0 !important;",
+      "  margin-left: 0 !important;",
+      "  margin-right: 0 !important;",
+      "  transform: none !important;",
+      "  box-sizing: border-box !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) video {",
+      "  left: 0 !important;",
+      "  right: auto !important;",
+      "  width: 100vw !important;",
+      "  max-width: 100vw !important;",
+      "  min-width: 0 !important;",
+      "  margin-left: 0 !important;",
+      "  margin-right: 0 !important;",
+      "  object-fit: contain !important;",
+      "  transform: none !important;",
+      "  box-sizing: border-box !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) ytd-watch-metadata,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #above-the-fold,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #below,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #comments,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) ytd-comments,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) ytd-item-section-renderer,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) ytd-watch-next-secondary-results-renderer {",
+      "  width: 100% !important;",
+      "  max-width: 100vw !important;",
+      "  min-width: 0 !important;",
+      "  box-sizing: border-box !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) ytd-watch-metadata,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #below,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #secondary {",
+      "  padding-left: 12px !important;",
+      "  padding-right: 12px !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-chrome-bottom,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-chrome-top {",
+      "  left: 12px !important;",
+      "  right: 12px !important;",
+      "  width: auto !important;",
+      "  max-width: calc(100vw - 24px) !important;",
+      "}"
+    ].join("\n");
+    (document.documentElement || document.head || document.body).appendChild(style);
   }
 
   function ensureLandscapeWatchStyle() {
@@ -197,6 +297,12 @@
     if (!document.documentElement) {
       return;
     }
+    if (isWatchPage()) {
+      ensureWatchFitStyle();
+      document.documentElement.classList.add("ytnext-watch-fit");
+    } else {
+      document.documentElement.classList.remove("ytnext-watch-fit");
+    }
     if (isLandscapeWatch()) {
       ensureLandscapeWatchStyle();
       document.documentElement.classList.add("ytnext-landscape-watch");
@@ -213,6 +319,8 @@
     window.setTimeout(applyLandscapeWatchMode, 0);
     window.setTimeout(applyLandscapeWatchMode, 150);
     window.setTimeout(applyLandscapeWatchMode, 700);
+    window.setTimeout(applyLandscapeWatchMode, 1500);
+    window.setTimeout(applyLandscapeWatchMode, 2600);
   }
 
   function isPlayerControlTarget(target) {

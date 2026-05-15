@@ -5,6 +5,8 @@
   var MODE_NAV = "MODE_NAV";
   var OPEN_NEW_TAB = "OPEN_NEW_TAB";
   var LANDSCAPE_STYLE_ID = "ytnext_landscape_watch_style";
+  var TAP_CONFIRM_DELAY_MS = 320;
+  var SEEK_STEP_SECONDS = 10;
   var pendingSingleTapTimer = null;
 
   function isYouTubeHost(host) {
@@ -196,6 +198,35 @@
     video.pause();
   }
 
+  function seekPrimaryVideo(deltaSeconds) {
+    var video = document.querySelector("video");
+    if (!video || !Number.isFinite(video.duration)) {
+      return;
+    }
+    var nextTime = Math.max(0, Math.min(video.duration, video.currentTime + deltaSeconds));
+    video.currentTime = nextTime;
+  }
+
+  function screenTapZone(event) {
+    var width = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
+    var x = Math.max(0, Math.min(width, event.clientX || 0));
+    if (x < width / 3) {
+      return "left";
+    }
+    if (x > (width * 2) / 3) {
+      return "right";
+    }
+    return "middle";
+  }
+
+  function stopPlayerTapEvent(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") {
+      event.stopImmediatePropagation();
+    }
+  }
+
   function handleLandscapePlayerClick(event) {
     if (!isLandscapeWatch()) {
       return;
@@ -203,10 +234,19 @@
     if (event.defaultPrevented || isPlayerControlTarget(event.target)) {
       return;
     }
+    stopPlayerTapEvent(event);
+    var zone = screenTapZone(event);
     if (event.detail > 1) {
       if (pendingSingleTapTimer) {
         window.clearTimeout(pendingSingleTapTimer);
         pendingSingleTapTimer = null;
+      }
+      if (zone === "left") {
+        seekPrimaryVideo(-SEEK_STEP_SECONDS);
+      } else if (zone === "right") {
+        seekPrimaryVideo(SEEK_STEP_SECONDS);
+      } else {
+        togglePrimaryVideo();
       }
       return;
     }
@@ -215,11 +255,19 @@
     }
     pendingSingleTapTimer = window.setTimeout(function () {
       pendingSingleTapTimer = null;
-      togglePrimaryVideo();
-    }, 420);
+      if (zone === "middle") {
+        togglePrimaryVideo();
+      }
+    }, TAP_CONFIRM_DELAY_MS);
   }
 
-  function handleLandscapePlayerDoubleClick() {
+  function handleLandscapePlayerDoubleClick(event) {
+    if (!isLandscapeWatch()) {
+      return;
+    }
+    if (!event.defaultPrevented && !isPlayerControlTarget(event.target)) {
+      stopPlayerTapEvent(event);
+    }
     if (pendingSingleTapTimer) {
       window.clearTimeout(pendingSingleTapTimer);
       pendingSingleTapTimer = null;
@@ -328,8 +376,8 @@
     }).catch(function () {});
   }
 
+  document.addEventListener("click", handleLandscapePlayerClick, true);
   document.addEventListener("click", handleDocumentClick, true);
-  document.addEventListener("click", handleLandscapePlayerClick, false);
   document.addEventListener("dblclick", handleLandscapePlayerDoubleClick, true);
   document.addEventListener("contextmenu", handleDocumentContextMenu, true);
   window.addEventListener("resize", scheduleLandscapeWatchMode, true);

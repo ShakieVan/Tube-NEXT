@@ -39,6 +39,15 @@ class TabOverviewAdapter(
         notifyItemChanged(index)
     }
 
+    fun moveItem(fromPosition: Int, toPosition: Int): Boolean {
+        if (fromPosition == toPosition) return false
+        if (fromPosition !in items.indices || toPosition !in items.indices) return false
+        val moved = items.removeAt(fromPosition)
+        items.add(toPosition, moved)
+        notifyItemMoved(fromPosition, toPosition)
+        return true
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TabViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_tab_overview, parent, false)

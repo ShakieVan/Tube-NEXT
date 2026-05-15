@@ -76,6 +76,15 @@ class TabManager(
         )
     }
 
+    fun move(fromIndex: Int, toIndex: Int): Boolean {
+        if (fromIndex == toIndex) return false
+        if (fromIndex !in sessions.indices || toIndex !in sessions.indices) return false
+        val moved = sessions.removeAt(fromIndex)
+        sessions.add(toIndex, moved)
+        persist()
+        return true
+    }
+
     fun persist() {
         persistence.save(sessions = sessions, selectedTabId = selectedId)
     }

@@ -24,7 +24,9 @@ import android.widget.TextView
 import androidx.core.content.getSystemService
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import androidx.core.view.WindowCompat
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -547,8 +549,7 @@ class MainActivity : AppCompatActivity() {
     private fun showTabOverview() {
         val dialog = BottomSheetDialog(this)
         val content = layoutInflater.inflate(R.layout.dialog_tab_overview, null)
-        val recyclerView =
-            content.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.tabOverviewList)
+        val recyclerView = content.findViewById<RecyclerView>(R.id.tabOverviewList)
         val title = content.findViewById<TextView>(R.id.tabOverviewTitle)
         val newTabButton = content.findViewById<ImageButton>(R.id.tabOverviewNewTab)
         val duplicateCurrentButton = content.findViewById<ImageButton>(R.id.tabOverviewDuplicateCurrent)
@@ -568,6 +569,7 @@ class MainActivity : AppCompatActivity() {
         )
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
+        attachTabOverviewDrag(recyclerView, adapter)
 
         closeButton.setOnClickListener { dialog.dismiss() }
         newTabButton.setOnClickListener {
@@ -590,6 +592,48 @@ class MainActivity : AppCompatActivity() {
         dialog.setContentView(content)
         refreshTabOverview(adapter, title)
         dialog.show()
+    }
+
+    private fun attachTabOverviewDrag(
+        recyclerView: RecyclerView,
+        adapter: TabOverviewAdapter
+    ) {
+        var orderChanged = false
+        val touchHelper = ItemTouchHelper(
+            object : ItemTouchHelper.SimpleCallback(ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0) {
+                override fun isLongPressDragEnabled(): Boolean = true
+
+                override fun isItemViewSwipeEnabled(): Boolean = false
+
+                override fun onMove(
+                    recyclerView: RecyclerView,
+                    viewHolder: RecyclerView.ViewHolder,
+                    target: RecyclerView.ViewHolder
+                ): Boolean {
+                    val from = viewHolder.bindingAdapterPosition
+                    val to = target.bindingAdapterPosition
+                    if (from == RecyclerView.NO_POSITION || to == RecyclerView.NO_POSITION) {
+                        return false
+                    }
+                    val moved = adapter.moveItem(from, to) && tabManager.move(from, to)
+                    orderChanged = orderChanged || moved
+                    return moved
+                }
+
+                override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) = Unit
+
+                override fun clearView(
+                    recyclerView: RecyclerView,
+                    viewHolder: RecyclerView.ViewHolder
+                ) {
+                    super.clearView(recyclerView, viewHolder)
+                    if (!orderChanged) return
+                    orderChanged = false
+                    syncTabLayout()
+                }
+            }
+        )
+        touchHelper.attachToRecyclerView(recyclerView)
     }
 
     private fun refreshTabOverview(adapter: TabOverviewAdapter, titleView: TextView) {

@@ -25,11 +25,10 @@
   }
 
   function extractAnchor(target) {
-    if (!target) return null;
-    if (typeof target.closest === "function") {
-      return target.closest("a[href]");
+    if (!target || typeof target.closest !== "function") {
+      return null;
     }
-    return null;
+    return target.closest("a[href]");
   }
 
   function shouldIgnoreClick(event) {
@@ -56,6 +55,7 @@
     if (anchor.hasAttribute("download")) {
       return;
     }
+
     var href = anchor.getAttribute("href");
     if (!href || href.startsWith("javascript:")) {
       return;

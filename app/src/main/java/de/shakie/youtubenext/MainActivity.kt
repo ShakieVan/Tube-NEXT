@@ -32,6 +32,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
 import de.shakie.youtubenext.browser.LinkInterceptor
+import de.shakie.youtubenext.browser.YouTubeNavigationPolicy
 import de.shakie.youtubenext.engine.BrowserEngine
 import de.shakie.youtubenext.engine.EngineCallbacks
 import de.shakie.youtubenext.engine.EngineType
@@ -333,7 +334,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateTabState(tabId: String, newUrl: String? = null, newTitle: String? = null) {
         val tab = browserTabs[tabId] ?: return
-        val updatedUrl = newUrl ?: tab.url
+        val updatedUrl = newUrl
+            ?.takeIf(YouTubeNavigationPolicy::isUserVisibleUrl)
+            ?: tab.url
         val updatedTitle = normalizeTabTitle(newTitle ?: tab.title)
         if (updatedUrl == tab.url && updatedTitle == tab.title) return
 
@@ -1106,16 +1109,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun shouldUseDesktopMode(url: String): Boolean {
-        if (url.isBlank()) return false
-        val uri = Uri.parse(url)
-        val host = uri.host?.lowercase().orEmpty()
-        val path = uri.path.orEmpty()
-        val isYouTubeHost = host == "youtube.com" ||
-            host == "www.youtube.com" ||
-            host == "m.youtube.com" ||
-            host == "youtu.be"
-        if (!isYouTubeHost) return false
-        return host == "youtu.be" || path.startsWith("/watch")
+        return YouTubeNavigationPolicy.shouldUseDesktopMode(url)
     }
 
     private fun normalizeStartUrl(rawUrl: String?): String {

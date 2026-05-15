@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "YTNext Nav Switch",
   "version": "1.0",
-  "description": "Intercepts YouTube navigation mode boundaries and forwards to native.",
+  "description": "Intercepts YouTube mode-boundary clicks before SPA navigation.",
   "applications": {
     "gecko": {
       "id": "ytnext-nav-switch@shakie.de"
@@ -10,6 +10,8 @@
   },
   "permissions": [
     "nativeMessaging",
+    "nativeMessagingFromContent",
+    "geckoViewAddons",
     "*://youtube.com/*",
     "*://www.youtube.com/*",
     "*://m.youtube.com/*",

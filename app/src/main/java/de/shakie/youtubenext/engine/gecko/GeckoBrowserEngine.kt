@@ -16,8 +16,8 @@ import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.WebExtension
-import java.util.WeakHashMap
 import org.json.JSONObject
+import java.util.WeakHashMap
 
 class GeckoBrowserEngine(
     private val activity: Activity,
@@ -207,7 +207,7 @@ class GeckoBrowserEngine(
         if (navExtensionInstallRequested) return
         navExtensionInstallRequested = true
         runtime.webExtensionController
-            .installBuiltIn(NAV_EXTENSION_LOCATION)
+            .ensureBuiltIn(NAV_EXTENSION_LOCATION, NAV_EXTENSION_ID)
             .accept(
                 { extension ->
                     if (extension == null) {
@@ -215,7 +215,7 @@ class GeckoBrowserEngine(
                         return@accept
                     }
                     navExtension = extension
-                    Log.i("YTNEXT_NAV", "Navigation extension installed: ${extension.id}")
+                    Log.i("YTNEXT_NAV", "Navigation extension ready: ${extension.id}")
                     bindAllNavigationBridges()
                 },
                 { throwable ->
@@ -244,9 +244,7 @@ class GeckoBrowserEngine(
     }
 
     private fun bindAllNavigationBridges() {
-        navBridgeBySession.keys.toList().forEach { session ->
-            bindNavigationBridge(session)
-        }
+        navBridgeBySession.keys.toList().forEach(::bindNavigationBridge)
     }
 
     private fun bindNavigationBridge(session: GeckoSession) {
@@ -260,7 +258,7 @@ class GeckoBrowserEngine(
                     message: Any,
                     sender: WebExtension.MessageSender
                 ): GeckoResult<Any>? {
-                    if (sender.session != session || sender.isTopLevel().not()) {
+                    if (sender.session != session || !sender.isTopLevel()) {
                         return GeckoResult.fromValue(null)
                     }
                     val intent = parseNavigationIntent(message)
@@ -313,6 +311,7 @@ class GeckoBrowserEngine(
     private companion object {
         private const val NAV_EXTENSION_LOCATION =
             "resource://android/assets/web_extensions/ytnext_nav_switch/"
+        private const val NAV_EXTENSION_ID = "ytnext-nav-switch@shakie.de"
         private const val NAV_NATIVE_APP_ID = "ytnext_nav_switch"
         private const val MODE_NAV_TYPE = "MODE_NAV"
     }

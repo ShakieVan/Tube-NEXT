@@ -246,12 +246,22 @@
     return String(minutes) + ":" + String(secs).padStart(2, "0");
   }
 
-  function stopOverlayEvent(event) {
-    event.preventDefault();
+  function stopOverlayEvent(event, preventDefault) {
+    if (preventDefault) {
+      event.preventDefault();
+    }
     event.stopPropagation();
     if (typeof event.stopImmediatePropagation === "function") {
       event.stopImmediatePropagation();
     }
+  }
+
+  function handleCueButtonActivation(event, action) {
+    stopOverlayEvent(event, true);
+    if (event.type === "click" && event.detail === 0) {
+      return;
+    }
+    action();
   }
 
   function ensureCueOverlay() {
@@ -265,10 +275,11 @@
     cueButton.type = "button";
     cueButton.className = "ytnext-cue-jump";
     cueButton.textContent = "Cue";
-    cueButton.addEventListener("click", function (event) {
-      stopOverlayEvent(event);
-      jumpToCuePoint();
-    }, true);
+    ["click", "pointerup", "touchend"].forEach(function (type) {
+      cueButton.addEventListener(type, function (event) {
+        handleCueButtonActivation(event, jumpToCuePoint);
+      }, true);
+    });
 
     var label = document.createElement("div");
     label.className = "ytnext-cue-label";
@@ -277,13 +288,19 @@
     closeButton.type = "button";
     closeButton.className = "ytnext-cue-close";
     closeButton.textContent = "X";
-    closeButton.addEventListener("click", function (event) {
-      stopOverlayEvent(event);
-      deactivateCueMode();
-    }, true);
+    ["click", "pointerup", "touchend"].forEach(function (type) {
+      closeButton.addEventListener(type, function (event) {
+        handleCueButtonActivation(event, deactivateCueMode);
+      }, true);
+    });
 
-    ["pointerdown", "pointerup", "touchstart", "touchend", "mousedown", "mouseup", "contextmenu"].forEach(function (type) {
-      cueOverlay.addEventListener(type, stopOverlayEvent, true);
+    ["pointerdown", "pointerup", "touchstart", "touchend", "mousedown", "mouseup"].forEach(function (type) {
+      cueOverlay.addEventListener(type, function (event) {
+        stopOverlayEvent(event, false);
+      }, true);
+    });
+    cueOverlay.addEventListener("contextmenu", function (event) {
+      stopOverlayEvent(event, true);
     });
 
     cueOverlay.appendChild(cueButton);

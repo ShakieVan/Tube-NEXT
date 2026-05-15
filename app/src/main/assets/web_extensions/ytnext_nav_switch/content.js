@@ -5,6 +5,7 @@
   var MODE_NAV = "MODE_NAV";
   var OPEN_NEW_TAB = "OPEN_NEW_TAB";
   var LANDSCAPE_STYLE_ID = "ytnext_landscape_watch_style";
+  var pendingSingleTapTimer = null;
 
   function isYouTubeHost(host) {
     var normalized = (host || "").toLowerCase();
@@ -163,6 +164,68 @@
     window.setTimeout(applyLandscapeWatchMode, 700);
   }
 
+  function isPlayerControlTarget(target) {
+    if (!target || typeof target.closest !== "function") {
+      return false;
+    }
+    return !!target.closest([
+      "a",
+      "button",
+      "input",
+      "textarea",
+      "select",
+      ".ytp-chrome-bottom",
+      ".ytp-chrome-top",
+      ".ytp-popup",
+      ".ytp-settings-menu",
+      ".ytp-panel",
+      ".ytp-ce-element",
+      ".ytp-cards-teaser"
+    ].join(","));
+  }
+
+  function togglePrimaryVideo() {
+    var video = document.querySelector("video");
+    if (!video) {
+      return;
+    }
+    if (video.paused) {
+      video.play().catch(function () {});
+      return;
+    }
+    video.pause();
+  }
+
+  function handleLandscapePlayerClick(event) {
+    if (!isLandscapeWatch()) {
+      return;
+    }
+    if (event.defaultPrevented || isPlayerControlTarget(event.target)) {
+      return;
+    }
+    if (event.detail > 1) {
+      if (pendingSingleTapTimer) {
+        window.clearTimeout(pendingSingleTapTimer);
+        pendingSingleTapTimer = null;
+      }
+      return;
+    }
+    if (pendingSingleTapTimer) {
+      window.clearTimeout(pendingSingleTapTimer);
+    }
+    pendingSingleTapTimer = window.setTimeout(function () {
+      pendingSingleTapTimer = null;
+      togglePrimaryVideo();
+    }, 230);
+  }
+
+  function handleLandscapePlayerDoubleClick() {
+    if (pendingSingleTapTimer) {
+      window.clearTimeout(pendingSingleTapTimer);
+      pendingSingleTapTimer = null;
+    }
+  }
+
   function extractAnchor(target) {
     if (!target || typeof target.closest !== "function") {
       return null;
@@ -266,6 +329,8 @@
   }
 
   document.addEventListener("click", handleDocumentClick, true);
+  document.addEventListener("click", handleLandscapePlayerClick, false);
+  document.addEventListener("dblclick", handleLandscapePlayerDoubleClick, true);
   document.addEventListener("contextmenu", handleDocumentContextMenu, true);
   window.addEventListener("resize", scheduleLandscapeWatchMode, true);
   window.addEventListener("orientationchange", scheduleLandscapeWatchMode, true);

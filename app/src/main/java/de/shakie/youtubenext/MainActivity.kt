@@ -1,6 +1,5 @@
 package de.shakie.youtubenext
 
-import android.app.PictureInPictureParams
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ActivityNotFoundException
@@ -119,16 +118,6 @@ class MainActivity : AppCompatActivity() {
             disableLandscapeVideoMode()
         }
         updateBrowserChromeVisibility()
-    }
-
-    override fun onUserLeaveHint() {
-        super.onUserLeaveHint()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isInPictureInPictureMode) {
-            val currentUrl = currentTab()?.url.orEmpty()
-            if (currentUrl.contains("youtube.com/watch")) {
-                enterPictureInPictureMode(PictureInPictureParams.Builder().build())
-            }
-        }
     }
 
     override fun onDestroy() {

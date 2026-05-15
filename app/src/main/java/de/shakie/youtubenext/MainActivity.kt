@@ -640,17 +640,18 @@ class MainActivity : AppCompatActivity() {
         val cropHeight: Int
         val cropX: Int
         val cropY: Int
+        val preferredTopOffset = (source.height * TAB_PREVIEW_TOP_OFFSET_RATIO).toInt()
 
         if (sourceRatio > targetRatio) {
             cropHeight = source.height
             cropWidth = (cropHeight * targetRatio).toInt().coerceAtMost(source.width)
             cropX = ((source.width - cropWidth) / 2).coerceAtLeast(0)
-            cropY = 0
+            cropY = preferredTopOffset.coerceIn(0, (source.height - cropHeight).coerceAtLeast(0))
         } else {
             cropWidth = source.width
             cropHeight = (cropWidth / targetRatio).toInt().coerceAtMost(source.height)
             cropX = 0
-            cropY = 0
+            cropY = preferredTopOffset.coerceIn(0, (source.height - cropHeight).coerceAtLeast(0))
         }
 
         val sourceRect = android.graphics.Rect(cropX, cropY, cropX + cropWidth, cropY + cropHeight)
@@ -1385,6 +1386,7 @@ class MainActivity : AppCompatActivity() {
         private const val MAX_TAB_LABEL_LENGTH = 24
         private const val WATCH_VIEWPORT_STABILIZE_DELAY_MS = 1000L
         private const val OVERLAY_HIDE_DELAY_MS = 2000L
+        private const val TAB_PREVIEW_TOP_OFFSET_RATIO = 0.12f
         private val LEADING_COUNT_PREFIX_REGEX = Regex("^\\(\\d+\\)\\s*")
     }
 

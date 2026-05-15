@@ -7,6 +7,8 @@ import android.view.ViewGroup
 import de.shakie.youtubenext.browser.LinkInterceptor
 import de.shakie.youtubenext.engine.BrowserEngine
 import de.shakie.youtubenext.engine.EngineCallbacks
+import de.shakie.youtubenext.engine.EngineMediaControls
+import de.shakie.youtubenext.engine.EnginePlaybackState
 import de.shakie.youtubenext.engine.EngineTab
 import de.shakie.youtubenext.engine.EngineType
 import org.mozilla.geckoview.AllowOrDeny
@@ -15,6 +17,7 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
+import org.mozilla.geckoview.MediaSession
 import org.mozilla.geckoview.WebExtension
 import org.json.JSONObject
 import java.util.WeakHashMap
@@ -43,6 +46,7 @@ class GeckoBrowserEngine(
         val settings = GeckoSessionSettings.Builder()
             .usePrivateMode(false)
             .userAgentMode(GeckoSessionSettings.USER_AGENT_MODE_DESKTOP)
+            .suspendMediaWhenInactive(false)
             .build()
         val session = GeckoSession(settings)
         val geckoView = GeckoView(activity).apply {
@@ -56,10 +60,50 @@ class GeckoBrowserEngine(
         var canGoBack = false
         var currentUrl = initialUrl
         var desktopMode = shouldUseDesktopMode(initialUrl)
+        var activeMediaSession: MediaSession? = null
+        var mediaTitle = title
+        var mediaArtist = ""
+        var mediaPlaying = false
+        var mediaPositionMs = 0L
+        var mediaDurationMs: Long? = null
         session.settings.userAgentMode = if (desktopMode) {
             GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
         } else {
             GeckoSessionSettings.USER_AGENT_MODE_MOBILE
+        }
+        val mediaControls = object : EngineMediaControls {
+            override fun play() {
+                activeMediaSession?.play()
+            }
+
+            override fun pause() {
+                activeMediaSession?.pause()
+            }
+
+            override fun stop() {
+                activeMediaSession?.stop()
+            }
+
+            override fun seekForward() {
+                activeMediaSession?.seekForward()
+            }
+
+            override fun seekBackward() {
+                activeMediaSession?.seekBackward()
+            }
+        }
+        fun emitPlaybackState() {
+            callbacks.onPlaybackStateChanged(
+                tabId,
+                EnginePlaybackState(
+                    url = currentUrl,
+                    title = mediaTitle.ifBlank { title.ifBlank { currentUrl } },
+                    isPlaying = mediaPlaying,
+                    positionMs = mediaPositionMs,
+                    durationMs = mediaDurationMs,
+                    isLive = mediaDurationMs == null
+                )
+            )
         }
         fun applyUserAgentForUrl(url: String, source: String): Boolean {
             if (!shouldApplyUserAgentForUrl(url)) return false
@@ -170,6 +214,66 @@ class GeckoBrowserEngine(
         session.contentDelegate = object : GeckoSession.ContentDelegate {
             override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
                 callbacks.onFullscreenChanged(tabId, fullScreen)
+            }
+        }
+
+        session.mediaSessionDelegate = object : MediaSession.Delegate {
+            override fun onActivated(session: GeckoSession, mediaSession: MediaSession) {
+                Log.i("YTNEXT_AUDIO", "tab=$tabId media activated")
+                activeMediaSession = mediaSession
+                callbacks.onMediaControlsChanged(tabId, mediaControls)
+                emitPlaybackState()
+            }
+
+            override fun onDeactivated(session: GeckoSession, mediaSession: MediaSession) {
+                if (activeMediaSession == mediaSession) {
+                    Log.i("YTNEXT_AUDIO", "tab=$tabId media deactivated")
+                    activeMediaSession = null
+                    mediaPlaying = false
+                    callbacks.onMediaControlsChanged(tabId, null)
+                    emitPlaybackState()
+                }
+            }
+
+            override fun onMetadata(
+                session: GeckoSession,
+                mediaSession: MediaSession,
+                metadata: MediaSession.Metadata
+            ) {
+                mediaTitle = metadata.title.orEmpty()
+                mediaArtist = metadata.artist.orEmpty()
+                Log.i("YTNEXT_AUDIO", "tab=$tabId metadata title=$mediaTitle artist=$mediaArtist")
+                emitPlaybackState()
+            }
+
+            override fun onPlay(session: GeckoSession, mediaSession: MediaSession) {
+                Log.i("YTNEXT_AUDIO", "tab=$tabId media play")
+                mediaPlaying = true
+                emitPlaybackState()
+            }
+
+            override fun onPause(session: GeckoSession, mediaSession: MediaSession) {
+                Log.i("YTNEXT_AUDIO", "tab=$tabId media pause")
+                mediaPlaying = false
+                emitPlaybackState()
+            }
+
+            override fun onStop(session: GeckoSession, mediaSession: MediaSession) {
+                Log.i("YTNEXT_AUDIO", "tab=$tabId media stop")
+                mediaPlaying = false
+                emitPlaybackState()
+            }
+
+            override fun onPositionState(
+                session: GeckoSession,
+                mediaSession: MediaSession,
+                positionState: MediaSession.PositionState
+            ) {
+                mediaPositionMs = (positionState.position * 1000).toLong().coerceAtLeast(0)
+                mediaDurationMs = positionState.duration
+                    .takeIf { !it.isNaN() && it > 0.0 }
+                    ?.let { (it * 1000).toLong() }
+                emitPlaybackState()
             }
         }
 

@@ -11,5 +11,7 @@ data class EngineCallbacks(
     val onProgressChanged: (tabId: String, progress: Int) -> Unit,
     val onNewTabRequest: (url: String) -> Unit,
     val onFullscreenChanged: (tabId: String, isFullscreen: Boolean) -> Unit,
-    val onLoadError: (tabId: String) -> Unit
+    val onLoadError: (tabId: String) -> Unit,
+    val onPlaybackStateChanged: (tabId: String, state: EnginePlaybackState) -> Unit = { _, _ -> },
+    val onMediaControlsChanged: (tabId: String, controls: EngineMediaControls?) -> Unit = { _, _ -> }
 )

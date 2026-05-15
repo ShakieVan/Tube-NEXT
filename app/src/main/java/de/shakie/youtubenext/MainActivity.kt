@@ -31,6 +31,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
+import de.shakie.youtubenext.audio.AndroidBackgroundAudioCoordinator
 import de.shakie.youtubenext.browser.LinkInterceptor
 import de.shakie.youtubenext.browser.YouTubeNavigationPolicy
 import de.shakie.youtubenext.engine.BrowserEngine
@@ -61,6 +62,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var browserEngine: BrowserEngine
     private lateinit var tabManager: TabManager
     private lateinit var tabPreviewStore: TabPreviewStore
+    private lateinit var backgroundAudioCoordinator: AndroidBackgroundAudioCoordinator
 
     private val browserTabs = linkedMapOf<String, AppTab>()
     private var selectedTabId: String? = null
@@ -91,6 +93,7 @@ class MainActivity : AppCompatActivity() {
         )
         tabManager = TabManager(TabPersistence(this))
         tabPreviewStore = TabPreviewStore(this)
+        backgroundAudioCoordinator = AndroidBackgroundAudioCoordinator(applicationContext)
 
         setupToolbar()
         setupTabs()
@@ -108,6 +111,20 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         tabManager.persist()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (::backgroundAudioCoordinator.isInitialized) {
+            backgroundAudioCoordinator.onAppForegrounded()
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (::backgroundAudioCoordinator.isInitialized) {
+            backgroundAudioCoordinator.onAppBackgrounded()
+        }
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -129,6 +146,9 @@ class MainActivity : AppCompatActivity() {
             tab.engineTab.destroy()
         }
         browserTabs.clear()
+        if (::backgroundAudioCoordinator.isInitialized) {
+            backgroundAudioCoordinator.shutdown()
+        }
         browserEngine.shutdown()
     }
 
@@ -300,6 +320,12 @@ class MainActivity : AppCompatActivity() {
                 onLoadError = { tabId ->
                     completeTabLoading(tabId, browserTabs[tabId]?.pageLoadGeneration)
                     Snackbar.make(webViewContainer, R.string.page_load_error, Snackbar.LENGTH_SHORT).show()
+                },
+                onPlaybackStateChanged = { _, state ->
+                    backgroundAudioCoordinator.onForegroundPlaybackState(state)
+                },
+                onMediaControlsChanged = { _, controls ->
+                    backgroundAudioCoordinator.setControls(controls)
                 }
             )
         )

@@ -216,7 +216,7 @@
     pendingSingleTapTimer = window.setTimeout(function () {
       pendingSingleTapTimer = null;
       togglePrimaryVideo();
-    }, 230);
+    }, 420);
   }
 
   function handleLandscapePlayerDoubleClick() {

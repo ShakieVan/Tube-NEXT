@@ -575,7 +575,8 @@ class MainActivity : AppCompatActivity() {
                     ?: getString(R.string.default_tab_title)
             }.let(::normalizeTabTitle)
             val previewBitmap = tabPreviewStore.load(session.id)
-                ?: tab?.let(::captureTabPreviewFallback)
+                ?: tab?.takeIf { it.engineTab.view.visibility == View.VISIBLE }
+                    ?.let(::captureTabPreviewFallback)
             TabOverviewItem(
                 id = session.id,
                 title = displayTitle,
@@ -594,7 +595,8 @@ class MainActivity : AppCompatActivity() {
     private fun captureAndStoreTabPreview(tab: AppTab, onPreview: ((Bitmap) -> Unit)? = null) {
         val contentView = tab.engineTab.view
         if (contentView.width <= 0 || contentView.height <= 0) return
-        if (contentView is GeckoView && contentView.visibility == View.VISIBLE) {
+        if (contentView is GeckoView) {
+            if (contentView.visibility != View.VISIBLE) return
             contentView.capturePixels().accept(
                 { captured ->
                     if (captured == null) return@accept
@@ -604,11 +606,7 @@ class MainActivity : AppCompatActivity() {
                         onPreview?.invoke(preview)
                     }
                 },
-                {
-                    captureTabPreviewFallback(tab)?.let { preview ->
-                        onPreview?.invoke(preview)
-                    }
-                }
+                { /* Hidden or failed Gecko captures should not overwrite saved previews. */ }
             )
             return
         }

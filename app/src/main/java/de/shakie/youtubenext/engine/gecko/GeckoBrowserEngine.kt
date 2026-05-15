@@ -274,6 +274,15 @@ class GeckoBrowserEngine(
                     }
                     val intent = parseNavigationIntent(message)
                     if (intent == null || intent.type != MODE_NAV_TYPE) {
+                        if (intent?.type == OPEN_NEW_TAB_TYPE) {
+                            val targetUri = runCatching { Uri.parse(intent.url) }.getOrNull()
+                            if (targetUri == null || !LinkInterceptor.isYouTubeUri(targetUri)) {
+                                Log.w("YTNEXT_NAV", "Ignored invalid OPEN_NEW_TAB url=${intent.url}")
+                                return GeckoResult.fromValue(null)
+                            }
+                            Log.i("YTNEXT_NAV", "tab=${bridge.tabId} open-new-tab url=${intent.url}")
+                            bridge.callbacks.onNewTabRequest(intent.url)
+                        }
                         return GeckoResult.fromValue(null)
                     }
                     val targetUri = runCatching { Uri.parse(intent.url) }.getOrNull()
@@ -325,6 +334,7 @@ class GeckoBrowserEngine(
         private const val NAV_EXTENSION_ID = "ytnext-nav-switch@shakie.de"
         private const val NAV_NATIVE_APP_ID = "ytnext_nav_switch"
         private const val MODE_NAV_TYPE = "MODE_NAV"
+        private const val OPEN_NEW_TAB_TYPE = "OPEN_NEW_TAB"
     }
 }
 

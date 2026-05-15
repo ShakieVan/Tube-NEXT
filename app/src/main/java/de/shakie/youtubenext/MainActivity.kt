@@ -26,6 +26,7 @@ import androidx.core.content.getSystemService
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.core.view.WindowCompat
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -427,7 +428,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun navigateBackInTabHistory(tab: AppTab): Boolean {
         if (tab.historyIndex <= 0) return false
-        tab.historyIndex -= 1
+        val currentCanonicalUrl = canonicalHistoryUrl(tab.url)
+        do {
+            tab.historyIndex -= 1
+        } while (
+            tab.historyIndex > 0 &&
+            tab.navigationHistory.getOrNull(tab.historyIndex) == currentCanonicalUrl
+        )
         tab.pendingHistoryNavigation = true
         tab.engineTab.loadUrl(tab.navigationHistory[tab.historyIndex])
         return true
@@ -460,7 +467,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun canonicalHistoryUrl(url: String): String {
-        return url
+        if (!YouTubeNavigationPolicy.isUserVisibleUrl(url)) return ""
+        val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return url
+        if (!YouTubeNavigationPolicy.isWatchUrl(url)) {
+            return uri.buildUpon()
+                .fragment(null)
+                .build()
+                .toString()
+        }
+
+        val videoId = if (uri.host?.lowercase() == "youtu.be") {
+            uri.pathSegments.firstOrNull()
+        } else {
+            uri.getQueryParameter("v")
+        }
+        if (videoId.isNullOrBlank()) return url
+        return Uri.Builder()
+            .scheme("https")
+            .authority("www.youtube.com")
+            .path("watch")
+            .appendQueryParameter("v", videoId)
+            .build()
+            .toString()
     }
 
     private fun updateToolbarState() {
@@ -614,12 +642,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun configureLongPressMenu(tab: AppTab) {
-        // GeckoView does not expose WebView-like hit test link metadata.
+        // Link long-press is handled inside the Gecko WebExtension because GeckoView
+        // does not expose WebView-like hit test metadata.
         tab.engineTab.view.setOnLongClickListener { false }
     }
 
     private fun enterLandscapeVideoModeIfNeeded() {
-        if (!supportsLegacyWatchTweaks()) return
         val tab = currentTab() ?: return
         if (!isCurrentTabWatchPage()) return
         if (tab.engineTab.isInCustomView()) return
@@ -628,8 +656,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun enableLandscapeVideoMode() {
         val tab = currentTab() ?: return
-        tab.engineTab.evaluateJavascript(
-            """
+        if (supportsLegacyWatchTweaks()) {
+            tab.engineTab.evaluateJavascript(
+                """
             (function() {
               const player = document.querySelector('video');
               if (!player) return false;
@@ -746,8 +775,9 @@ class MainActivity : AppCompatActivity() {
               return true;
             })();
             """.trimIndent(),
-            null
-        )
+                null
+            )
+        }
         landscapeVideoModeActive = true
         enableSystemImmersiveMode()
         attachLandscapePinchToEngineView(tab.engineTab.view)
@@ -1123,7 +1153,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun attachLandscapePinchToEngineView(contentView: View) {
-        if (!supportsLegacyWatchTweaks()) return
         var downX = 0f
         var downY = 0f
         var startTranslationX = 0f
@@ -1246,7 +1275,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun enableSystemImmersiveMode() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.insetsController?.systemBarsBehavior =
+                android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             window.insetsController?.hide(
                 android.view.WindowInsets.Type.statusBars() or
                     android.view.WindowInsets.Type.navigationBars()
@@ -1261,6 +1293,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun disableSystemImmersiveMode() {
+        WindowCompat.setDecorFitsSystemWindows(window, true)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             window.insetsController?.show(
                 android.view.WindowInsets.Type.statusBars() or

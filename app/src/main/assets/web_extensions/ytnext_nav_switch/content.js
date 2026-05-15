@@ -6,9 +6,13 @@
   var OPEN_NEW_TAB = "OPEN_NEW_TAB";
   var LANDSCAPE_STYLE_ID = "ytnext_landscape_watch_style";
   var TAP_CONFIRM_DELAY_MS = 320;
+  var LONG_PRESS_TRIGGER_MS = 520;
   var LONG_TAP_SUPPRESS_MS = 650;
   var SEEK_STEP_SECONDS = 10;
   var pendingSingleTapTimer = null;
+  var activePlayerTouch = null;
+  var lastTouchTapAt = 0;
+  var lastTouchTapZone = null;
   var cueModeActive = false;
   var cueTime = null;
   var cueOverlay = null;
@@ -370,6 +374,12 @@
   function screenTapZone(event) {
     var width = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
     var x = Math.max(0, Math.min(width, event.clientX || 0));
+    return screenTapZoneForX(x);
+  }
+
+  function screenTapZoneForX(x) {
+    var width = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
+    x = Math.max(0, Math.min(width, x || 0));
     if (x < width / 3) {
       return "left";
     }
@@ -387,19 +397,8 @@
     }
   }
 
-  function handleLandscapePlayerClick(event) {
-    if (!isLandscapeWatch()) {
-      return;
-    }
-    if (event.defaultPrevented || isPlayerControlTarget(event.target)) {
-      return;
-    }
-    stopPlayerTapEvent(event);
-    if (Date.now() < suppressPlayerTapUntil) {
-      return;
-    }
-    var zone = screenTapZone(event);
-    if (event.detail > 1) {
+  function runLandscapeTapAction(zone, isMultiTap) {
+    if (isMultiTap) {
       if (pendingSingleTapTimer) {
         window.clearTimeout(pendingSingleTapTimer);
         pendingSingleTapTimer = null;
@@ -422,6 +421,20 @@
         togglePrimaryVideo();
       }
     }, TAP_CONFIRM_DELAY_MS);
+  }
+
+  function handleLandscapePlayerClick(event) {
+    if (!isLandscapeWatch()) {
+      return;
+    }
+    if (event.defaultPrevented || isPlayerControlTarget(event.target)) {
+      return;
+    }
+    stopPlayerTapEvent(event);
+    if (Date.now() < suppressPlayerTapUntil) {
+      return;
+    }
+    runLandscapeTapAction(screenTapZone(event), event.detail > 1);
   }
 
   function handleLandscapePlayerDoubleClick(event) {
@@ -451,6 +464,83 @@
       pendingSingleTapTimer = null;
     }
     setCuePointFromVideo();
+  }
+
+  function handleLandscapePlayerTouchStart(event) {
+    if (!isLandscapeWatch() || event.defaultPrevented || isPlayerControlTarget(event.target)) {
+      return;
+    }
+    if (!event.touches || event.touches.length !== 1) {
+      return;
+    }
+    var touch = event.touches[0];
+    stopPlayerTapEvent(event);
+    activePlayerTouch = {
+      x: touch.clientX,
+      y: touch.clientY,
+      moved: false,
+      longPressFired: false,
+      timer: window.setTimeout(function () {
+        if (!activePlayerTouch || activePlayerTouch.moved) {
+          return;
+        }
+        activePlayerTouch.longPressFired = true;
+        suppressPlayerTapUntil = Date.now() + LONG_TAP_SUPPRESS_MS;
+        if (pendingSingleTapTimer) {
+          window.clearTimeout(pendingSingleTapTimer);
+          pendingSingleTapTimer = null;
+        }
+        setCuePointFromVideo();
+      }, LONG_PRESS_TRIGGER_MS)
+    };
+  }
+
+  function handleLandscapePlayerTouchMove(event) {
+    if (!activePlayerTouch) {
+      return;
+    }
+    stopPlayerTapEvent(event);
+    if (!event.touches || event.touches.length !== 1) {
+      activePlayerTouch.moved = true;
+      window.clearTimeout(activePlayerTouch.timer);
+      return;
+    }
+    var touch = event.touches[0];
+    var dx = touch.clientX - activePlayerTouch.x;
+    var dy = touch.clientY - activePlayerTouch.y;
+    if (Math.sqrt(dx * dx + dy * dy) > 18) {
+      activePlayerTouch.moved = true;
+      window.clearTimeout(activePlayerTouch.timer);
+    }
+  }
+
+  function handleLandscapePlayerTouchEnd(event) {
+    if (!activePlayerTouch) {
+      return;
+    }
+    stopPlayerTapEvent(event);
+    var touch = activePlayerTouch;
+    window.clearTimeout(touch.timer);
+    activePlayerTouch = null;
+    suppressPlayerTapUntil = Date.now() + LONG_TAP_SUPPRESS_MS;
+    if (touch.longPressFired || touch.moved) {
+      return;
+    }
+    var zone = screenTapZoneForX(touch.x);
+    var now = Date.now();
+    var isMultiTap = lastTouchTapZone === zone && now - lastTouchTapAt <= TAP_CONFIRM_DELAY_MS;
+    runLandscapeTapAction(zone, isMultiTap);
+    lastTouchTapAt = isMultiTap ? 0 : now;
+    lastTouchTapZone = isMultiTap ? null : zone;
+  }
+
+  function handleLandscapePlayerTouchCancel(event) {
+    if (!activePlayerTouch) {
+      return;
+    }
+    stopPlayerTapEvent(event);
+    window.clearTimeout(activePlayerTouch.timer);
+    activePlayerTouch = null;
   }
 
   function extractAnchor(target) {
@@ -555,6 +645,10 @@
     }).catch(function () {});
   }
 
+  document.addEventListener("touchstart", handleLandscapePlayerTouchStart, true);
+  document.addEventListener("touchmove", handleLandscapePlayerTouchMove, true);
+  document.addEventListener("touchend", handleLandscapePlayerTouchEnd, true);
+  document.addEventListener("touchcancel", handleLandscapePlayerTouchCancel, true);
   document.addEventListener("click", handleLandscapePlayerClick, true);
   document.addEventListener("click", handleDocumentClick, true);
   document.addEventListener("dblclick", handleLandscapePlayerDoubleClick, true);

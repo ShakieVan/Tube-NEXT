@@ -32,6 +32,13 @@ class TabOverviewAdapter(
         notifyDataSetChanged()
     }
 
+    fun updatePreview(tabId: String, bitmap: Bitmap) {
+        val index = items.indexOfFirst { it.id == tabId }
+        if (index < 0) return
+        items[index] = items[index].copy(preview = bitmap)
+        notifyItemChanged(index)
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TabViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_tab_overview, parent, false)

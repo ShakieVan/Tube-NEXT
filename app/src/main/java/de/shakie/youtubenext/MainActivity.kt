@@ -44,6 +44,7 @@ import de.shakie.youtubenext.tabs.TabPreviewStore
 import de.shakie.youtubenext.tabs.TabSession
 import de.shakie.youtubenext.ui.TabOverviewAdapter
 import de.shakie.youtubenext.ui.TabOverviewItem
+import org.mozilla.geckoview.GeckoView
 
 class MainActivity : AppCompatActivity() {
     private lateinit var toolbar: MaterialToolbar
@@ -348,6 +349,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun selectTab(tabId: String, persistSelection: Boolean = true) {
         if (!browserTabs.containsKey(tabId)) return
+        currentTab()
+            ?.takeIf { it.id != tabId }
+            ?.let(::captureAndStoreTabPreview)
         selectedTabId = tabId
         browserTabs.forEach { (id, tab) ->
             tab.engineTab.view.visibility = if (id == tabId) View.VISIBLE else View.GONE
@@ -570,7 +574,8 @@ class MainActivity : AppCompatActivity() {
                 session.url.takeIf { it.isNotBlank() }?.let(::formatToolbarUrl)
                     ?: getString(R.string.default_tab_title)
             }.let(::normalizeTabTitle)
-            val previewBitmap = tab?.let(::captureTabPreview) ?: tabPreviewStore.load(session.id)
+            val previewBitmap = tabPreviewStore.load(session.id)
+                ?: tab?.let(::captureTabPreviewFallback)
             TabOverviewItem(
                 id = session.id,
                 title = displayTitle,
@@ -579,20 +584,65 @@ class MainActivity : AppCompatActivity() {
             )
         }
         adapter.submitList(items)
+        browserTabs.values.forEach { tab ->
+            captureAndStoreTabPreview(tab) { bitmap ->
+                adapter.updatePreview(tab.id, bitmap)
+            }
+        }
     }
 
-    private fun captureTabPreview(tab: AppTab): Bitmap? {
+    private fun captureAndStoreTabPreview(tab: AppTab, onPreview: ((Bitmap) -> Unit)? = null) {
+        val contentView = tab.engineTab.view
+        if (contentView.width <= 0 || contentView.height <= 0) return
+        if (contentView is GeckoView && contentView.visibility == View.VISIBLE) {
+            contentView.capturePixels().accept(
+                { captured ->
+                    if (captured == null) return@accept
+                    val preview = createTabPreviewBitmap(captured)
+                    tabPreviewStore.save(tab.id, preview)
+                    runOnUiThread {
+                        onPreview?.invoke(preview)
+                    }
+                },
+                {
+                    captureTabPreviewFallback(tab)?.let { preview ->
+                        onPreview?.invoke(preview)
+                    }
+                }
+            )
+            return
+        }
+        captureTabPreviewFallback(tab)?.let { preview ->
+            onPreview?.invoke(preview)
+        }
+    }
+
+    private fun captureTabPreviewFallback(tab: AppTab): Bitmap? {
         val contentView = tab.engineTab.view
         val width = contentView.width.takeIf { it > 0 } ?: return null
         val height = contentView.height.takeIf { it > 0 } ?: return null
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        contentView.draw(canvas)
+        val preview = createTabPreviewBitmap(bitmap)
+        tabPreviewStore.save(tab.id, preview)
+        return preview
+    }
+
+    private fun createTabPreviewBitmap(source: Bitmap): Bitmap {
         val previewWidth = 192
         val previewHeight = 108
         val bitmap = Bitmap.createBitmap(previewWidth, previewHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        val scale = previewWidth / width.toFloat()
+        val scale = maxOf(
+            previewWidth / source.width.toFloat(),
+            previewHeight / source.height.toFloat()
+        )
+        val dx = (previewWidth - source.width * scale) / 2f
+        val dy = (previewHeight - source.height * scale) / 2f
+        canvas.translate(dx, dy)
         canvas.scale(scale, scale)
-        contentView.draw(canvas)
-        tabPreviewStore.save(tab.id, bitmap)
+        canvas.drawBitmap(source, 0f, 0f, null)
         return bitmap
     }
 
@@ -907,6 +957,7 @@ class MainActivity : AppCompatActivity() {
                 if (currentTab.pageLoadGeneration != targetGeneration) return@postDelayed
                 if (currentTab.loadingOverlayVisible) return@postDelayed
                 hideLoadingOverlay()
+                captureAndStoreTabPreview(currentTab)
             }, OVERLAY_HIDE_DELAY_MS)
         }
     }

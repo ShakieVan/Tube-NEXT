@@ -631,18 +631,31 @@ class MainActivity : AppCompatActivity() {
 
     private fun createTabPreviewBitmap(source: Bitmap): Bitmap {
         val previewWidth = 192
-        val previewHeight = 108
+        val previewHeight = 120
         val bitmap = Bitmap.createBitmap(previewWidth, previewHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        val scale = maxOf(
-            previewWidth / source.width.toFloat(),
-            previewHeight / source.height.toFloat()
-        )
-        val dx = (previewWidth - source.width * scale) / 2f
-        val dy = (previewHeight - source.height * scale) / 2f
-        canvas.translate(dx, dy)
-        canvas.scale(scale, scale)
-        canvas.drawBitmap(source, 0f, 0f, null)
+        val targetRatio = previewWidth / previewHeight.toFloat()
+        val sourceRatio = source.width / source.height.toFloat()
+        val cropWidth: Int
+        val cropHeight: Int
+        val cropX: Int
+        val cropY: Int
+
+        if (sourceRatio > targetRatio) {
+            cropHeight = source.height
+            cropWidth = (cropHeight * targetRatio).toInt().coerceAtMost(source.width)
+            cropX = ((source.width - cropWidth) / 2).coerceAtLeast(0)
+            cropY = 0
+        } else {
+            cropWidth = source.width
+            cropHeight = (cropWidth / targetRatio).toInt().coerceAtMost(source.height)
+            cropX = 0
+            cropY = 0
+        }
+
+        val sourceRect = android.graphics.Rect(cropX, cropY, cropX + cropWidth, cropY + cropHeight)
+        val targetRect = android.graphics.Rect(0, 0, previewWidth, previewHeight)
+        canvas.drawBitmap(source, sourceRect, targetRect, null)
         return bitmap
     }
 

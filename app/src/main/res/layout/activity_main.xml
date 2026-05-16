@@ -14,7 +14,7 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="?attr/colorSurface"
+            android:background="@color/yt_surface_lowest"
             android:minHeight="?attr/actionBarSize"
             app:subtitleTextColor="@android:color/white"
             app:titleTextColor="@android:color/white">
@@ -24,36 +24,40 @@
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:paddingTop="6dp"
-                android:paddingBottom="6dp">
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp">
+
+                <ImageButton
+                    android:id="@+id/reloadButton"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/menu_reload"
+                    android:padding="9dp"
+                    android:src="@android:drawable/ic_popup_sync"
+                    app:tint="@color/yt_primary" />
 
                 <TextView
                     android:id="@+id/urlText"
                     android:layout_width="0dp"
-                    android:layout_height="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="18dp"
+                    android:layout_marginEnd="18dp"
                     android:layout_weight="1"
+                    android:background="@drawable/toolbar_url_pill_background"
                     android:ellipsize="end"
+                    android:gravity="center"
                     android:maxLines="1"
-                    android:textColor="?attr/colorOnSurface"
-                    android:textSize="13sp" />
-
-                <ImageButton
-                    android:id="@+id/reloadButton"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:layout_marginStart="8dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/menu_reload"
-                    android:padding="8dp"
-                    android:src="@android:drawable/ic_popup_sync" />
+                    android:textColor="@color/yt_on_surface"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
 
                 <FrameLayout
                     android:id="@+id/tabSwitcherButton"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:layout_marginStart="6dp"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:clickable="true"
                     android:focusable="true"
@@ -65,7 +69,7 @@
                         android:contentDescription="@string/tab_switcher_button"
                         android:padding="8dp"
                         android:src="@drawable/ic_tabs_overview"
-                        app:tint="?attr/colorOnSurface" />
+                        app:tint="@color/yt_primary" />
 
                     <TextView
                         android:id="@+id/tabCountBadge"
@@ -76,7 +80,7 @@
                         android:gravity="center"
                         android:minWidth="18dp"
                         android:text="1"
-                        android:textColor="@android:color/black"
+                        android:textColor="@color/yt_on_primary"
                         android:textSize="10sp"
                         android:textStyle="bold" />
                 </FrameLayout>
@@ -107,44 +111,66 @@
                 android:id="@+id/loadingOverlay"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="?attr/colorSurface"
+                android:background="@color/yt_surface_lowest"
                 android:clickable="true"
                 android:focusable="true"
                 android:visibility="gone">
+
+                <ImageView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="@null"
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/tube_next_background" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="#A6131316" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:layout_gravity="center"
-                    android:gravity="center_horizontal"
+                    android:gravity="center"
                     android:orientation="vertical"
                     android:paddingStart="24dp"
                     android:paddingEnd="24dp">
 
-                    <ProgressBar
-                        android:id="@+id/loadingSpinner"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
-                        android:indeterminate="true" />
+                    <ImageView
+                        android:layout_width="112dp"
+                        android:layout_height="112dp"
+                        android:contentDescription="@string/app_name"
+                        android:src="@drawable/tube_next_icon_source" />
+
+                    <ImageView
+                        android:layout_width="260dp"
+                        android:layout_height="44dp"
+                        android:layout_marginTop="18dp"
+                        android:adjustViewBounds="true"
+                        android:contentDescription="@string/app_name"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/tube_next_wordmark" />
 
                     <TextView
                         android:id="@+id/loadingLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
+                        android:layout_marginTop="16dp"
                         android:text="@string/loading_page"
-                        android:textColor="?attr/colorOnSurface"
-                        android:textSize="14sp" />
+                        android:textColor="@color/yt_on_surface_variant"
+                        android:textSize="15sp" />
 
                     <ProgressBar
                         android:id="@+id/loadingProgress"
                         style="?android:attr/progressBarStyleHorizontal"
                         android:layout_width="280dp"
-                        android:layout_height="8dp"
-                        android:layout_marginTop="14dp"
+                        android:layout_height="6dp"
+                        android:layout_marginTop="18dp"
                         android:indeterminate="false"
                         android:max="100"
-                        android:progress="8" />
+                        android:progress="8"
+                        android:progressDrawable="@drawable/loading_progress" />
                 </LinearLayout>
             </FrameLayout>
         </FrameLayout>

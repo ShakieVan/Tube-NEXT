@@ -8,7 +8,6 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import de.shakie.youtubenext.R
 
@@ -73,13 +72,7 @@ class TabOverviewAdapter(
             } else {
                 preview.setImageDrawable(null)
             }
-            root.setBackgroundColor(
-                if (item.isActive) {
-                    ContextCompat.getColor(itemView.context, R.color.yt_tab_active)
-                } else {
-                    ContextCompat.getColor(itemView.context, android.R.color.transparent)
-                }
-            )
+            root.isSelected = item.isActive
             root.setOnClickListener { onTabClick(item.id) }
             closeButton.setOnClickListener { onTabClose(item.id) }
         }

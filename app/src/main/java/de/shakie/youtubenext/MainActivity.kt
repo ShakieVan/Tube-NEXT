@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -579,6 +580,8 @@ class MainActivity : AppCompatActivity() {
         dialog.setContentView(content)
         refreshTabOverview(adapter, title)
         dialog.show()
+        dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            ?.setBackgroundColor(Color.TRANSPARENT)
     }
 
     private fun attachTabOverviewDrag(

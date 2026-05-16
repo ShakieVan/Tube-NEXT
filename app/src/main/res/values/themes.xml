@@ -5,8 +5,12 @@
         <item name="colorOnPrimary">@color/yt_on_primary</item>
         <item name="colorSurface">@color/yt_surface</item>
         <item name="colorOnSurface">@color/yt_on_surface</item>
-        <item name="android:statusBarColor">@android:color/black</item>
-        <item name="android:navigationBarColor">@android:color/black</item>
+        <item name="android:statusBarColor">@color/yt_surface_lowest</item>
+        <item name="android:navigationBarColor">@color/yt_surface_lowest</item>
+        <item name="android:windowBackground">@color/yt_surface_lowest</item>
+        <item name="android:windowSplashScreenBackground">@color/yt_surface_lowest</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/tube_next_splash_icon_safe</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/yt_surface_lowest</item>
         <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
         <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">false</item>

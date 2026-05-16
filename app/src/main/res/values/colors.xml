@@ -1,8 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="yt_surface">#111111</color>
-    <color name="yt_on_surface">#FFFFFF</color>
-    <color name="yt_primary">#FF0000</color>
-    <color name="yt_on_primary">#FFFFFF</color>
-    <color name="yt_tab_active">#22392B</color>
+    <color name="yt_surface">#131316</color>
+    <color name="yt_surface_lowest">#0E0E11</color>
+    <color name="yt_surface_low">#1B1B1E</color>
+    <color name="yt_surface_high">#2A2A2D</color>
+    <color name="yt_on_surface">#E4E1E6</color>
+    <color name="yt_on_surface_variant">#F1C1A8</color>
+    <color name="yt_primary">#FFB36B</color>
+    <color name="yt_primary_strong">#FF7A3D</color>
+    <color name="yt_secondary">#FFD08A</color>
+    <color name="yt_on_primary">#321100</color>
+    <color name="yt_outline">#B98C70</color>
+    <color name="yt_outline_variant">#63422F</color>
+    <color name="yt_tab_active">#2B1A12</color>
 </resources>

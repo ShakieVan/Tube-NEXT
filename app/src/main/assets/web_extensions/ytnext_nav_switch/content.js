@@ -4,6 +4,7 @@
   var NATIVE_APP = "ytnext_nav_switch";
   var MODE_NAV = "MODE_NAV";
   var OPEN_NEW_TAB = "OPEN_NEW_TAB";
+  var DARK_MODE_STYLE_ID = "ytnext_dark_mode_style";
   var WATCH_FIT_STYLE_ID = "ytnext_watch_fit_style";
   var SCROLL_TOP_BUTTON_ID = "ytnext_scroll_top_button";
   var LANDSCAPE_STYLE_ID = "ytnext_landscape_watch_style";
@@ -48,6 +49,66 @@
   function isWatchPage() {
     return shouldUseDesktop(window.location.href);
   }
+
+  function ensureYouTubeDarkPreference() {
+    if (!isYouTubeHost(window.location.hostname)) {
+      return;
+    }
+    var pref = "";
+    document.cookie.split(";").forEach(function (part) {
+      var trimmed = part.trim();
+      if (trimmed.indexOf("PREF=") === 0) {
+        pref = trimmed.substring(5);
+      }
+    });
+    var parts = pref ? pref.split("&").filter(Boolean) : [];
+    var found = false;
+    parts = parts.map(function (part) {
+      if (part.indexOf("f6=") === 0) {
+        found = true;
+        return "f6=400";
+      }
+      return part;
+    });
+    if (!found) {
+      parts.push("f6=400");
+    }
+    var cookie = "PREF=" + parts.join("&") + "; path=/; max-age=31536000; SameSite=Lax";
+    var host = window.location.hostname.toLowerCase();
+    if (host === "youtube.com" || host.endsWith(".youtube.com")) {
+      document.cookie = cookie + "; domain=.youtube.com";
+    } else {
+      document.cookie = cookie;
+    }
+  }
+
+  function ensureDarkModeStyle() {
+    if (document.getElementById(DARK_MODE_STYLE_ID)) {
+      return;
+    }
+    var style = document.createElement("style");
+    style.id = DARK_MODE_STYLE_ID;
+    style.textContent = [
+      ":root {",
+      "  color-scheme: dark !important;",
+      "  --yt-spec-base-background: #0f0f0f !important;",
+      "  --yt-spec-raised-background: #212121 !important;",
+      "  --yt-spec-menu-background: #282828 !important;",
+      "  --yt-spec-text-primary: #f1f1f1 !important;",
+      "  --yt-spec-text-secondary: #aaa !important;",
+      "}",
+      "html, body, ytd-app, ytm-app {",
+      "  background: #0f0f0f !important;",
+      "}",
+      "html:not([dark]) {",
+      "  background: #0f0f0f !important;",
+      "}"
+    ].join("\n");
+    (document.documentElement || document.head || document.body).appendChild(style);
+  }
+
+  ensureYouTubeDarkPreference();
+  ensureDarkModeStyle();
 
   function ensureWatchFitStyle() {
     if (document.getElementById(WATCH_FIT_STYLE_ID)) {
@@ -161,33 +222,78 @@
       "  max-width: calc(100vw - 24px) !important;",
       "}",
       "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-chrome-bottom {",
-      "  height: 48px !important;",
+      "  height: 62px !important;",
       "  bottom: 0 !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-chrome-controls {",
+      "  height: 56px !important;",
+      "  display: flex !important;",
+      "  align-items: center !important;",
       "}",
       "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-left-controls,",
       "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-right-controls {",
-      "  height: 48px !important;",
+      "  height: 56px !important;",
+      "  display: flex !important;",
+      "  align-items: center !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-left-controls {",
+      "  flex: 1 1 auto !important;",
+      "  min-width: 0 !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-right-controls {",
+      "  flex: 0 0 58px !important;",
+      "  width: 58px !important;",
+      "  min-width: 58px !important;",
+      "  justify-content: flex-end !important;",
       "}",
       "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-button {",
-      "  width: 44px !important;",
-      "  height: 44px !important;",
-      "  padding: 10px !important;",
+      "  width: 52px !important;",
+      "  min-width: 52px !important;",
+      "  height: 52px !important;",
+      "  padding: 7px !important;",
       "  box-sizing: border-box !important;",
       "}",
       "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-button svg {",
-      "  width: 24px !important;",
-      "  height: 24px !important;",
+      "  width: 36px !important;",
+      "  height: 36px !important;",
+      "  transform: scale(1.2) !important;",
+      "  transform-origin: center !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-button .ytp-svg-fill {",
+      "  transform: scale(1.25) !important;",
+      "  transform-origin: center !important;",
       "}",
       "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-time-display,",
       "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-time-current,",
       "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-time-duration {",
-      "  font-size: 14px !important;",
-      "  line-height: 44px !important;",
+      "  font-size: 18px !important;",
+      "  line-height: 52px !important;",
+      "  height: 52px !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-progress-bar-container {",
+      "  height: 18px !important;",
+      "  top: -10px !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-progress-bar {",
+      "  height: 5px !important;",
       "}",
       "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-volume-area,",
       "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-next-button,",
       "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-miniplayer-button,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-size-button {",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-size-button,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-subtitles-button,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-fullscreen-button,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-remote-button,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-overflow-button,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-right-controls .ytp-button:not(.ytp-settings-button) {",
+      "  display: none !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-settings-button {",
+      "  display: inline-flex !important;",
+      "  visibility: visible !important;",
+      "  opacity: 1 !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-tooltip {",
       "  display: none !important;",
       "}",
       "#" + SCROLL_TOP_BUTTON_ID + " {",

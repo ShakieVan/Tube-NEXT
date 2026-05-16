@@ -5,6 +5,7 @@
   var MODE_NAV = "MODE_NAV";
   var OPEN_NEW_TAB = "OPEN_NEW_TAB";
   var WATCH_FIT_STYLE_ID = "ytnext_watch_fit_style";
+  var SCROLL_TOP_BUTTON_ID = "ytnext_scroll_top_button";
   var LANDSCAPE_STYLE_ID = "ytnext_landscape_watch_style";
   var TAP_CONFIRM_DELAY_MS = 320;
   var LONG_PRESS_TRIGGER_MS = 520;
@@ -17,6 +18,7 @@
   var cueModeActive = false;
   var cueTime = null;
   var cueOverlay = null;
+  var scrollTopButton = null;
   var suppressPlayerTapUntil = 0;
 
   function isYouTubeHost(host) {
@@ -157,6 +159,58 @@
       "  right: 12px !important;",
       "  width: auto !important;",
       "  max-width: calc(100vw - 24px) !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-chrome-bottom {",
+      "  height: 48px !important;",
+      "  bottom: 0 !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-left-controls,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-right-controls {",
+      "  height: 48px !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-button {",
+      "  width: 44px !important;",
+      "  height: 44px !important;",
+      "  padding: 10px !important;",
+      "  box-sizing: border-box !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-button svg {",
+      "  width: 24px !important;",
+      "  height: 24px !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-time-display,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-time-current,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-time-duration {",
+      "  font-size: 14px !important;",
+      "  line-height: 44px !important;",
+      "}",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-volume-area,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-next-button,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-miniplayer-button,",
+      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-size-button {",
+      "  display: none !important;",
+      "}",
+      "#" + SCROLL_TOP_BUTTON_ID + " {",
+      "  position: fixed !important;",
+      "  right: 16px !important;",
+      "  bottom: 88px !important;",
+      "  z-index: 2147483647 !important;",
+      "  width: 44px !important;",
+      "  height: 44px !important;",
+      "  border: 0 !important;",
+      "  border-radius: 999px !important;",
+      "  background: rgba(255, 255, 255, 0.92) !important;",
+      "  color: #111 !important;",
+      "  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;",
+      "  font: 800 24px/44px sans-serif !important;",
+      "  text-align: center !important;",
+      "  opacity: 0 !important;",
+      "  pointer-events: none !important;",
+      "  transition: opacity 160ms ease !important;",
+      "}",
+      "html.ytnext-show-scroll-top:not(.ytnext-landscape-watch) #" + SCROLL_TOP_BUTTON_ID + " {",
+      "  opacity: 1 !important;",
+      "  pointer-events: auto !important;",
       "}"
     ].join("\n");
     (document.documentElement || document.head || document.body).appendChild(style);
@@ -341,6 +395,56 @@
     window.setTimeout(applyLandscapeWatchMode, 700);
     window.setTimeout(applyLandscapeWatchMode, 1500);
     window.setTimeout(applyLandscapeWatchMode, 2600);
+  }
+
+  function stopGenericOverlayEvent(event, preventDefault) {
+    if (preventDefault) {
+      event.preventDefault();
+    }
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") {
+      event.stopImmediatePropagation();
+    }
+  }
+
+  function ensureScrollTopButton() {
+    if (scrollTopButton && document.documentElement.contains(scrollTopButton)) {
+      return scrollTopButton;
+    }
+    scrollTopButton = document.createElement("button");
+    scrollTopButton.id = SCROLL_TOP_BUTTON_ID;
+    scrollTopButton.type = "button";
+    scrollTopButton.textContent = "↑";
+    scrollTopButton.setAttribute("aria-label", "Nach oben");
+    ["click", "pointerup", "touchend"].forEach(function (type) {
+      scrollTopButton.addEventListener(type, function (event) {
+        stopGenericOverlayEvent(event, true);
+        window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+      }, true);
+    });
+    ["pointerdown", "touchstart", "mousedown", "contextmenu"].forEach(function (type) {
+      scrollTopButton.addEventListener(type, function (event) {
+        stopGenericOverlayEvent(event, true);
+      }, true);
+    });
+    (document.body || document.documentElement).appendChild(scrollTopButton);
+    return scrollTopButton;
+  }
+
+  function updateScrollTopButton() {
+    if (!document.documentElement) {
+      return;
+    }
+    ensureWatchFitStyle();
+    ensureScrollTopButton();
+    var show = !isLandscapeWatch() && window.scrollY > 480;
+    document.documentElement.classList.toggle("ytnext-show-scroll-top", show);
+  }
+
+  function forceTopAfterLoad() {
+    window.setTimeout(function () { window.scrollTo(0, 0); }, 0);
+    window.setTimeout(function () { window.scrollTo(0, 0); }, 120);
+    window.setTimeout(function () { window.scrollTo(0, 0); }, 450);
   }
 
   function isPlayerControlTarget(target) {
@@ -782,9 +886,16 @@
   document.addEventListener("dblclick", handleLandscapePlayerDoubleClick, true);
   document.addEventListener("contextmenu", handleLandscapeCueContextMenu, true);
   document.addEventListener("contextmenu", handleDocumentContextMenu, true);
+  window.addEventListener("scroll", updateScrollTopButton, { passive: true });
+  window.addEventListener("load", forceTopAfterLoad, true);
+  window.addEventListener("pageshow", forceTopAfterLoad, true);
   window.addEventListener("resize", scheduleLandscapeWatchMode, true);
   window.addEventListener("orientationchange", scheduleLandscapeWatchMode, true);
-  window.addEventListener("yt-navigate-finish", scheduleLandscapeWatchMode, true);
+  window.addEventListener("yt-navigate-finish", function () {
+    forceTopAfterLoad();
+    scheduleLandscapeWatchMode();
+  }, true);
   window.addEventListener("popstate", scheduleLandscapeWatchMode, true);
   scheduleLandscapeWatchMode();
+  updateScrollTopButton();
 })();

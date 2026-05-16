@@ -261,20 +261,7 @@ class MainActivity : AppCompatActivity() {
             createAndSelectTab(url)
             return
         }
-        if (current.url.isBlank() || current.url == DEFAULT_URL) {
-            loadInCurrentTab(url)
-            return
-        }
-
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.link_open_title)
-            .setPositiveButton(R.string.link_open_current) { _, _ ->
-                loadInCurrentTab(url)
-            }
-            .setNegativeButton(R.string.link_open_new) { _, _ ->
-                createAndSelectTab(url)
-            }
-            .show()
+        createAndSelectTab(url)
     }
 
     private fun createAndSelectTab(url: String): AppTab {

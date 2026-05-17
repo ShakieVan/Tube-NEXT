@@ -1,4 +1,4 @@
-package de.shakie.youtubenext.ui
+package de.shakie.tubenext.ui
 
 import android.graphics.Bitmap
 import android.view.LayoutInflater
@@ -9,7 +9,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
-import de.shakie.youtubenext.R
+import de.shakie.tubenext.R
 
 data class TabOverviewItem(
     val id: String,

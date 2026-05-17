@@ -1,13 +1,13 @@
 (function () {
   "use strict";
 
-  var NATIVE_APP = "ytnext_nav_switch";
+  var NATIVE_APP = "tubenext_nav_switch";
   var MODE_NAV = "MODE_NAV";
   var OPEN_NEW_TAB = "OPEN_NEW_TAB";
-  var DARK_MODE_STYLE_ID = "ytnext_dark_mode_style";
-  var WATCH_FIT_STYLE_ID = "ytnext_watch_fit_style";
-  var SCROLL_TOP_BUTTON_ID = "ytnext_scroll_top_button";
-  var LANDSCAPE_STYLE_ID = "ytnext_landscape_watch_style";
+  var DARK_MODE_STYLE_ID = "tubenext_dark_mode_style";
+  var WATCH_FIT_STYLE_ID = "tubenext_watch_fit_style";
+  var SCROLL_TOP_BUTTON_ID = "tubenext_scroll_top_button";
+  var LANDSCAPE_STYLE_ID = "tubenext_landscape_watch_style";
   var TAP_CONFIRM_DELAY_MS = 320;
   var LONG_PRESS_TRIGGER_MS = 520;
   var LONG_TAP_SUPPRESS_MS = 650;
@@ -117,21 +117,21 @@
     var style = document.createElement("style");
     style.id = WATCH_FIT_STYLE_ID;
     style.textContent = [
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch),",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) body {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch),",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) body {",
       "  width: 100% !important;",
       "  max-width: 100vw !important;",
       "  overflow-x: hidden !important;",
       "  box-sizing: border-box !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) * {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) * {",
       "  box-sizing: border-box !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) ytd-app,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) ytd-page-manager,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) ytd-watch-flexy,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #content,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #page-manager {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) ytd-app,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) ytd-page-manager,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) ytd-watch-flexy,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #content,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #page-manager {",
       "  width: 100% !important;",
       "  max-width: 100vw !important;",
       "  min-width: 0 !important;",
@@ -141,10 +141,10 @@
       "  padding-right: 0 !important;",
       "  overflow-x: hidden !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #columns,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #primary,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #primary-inner,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #secondary {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #columns,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #primary,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #primary-inner,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #secondary {",
       "  width: auto !important;",
       "  max-width: 100% !important;",
       "  min-width: 0 !important;",
@@ -155,17 +155,17 @@
       "  box-sizing: border-box !important;",
       "  overflow-x: hidden !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #columns {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #columns {",
       "  display: block !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #player,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #player-container,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #player-container-outer,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #player-container-inner,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #player-full-bleed-container,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #movie_player,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .html5-video-player,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .html5-video-container {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #player,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #player-container,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #player-container-outer,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #player-container-inner,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #player-full-bleed-container,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #movie_player,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .html5-video-player,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .html5-video-container {",
       "  left: 0 !important;",
       "  right: auto !important;",
       "  width: 100vw !important;",
@@ -176,7 +176,7 @@
       "  transform: none !important;",
       "  box-sizing: border-box !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) video {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) video {",
       "  left: 0 !important;",
       "  right: auto !important;",
       "  width: 100vw !important;",
@@ -188,112 +188,112 @@
       "  transform: none !important;",
       "  box-sizing: border-box !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) ytd-watch-metadata,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #above-the-fold,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #below,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #comments,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) ytd-comments,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) ytd-item-section-renderer,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) ytd-watch-next-secondary-results-renderer {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) ytd-watch-metadata,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #above-the-fold,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #below,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #comments,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) ytd-comments,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) ytd-item-section-renderer,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) ytd-watch-next-secondary-results-renderer {",
       "  width: 100% !important;",
       "  max-width: 100% !important;",
       "  min-width: 0 !important;",
       "  box-sizing: border-box !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) ytd-watch-metadata,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #below,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #secondary {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) ytd-watch-metadata,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #below,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #secondary {",
       "  padding-left: 0 !important;",
       "  padding-right: 0 !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) ytd-watch-metadata > *,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #below > *,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) #secondary > * {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) ytd-watch-metadata > *,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #below > *,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) #secondary > * {",
       "  max-width: 100% !important;",
       "  min-width: 0 !important;",
       "  margin-left: 0 !important;",
       "  margin-right: 0 !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-chrome-bottom,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-chrome-top {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-chrome-bottom,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-chrome-top {",
       "  left: 12px !important;",
       "  right: 12px !important;",
       "  width: auto !important;",
       "  max-width: calc(100vw - 24px) !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-chrome-bottom {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-chrome-bottom {",
       "  height: 62px !important;",
       "  bottom: 0 !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-chrome-controls {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-chrome-controls {",
       "  height: 56px !important;",
       "  display: flex !important;",
       "  align-items: center !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-left-controls,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-right-controls {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-left-controls,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-right-controls {",
       "  height: 56px !important;",
       "  display: flex !important;",
       "  align-items: center !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-left-controls {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-left-controls {",
       "  flex: 1 1 auto !important;",
       "  min-width: 0 !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-right-controls {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-right-controls {",
       "  flex: 0 0 58px !important;",
       "  width: 58px !important;",
       "  min-width: 58px !important;",
       "  justify-content: flex-end !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-button {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-button {",
       "  width: 52px !important;",
       "  min-width: 52px !important;",
       "  height: 52px !important;",
       "  padding: 7px !important;",
       "  box-sizing: border-box !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-button svg {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-button svg {",
       "  width: 36px !important;",
       "  height: 36px !important;",
       "  transform: scale(1.2) !important;",
       "  transform-origin: center !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-button .ytp-svg-fill {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-button .ytp-svg-fill {",
       "  transform: scale(1.25) !important;",
       "  transform-origin: center !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-time-display,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-time-current,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-time-duration {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-time-display,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-time-current,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-time-duration {",
       "  font-size: 18px !important;",
       "  line-height: 52px !important;",
       "  height: 52px !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-progress-bar-container {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-progress-bar-container {",
       "  height: 18px !important;",
       "  top: -10px !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-progress-bar {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-progress-bar {",
       "  height: 5px !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-volume-area,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-next-button,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-miniplayer-button,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-size-button,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-subtitles-button,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-fullscreen-button,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-remote-button,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-overflow-button,",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-right-controls .ytp-button:not(.ytp-settings-button) {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-volume-area,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-next-button,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-miniplayer-button,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-size-button,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-subtitles-button,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-fullscreen-button,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-remote-button,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-overflow-button,",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-right-controls .ytp-button:not(.ytp-settings-button) {",
       "  display: none !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-settings-button {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-settings-button {",
       "  display: inline-flex !important;",
       "  visibility: visible !important;",
       "  opacity: 1 !important;",
       "}",
-      "html.ytnext-watch-fit:not(.ytnext-landscape-watch) .ytp-tooltip {",
+      "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-tooltip {",
       "  display: none !important;",
       "}",
       "#" + SCROLL_TOP_BUTTON_ID + " {",
@@ -314,7 +314,7 @@
       "  pointer-events: none !important;",
       "  transition: opacity 160ms ease !important;",
       "}",
-      "html.ytnext-show-scroll-top:not(.ytnext-landscape-watch) #" + SCROLL_TOP_BUTTON_ID + " {",
+      "html.tubenext-show-scroll-top:not(.tubenext-landscape-watch) #" + SCROLL_TOP_BUTTON_ID + " {",
       "  opacity: 1 !important;",
       "  pointer-events: auto !important;",
       "}"
@@ -329,7 +329,7 @@
     var style = document.createElement("style");
     style.id = LANDSCAPE_STYLE_ID;
     style.textContent = [
-      "html.ytnext-landscape-watch, html.ytnext-landscape-watch body {",
+      "html.tubenext-landscape-watch, html.tubenext-landscape-watch body {",
       "  margin: 0 !important;",
       "  padding: 0 !important;",
       "  width: 100vw !important;",
@@ -337,26 +337,26 @@
       "  overflow: hidden !important;",
       "  background: #000 !important;",
       "}",
-      "html.ytnext-landscape-watch ytd-masthead,",
-      "html.ytnext-landscape-watch #masthead,",
-      "html.ytnext-landscape-watch #masthead-container,",
-      "html.ytnext-landscape-watch ytd-mini-guide-renderer,",
-      "html.ytnext-landscape-watch tp-yt-app-drawer,",
-      "html.ytnext-landscape-watch ytd-popup-container,",
-      "html.ytnext-landscape-watch ytd-watch-flexy #below,",
-      "html.ytnext-landscape-watch ytd-watch-flexy #secondary,",
-      "html.ytnext-landscape-watch ytd-watch-flexy #comments,",
-      "html.ytnext-landscape-watch ytd-watch-flexy #related,",
-      "html.ytnext-landscape-watch ytd-watch-flexy #meta,",
-      "html.ytnext-landscape-watch ytd-watch-flexy #chat,",
-      "html.ytnext-landscape-watch ytd-watch-flexy #panels {",
+      "html.tubenext-landscape-watch ytd-masthead,",
+      "html.tubenext-landscape-watch #masthead,",
+      "html.tubenext-landscape-watch #masthead-container,",
+      "html.tubenext-landscape-watch ytd-mini-guide-renderer,",
+      "html.tubenext-landscape-watch tp-yt-app-drawer,",
+      "html.tubenext-landscape-watch ytd-popup-container,",
+      "html.tubenext-landscape-watch ytd-watch-flexy #below,",
+      "html.tubenext-landscape-watch ytd-watch-flexy #secondary,",
+      "html.tubenext-landscape-watch ytd-watch-flexy #comments,",
+      "html.tubenext-landscape-watch ytd-watch-flexy #related,",
+      "html.tubenext-landscape-watch ytd-watch-flexy #meta,",
+      "html.tubenext-landscape-watch ytd-watch-flexy #chat,",
+      "html.tubenext-landscape-watch ytd-watch-flexy #panels {",
       "  display: none !important;",
       "}",
-      "html.ytnext-landscape-watch ytd-app,",
-      "html.ytnext-landscape-watch ytd-page-manager,",
-      "html.ytnext-landscape-watch ytd-watch-flexy,",
-      "html.ytnext-landscape-watch #content,",
-      "html.ytnext-landscape-watch #primary {",
+      "html.tubenext-landscape-watch ytd-app,",
+      "html.tubenext-landscape-watch ytd-page-manager,",
+      "html.tubenext-landscape-watch ytd-watch-flexy,",
+      "html.tubenext-landscape-watch #content,",
+      "html.tubenext-landscape-watch #primary {",
       "  margin: 0 !important;",
       "  padding: 0 !important;",
       "  width: 100vw !important;",
@@ -365,14 +365,14 @@
       "  min-width: 0 !important;",
       "  overflow: hidden !important;",
       "}",
-      "html.ytnext-landscape-watch #player,",
-      "html.ytnext-landscape-watch #player-container,",
-      "html.ytnext-landscape-watch #player-container-outer,",
-      "html.ytnext-landscape-watch #player-container-inner,",
-      "html.ytnext-landscape-watch #player-full-bleed-container,",
-      "html.ytnext-landscape-watch #movie_player,",
-      "html.ytnext-landscape-watch .html5-video-player,",
-      "html.ytnext-landscape-watch .html5-video-container {",
+      "html.tubenext-landscape-watch #player,",
+      "html.tubenext-landscape-watch #player-container,",
+      "html.tubenext-landscape-watch #player-container-outer,",
+      "html.tubenext-landscape-watch #player-container-inner,",
+      "html.tubenext-landscape-watch #player-full-bleed-container,",
+      "html.tubenext-landscape-watch #movie_player,",
+      "html.tubenext-landscape-watch .html5-video-player,",
+      "html.tubenext-landscape-watch .html5-video-container {",
       "  position: fixed !important;",
       "  inset: 0 !important;",
       "  margin: 0 !important;",
@@ -384,7 +384,7 @@
       "  background: #000 !important;",
       "  z-index: 2147483646 !important;",
       "}",
-      "html.ytnext-landscape-watch video {",
+      "html.tubenext-landscape-watch video {",
       "  position: absolute !important;",
       "  inset: 0 !important;",
       "  margin: 0 !important;",
@@ -395,36 +395,36 @@
       "  background: #000 !important;",
       "  z-index: 0 !important;",
       "}",
-      "html.ytnext-landscape-watch .ytp-gradient-top,",
-      "html.ytnext-landscape-watch .ytp-gradient-bottom,",
-      "html.ytnext-landscape-watch .ytp-chrome-top,",
-      "html.ytnext-landscape-watch .ytp-chrome-bottom,",
-      "html.ytnext-landscape-watch .ytp-player-content,",
-      "html.ytnext-landscape-watch .ytp-cards-teaser,",
-      "html.ytnext-landscape-watch .ytp-ce-element,",
-      "html.ytnext-landscape-watch .ytp-popup,",
-      "html.ytnext-landscape-watch .ytp-settings-menu,",
-      "html.ytnext-landscape-watch .ytp-panel,",
-      "html.ytnext-landscape-watch .ytp-caption-window-container {",
+      "html.tubenext-landscape-watch .ytp-gradient-top,",
+      "html.tubenext-landscape-watch .ytp-gradient-bottom,",
+      "html.tubenext-landscape-watch .ytp-chrome-top,",
+      "html.tubenext-landscape-watch .ytp-chrome-bottom,",
+      "html.tubenext-landscape-watch .ytp-player-content,",
+      "html.tubenext-landscape-watch .ytp-cards-teaser,",
+      "html.tubenext-landscape-watch .ytp-ce-element,",
+      "html.tubenext-landscape-watch .ytp-popup,",
+      "html.tubenext-landscape-watch .ytp-settings-menu,",
+      "html.tubenext-landscape-watch .ytp-panel,",
+      "html.tubenext-landscape-watch .ytp-caption-window-container {",
       "  z-index: 2147483647 !important;",
       "  pointer-events: auto !important;",
       "}",
-      "html.ytnext-landscape-watch .ytp-chrome-bottom {",
+      "html.tubenext-landscape-watch .ytp-chrome-bottom {",
       "  left: 12px !important;",
       "  right: 12px !important;",
       "  bottom: 0 !important;",
       "  width: auto !important;",
       "}",
-      "html.ytnext-landscape-watch .ytp-chrome-top {",
+      "html.tubenext-landscape-watch .ytp-chrome-top {",
       "  left: 12px !important;",
       "  right: 12px !important;",
       "  width: auto !important;",
       "}",
-      "html.ytnext-landscape-watch .ytp-fullscreen .ytp-chrome-bottom,",
-      "html.ytnext-landscape-watch .ytp-fullscreen .ytp-chrome-top {",
+      "html.tubenext-landscape-watch .ytp-fullscreen .ytp-chrome-bottom,",
+      "html.tubenext-landscape-watch .ytp-fullscreen .ytp-chrome-top {",
       "  width: auto !important;",
       "}",
-      "html.ytnext-landscape-watch .ytnext-cue-overlay {",
+      "html.tubenext-landscape-watch .tubenext-cue-overlay {",
       "  position: fixed !important;",
       "  left: 18px !important;",
       "  top: 50% !important;",
@@ -437,7 +437,7 @@
       "  pointer-events: auto !important;",
       "  font-family: sans-serif !important;",
       "}",
-      "html.ytnext-landscape-watch .ytnext-cue-overlay button {",
+      "html.tubenext-landscape-watch .tubenext-cue-overlay button {",
       "  appearance: none !important;",
       "  border: 0 !important;",
       "  border-radius: 999px !important;",
@@ -448,13 +448,13 @@
       "  min-width: 68px !important;",
       "  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;",
       "}",
-      "html.ytnext-landscape-watch .ytnext-cue-overlay .ytnext-cue-close {",
+      "html.tubenext-landscape-watch .tubenext-cue-overlay .tubenext-cue-close {",
       "  min-width: 42px !important;",
       "  padding: 10px 12px !important;",
       "  background: rgba(0, 0, 0, 0.62) !important;",
       "  color: #fff !important;",
       "}",
-      "html.ytnext-landscape-watch .ytnext-cue-overlay .ytnext-cue-label {",
+      "html.tubenext-landscape-watch .tubenext-cue-overlay .tubenext-cue-label {",
       "  border-radius: 999px !important;",
       "  background: rgba(0, 0, 0, 0.62) !important;",
       "  color: #fff !important;",
@@ -479,18 +479,18 @@
     }
     if (isWatchPage()) {
       ensureWatchFitStyle();
-      document.documentElement.classList.add("ytnext-watch-fit");
+      document.documentElement.classList.add("tubenext-watch-fit");
     } else {
-      document.documentElement.classList.remove("ytnext-watch-fit");
+      document.documentElement.classList.remove("tubenext-watch-fit");
     }
     if (isLandscapeWatch()) {
       ensureLandscapeWatchStyle();
-      document.documentElement.classList.add("ytnext-landscape-watch");
+      document.documentElement.classList.add("tubenext-landscape-watch");
       updateCueOverlay();
       window.scrollTo(0, 0);
       return;
     }
-    document.documentElement.classList.remove("ytnext-landscape-watch");
+    document.documentElement.classList.remove("tubenext-landscape-watch");
     updateCueOverlay();
     removeLandscapeWatchStyle();
   }
@@ -544,7 +544,7 @@
     ensureWatchFitStyle();
     ensureScrollTopButton();
     var show = !isLandscapeWatch() && window.scrollY > 480;
-    document.documentElement.classList.toggle("ytnext-show-scroll-top", show);
+    document.documentElement.classList.toggle("tubenext-show-scroll-top", show);
   }
 
   function forceTopAfterLoad() {
@@ -570,7 +570,7 @@
       ".ytp-panel",
       ".ytp-ce-element",
       ".ytp-cards-teaser",
-      ".ytnext-cue-overlay"
+      ".tubenext-cue-overlay"
     ].join(","));
   }
 
@@ -611,11 +611,11 @@
       return cueOverlay;
     }
     cueOverlay = document.createElement("div");
-    cueOverlay.className = "ytnext-cue-overlay";
+    cueOverlay.className = "tubenext-cue-overlay";
 
     var cueButton = document.createElement("button");
     cueButton.type = "button";
-    cueButton.className = "ytnext-cue-jump";
+    cueButton.className = "tubenext-cue-jump";
     cueButton.textContent = "Cue";
     ["click", "pointerup", "touchend"].forEach(function (type) {
       cueButton.addEventListener(type, function (event) {
@@ -624,11 +624,11 @@
     });
 
     var label = document.createElement("div");
-    label.className = "ytnext-cue-label";
+    label.className = "tubenext-cue-label";
 
     var closeButton = document.createElement("button");
     closeButton.type = "button";
-    closeButton.className = "ytnext-cue-close";
+    closeButton.className = "tubenext-cue-close";
     closeButton.textContent = "X";
     ["click", "pointerup", "touchend"].forEach(function (type) {
       closeButton.addEventListener(type, function (event) {
@@ -658,7 +658,7 @@
     }
     var overlay = ensureCueOverlay();
     overlay.style.setProperty("display", cueModeActive && isLandscapeWatch() ? "flex" : "none", "important");
-    var label = overlay.querySelector(".ytnext-cue-label");
+    var label = overlay.querySelector(".tubenext-cue-label");
     if (label) {
       label.textContent = "Cue " + formatCueTime(cueTime);
     }

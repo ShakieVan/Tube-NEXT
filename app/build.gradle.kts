@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "de.shakie.youtubenext"
+    namespace = "de.shakie.tubenext"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "de.shakie.youtubenext"
+        applicationId = "de.shakie.tubenext"
         minSdk = 29
         targetSdk = 35
         versionCode = 1

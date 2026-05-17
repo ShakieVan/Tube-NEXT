@@ -1,17 +1,17 @@
-package de.shakie.youtubenext.engine.gecko
+package de.shakie.tubenext.engine.gecko
 
 import android.app.Activity
 import android.content.Context
 import android.net.Uri
 import android.util.Log
 import android.view.ViewGroup
-import de.shakie.youtubenext.browser.LinkInterceptor
-import de.shakie.youtubenext.engine.BrowserEngine
-import de.shakie.youtubenext.engine.EngineCallbacks
-import de.shakie.youtubenext.engine.EngineMediaControls
-import de.shakie.youtubenext.engine.EnginePlaybackState
-import de.shakie.youtubenext.engine.EngineTab
-import de.shakie.youtubenext.engine.EngineType
+import de.shakie.tubenext.browser.LinkInterceptor
+import de.shakie.tubenext.engine.BrowserEngine
+import de.shakie.tubenext.engine.EngineCallbacks
+import de.shakie.tubenext.engine.EngineMediaControls
+import de.shakie.tubenext.engine.EnginePlaybackState
+import de.shakie.tubenext.engine.EngineTab
+import de.shakie.tubenext.engine.EngineType
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -135,7 +135,7 @@ class GeckoBrowserEngine(
                 GeckoSessionSettings.USER_AGENT_MODE_MOBILE
             }
             Log.i(
-                "YTNEXT_ENGINE",
+                "TUBENEXT_ENGINE",
                 "tab=$tabId source=$source uaMode=${if (retainedTab.desktopMode) "DESKTOP" else "MOBILE"} url=$url"
             )
             return true
@@ -239,7 +239,7 @@ class GeckoBrowserEngine(
 
         session.mediaSessionDelegate = object : MediaSession.Delegate {
             override fun onActivated(session: GeckoSession, mediaSession: MediaSession) {
-                Log.i("YTNEXT_AUDIO", "tab=$tabId media activated")
+                Log.i("TUBENEXT_AUDIO", "tab=$tabId media activated")
                 activeMediaSession = mediaSession
                 callbacks.onMediaControlsChanged(tabId, mediaControls)
                 emitPlaybackState()
@@ -247,7 +247,7 @@ class GeckoBrowserEngine(
 
             override fun onDeactivated(session: GeckoSession, mediaSession: MediaSession) {
                 if (activeMediaSession == mediaSession) {
-                    Log.i("YTNEXT_AUDIO", "tab=$tabId media deactivated")
+                    Log.i("TUBENEXT_AUDIO", "tab=$tabId media deactivated")
                     activeMediaSession = null
                     mediaPlaying = false
                     callbacks.onMediaControlsChanged(tabId, null)
@@ -262,24 +262,24 @@ class GeckoBrowserEngine(
             ) {
                 mediaTitle = metadata.title.orEmpty()
                 mediaArtist = metadata.artist.orEmpty()
-                Log.i("YTNEXT_AUDIO", "tab=$tabId metadata title=$mediaTitle artist=$mediaArtist")
+                Log.i("TUBENEXT_AUDIO", "tab=$tabId metadata title=$mediaTitle artist=$mediaArtist")
                 emitPlaybackState()
             }
 
             override fun onPlay(session: GeckoSession, mediaSession: MediaSession) {
-                Log.i("YTNEXT_AUDIO", "tab=$tabId media play")
+                Log.i("TUBENEXT_AUDIO", "tab=$tabId media play")
                 mediaPlaying = true
                 emitPlaybackState()
             }
 
             override fun onPause(session: GeckoSession, mediaSession: MediaSession) {
-                Log.i("YTNEXT_AUDIO", "tab=$tabId media pause")
+                Log.i("TUBENEXT_AUDIO", "tab=$tabId media pause")
                 mediaPlaying = false
                 emitPlaybackState()
             }
 
             override fun onStop(session: GeckoSession, mediaSession: MediaSession) {
-                Log.i("YTNEXT_AUDIO", "tab=$tabId media stop")
+                Log.i("TUBENEXT_AUDIO", "tab=$tabId media stop")
                 mediaPlaying = false
                 emitPlaybackState()
             }
@@ -352,17 +352,17 @@ class GeckoBrowserEngine(
             .accept(
                 { extension ->
                     if (extension == null) {
-                        Log.w("YTNEXT_NAV", "Navigation extension install returned null")
+                        Log.w("TUBENEXT_NAV", "Navigation extension install returned null")
                         return@accept
                     }
                     navExtension = extension
-                    Log.i("YTNEXT_NAV", "Navigation extension ready: ${extension.id}")
+                    Log.i("TUBENEXT_NAV", "Navigation extension ready: ${extension.id}")
                     bindAllNavigationBridges()
                 },
                 { throwable ->
                     navExtensionInstallRequested = false
                     Log.w(
-                        "YTNEXT_NAV",
+                        "TUBENEXT_NAV",
                         "Navigation extension install failed: ${throwable?.message}"
                     )
                 }
@@ -407,21 +407,21 @@ class GeckoBrowserEngine(
                         if (intent?.type == OPEN_NEW_TAB_TYPE) {
                             val targetUri = runCatching { Uri.parse(intent.url) }.getOrNull()
                             if (targetUri == null || !LinkInterceptor.isYouTubeUri(targetUri)) {
-                                Log.w("YTNEXT_NAV", "Ignored invalid OPEN_NEW_TAB url=${intent.url}")
+                                Log.w("TUBENEXT_NAV", "Ignored invalid OPEN_NEW_TAB url=${intent.url}")
                                 return GeckoResult.fromValue(null)
                             }
-                            Log.i("YTNEXT_NAV", "tab=${bridge.tabId} open-new-tab url=${intent.url}")
+                            Log.i("TUBENEXT_NAV", "tab=${bridge.tabId} open-new-tab url=${intent.url}")
                             bridge.callbacks.onNewTabRequest(intent.url)
                         }
                         return GeckoResult.fromValue(null)
                     }
                     val targetUri = runCatching { Uri.parse(intent.url) }.getOrNull()
                     if (targetUri == null || !LinkInterceptor.isInternalFlowUri(targetUri)) {
-                        Log.w("YTNEXT_UA", "Ignored invalid MODE_NAV url=${intent.url}")
+                        Log.w("TUBENEXT_UA", "Ignored invalid MODE_NAV url=${intent.url}")
                         return GeckoResult.fromValue(null)
                     }
                     bridge.applyUserAgentForUrl(intent.url, "extension")
-                    Log.i("YTNEXT_NAV", "tab=${bridge.tabId} mode-nav url=${intent.url}")
+                    Log.i("TUBENEXT_NAV", "tab=${bridge.tabId} mode-nav url=${intent.url}")
                     bridge.callbacks.onMainNavigationStarted(bridge.tabId, intent.url)
                     session.loadUri(intent.url)
                     return GeckoResult.fromValue(null)
@@ -472,9 +472,9 @@ class GeckoBrowserEngine(
         private val retainedTabs = mutableMapOf<String, RetainedGeckoTab>()
 
         private const val NAV_EXTENSION_LOCATION =
-            "resource://android/assets/web_extensions/ytnext_nav_switch/"
-        private const val NAV_EXTENSION_ID = "ytnext-nav-switch@shakie.de"
-        private const val NAV_NATIVE_APP_ID = "ytnext_nav_switch"
+            "resource://android/assets/web_extensions/tubenext_nav_switch/"
+        private const val NAV_EXTENSION_ID = "tubenext-nav-switch@shakie.de"
+        private const val NAV_NATIVE_APP_ID = "tubenext_nav_switch"
         private const val MODE_NAV_TYPE = "MODE_NAV"
         private const val OPEN_NEW_TAB_TYPE = "OPEN_NEW_TAB"
 

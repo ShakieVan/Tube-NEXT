@@ -1,11 +1,11 @@
 {
   "manifest_version": 2,
-  "name": "YTNext Nav Switch",
+  "name": "Tube NEXT Nav Switch",
   "version": "1.0",
   "description": "Intercepts YouTube mode-boundary clicks before SPA navigation.",
   "applications": {
     "gecko": {
-      "id": "ytnext-nav-switch@shakie.de"
+      "id": "tubenext-nav-switch@shakie.de"
     }
   },
   "permissions": [

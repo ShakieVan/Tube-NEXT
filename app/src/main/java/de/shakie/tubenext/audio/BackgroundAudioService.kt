@@ -1,4 +1,4 @@
-package de.shakie.youtubenext.audio
+package de.shakie.tubenext.audio
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -15,8 +15,8 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
-import de.shakie.youtubenext.MainActivity
-import de.shakie.youtubenext.R
+import de.shakie.tubenext.MainActivity
+import de.shakie.tubenext.R
 
 class BackgroundAudioService : Service() {
     private lateinit var mediaSession: MediaSession
@@ -83,7 +83,7 @@ class BackgroundAudioService : Service() {
         mediaSession.setMetadata(buildMetadata(state))
         mediaSession.setPlaybackState(buildPlaybackState(state.isPlaying))
         Log.i(
-            "YTNEXT_AUDIO",
+            "TUBENEXT_AUDIO",
             "service foreground playing=${state.isPlaying} artwork=${state.artwork != null} title=${state.title}"
         )
         startForeground(NOTIFICATION_ID, buildNotification(state))
@@ -247,13 +247,13 @@ class BackgroundAudioService : Service() {
     }
 
     companion object {
-        private const val CHANNEL_ID = "ytnext_background_audio"
-        private const val MEDIA_SESSION_TAG = "YouTube NEXT"
+        private const val CHANNEL_ID = "tubenext_background_audio"
+        private const val MEDIA_SESSION_TAG = "Tube NEXT"
         private const val NOTIFICATION_ID = 42
-        private const val ACTION_PLAY = "de.shakie.youtubenext.audio.PLAY"
-        private const val ACTION_PAUSE = "de.shakie.youtubenext.audio.PAUSE"
-        private const val ACTION_STOP = "de.shakie.youtubenext.audio.STOP"
-        private const val ACTION_DISMISS = "de.shakie.youtubenext.audio.DISMISS"
+        private const val ACTION_PLAY = "de.shakie.tubenext.audio.PLAY"
+        private const val ACTION_PAUSE = "de.shakie.tubenext.audio.PAUSE"
+        private const val ACTION_STOP = "de.shakie.tubenext.audio.STOP"
+        private const val ACTION_DISMISS = "de.shakie.tubenext.audio.DISMISS"
 
         @Volatile
         var controller: Controller? = null
@@ -279,14 +279,14 @@ class BackgroundAudioService : Service() {
             } else if (isRunning) {
                 context.startService(intent)
             } else {
-                Log.i("YTNEXT_AUDIO", "skip paused notification update; service not running")
+                Log.i("TUBENEXT_AUDIO", "skip paused notification update; service not running")
             }
         }
 
         fun stop(context: Context) {
             if (foregroundStartPending) {
                 stopAfterForegroundStart = true
-                Log.i("YTNEXT_AUDIO", "defer service stop until foreground start completes")
+                Log.i("TUBENEXT_AUDIO", "defer service stop until foreground start completes")
                 return
             }
             if (isRunning) {

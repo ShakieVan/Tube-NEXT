@@ -1,4 +1,4 @@
-package de.shakie.youtubenext.engine
+package de.shakie.tubenext.engine
 
 data class EnginePlaybackState(
     val url: String,

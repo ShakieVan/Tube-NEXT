@@ -1,4 +1,4 @@
-package de.shakie.youtubenext
+package de.shakie.tubenext
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -34,20 +34,20 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
-import de.shakie.youtubenext.audio.AndroidBackgroundAudioCoordinator
-import de.shakie.youtubenext.browser.LinkInterceptor
-import de.shakie.youtubenext.browser.YouTubeNavigationPolicy
-import de.shakie.youtubenext.engine.BrowserEngine
-import de.shakie.youtubenext.engine.EngineCallbacks
-import de.shakie.youtubenext.engine.EngineType
-import de.shakie.youtubenext.engine.gecko.GeckoBrowserEngine
-import de.shakie.youtubenext.tabs.AppTab
-import de.shakie.youtubenext.tabs.TabManager
-import de.shakie.youtubenext.tabs.TabPersistence
-import de.shakie.youtubenext.tabs.TabPreviewStore
-import de.shakie.youtubenext.tabs.TabSession
-import de.shakie.youtubenext.ui.TabOverviewAdapter
-import de.shakie.youtubenext.ui.TabOverviewItem
+import de.shakie.tubenext.audio.AndroidBackgroundAudioCoordinator
+import de.shakie.tubenext.browser.LinkInterceptor
+import de.shakie.tubenext.browser.YouTubeNavigationPolicy
+import de.shakie.tubenext.engine.BrowserEngine
+import de.shakie.tubenext.engine.EngineCallbacks
+import de.shakie.tubenext.engine.EngineType
+import de.shakie.tubenext.engine.gecko.GeckoBrowserEngine
+import de.shakie.tubenext.tabs.AppTab
+import de.shakie.tubenext.tabs.TabManager
+import de.shakie.tubenext.tabs.TabPersistence
+import de.shakie.tubenext.tabs.TabPreviewStore
+import de.shakie.tubenext.tabs.TabSession
+import de.shakie.tubenext.ui.TabOverviewAdapter
+import de.shakie.tubenext.ui.TabOverviewItem
 import org.mozilla.geckoview.GeckoView
 
 class MainActivity : AppCompatActivity() {
@@ -683,7 +683,7 @@ class MainActivity : AppCompatActivity() {
                         }
                     },
                     { error ->
-                        Log.w("YTNEXT_STATE", "tab preview capture failed tab=${tab.id}", error)
+                        Log.w("TUBENEXT_STATE", "tab preview capture failed tab=${tab.id}", error)
                     }
                 )
                 return
@@ -692,7 +692,7 @@ class MainActivity : AppCompatActivity() {
                 onPreview?.invoke(preview)
             }
         }.onFailure { error ->
-            Log.w("YTNEXT_STATE", "tab preview capture skipped tab=${tab.id}", error)
+            Log.w("TUBENEXT_STATE", "tab preview capture skipped tab=${tab.id}", error)
         }
     }
 
@@ -718,7 +718,7 @@ class MainActivity : AppCompatActivity() {
             tabPreviewStore.save(tab.id, preview)
             preview
         }.onFailure { error ->
-            Log.w("YTNEXT_STATE", "fallback preview capture failed tab=${tab.id}", error)
+            Log.w("TUBENEXT_STATE", "fallback preview capture failed tab=${tab.id}", error)
         }.getOrNull()
     }
 
@@ -1261,7 +1261,7 @@ class MainActivity : AppCompatActivity() {
                     })();
                     """.trimIndent()
                 ) { rectJson ->
-                    Log.i("YTNEXT_WATCH_FIX", "post-fix moviePlayerRect=$rectJson")
+                    Log.i("TUBENEXT_WATCH_FIX", "post-fix moviePlayerRect=$rectJson")
                 }
             }, 950L)
         }

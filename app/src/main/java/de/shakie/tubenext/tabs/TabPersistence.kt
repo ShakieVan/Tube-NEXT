@@ -1,4 +1,4 @@
-package de.shakie.youtubenext.tabs
+package de.shakie.tubenext.tabs
 
 import android.content.Context
 import org.json.JSONArray
@@ -54,7 +54,7 @@ class TabPersistence(context: Context) {
     }
 
     companion object {
-        private const val PREFS_NAME = "youtube_next_tabs"
+        private const val PREFS_NAME = "tube_next_tabs"
         private const val KEY_TABS = "tabs"
         private const val KEY_SELECTED_TAB = "selected_tab"
         private const val KEY_ID = "id"

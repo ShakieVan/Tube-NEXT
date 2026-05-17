@@ -15,5 +15,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Youtube-NEXT"
+rootProject.name = "Tube-NEXT"
 include(":app")

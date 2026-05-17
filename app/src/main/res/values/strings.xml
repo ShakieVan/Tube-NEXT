@@ -20,9 +20,9 @@
     <string name="url_edit_title">URL bearbeiten</string>
     <string name="url_edit_hint">Adresse eingeben</string>
     <string name="action_open">Oeffnen</string>
-    <string name="loading_page">Seite wird aufbereitet…</string>
+    <string name="loading_page">Seite wird aufbereitet...</string>
     <string name="background_audio_channel_name">Hintergrund-Audio</string>
-    <string name="background_audio_notification_text">YouTube wird im Hintergrund wiedergegeben</string>
+    <string name="background_audio_notification_text">Audio wird im Hintergrund wiedergegeben</string>
     <string name="background_audio_play">Starten</string>
     <string name="background_audio_pause">Pausieren</string>
     <string name="background_audio_stop">Stoppen</string>

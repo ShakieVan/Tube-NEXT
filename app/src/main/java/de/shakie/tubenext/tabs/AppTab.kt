@@ -1,6 +1,6 @@
-package de.shakie.youtubenext.tabs
+package de.shakie.tubenext.tabs
 
-import de.shakie.youtubenext.engine.EngineTab
+import de.shakie.tubenext.engine.EngineTab
 
 data class AppTab(
     val id: String,

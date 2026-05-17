@@ -1,6 +1,6 @@
-package de.shakie.youtubenext.audio
+package de.shakie.tubenext.audio
 
-import de.shakie.youtubenext.engine.EnginePlaybackState
+import de.shakie.tubenext.engine.EnginePlaybackState
 
 interface BackgroundAudioCoordinator {
     fun onForegroundPlaybackState(state: EnginePlaybackState)

@@ -1,4 +1,4 @@
-# AGENTS.md - YouTube-NEXT
+# AGENTS.md - Tube-NEXT
 
 ## Zweck
 Dieses Repository dient als Startpunkt fuer eine Android-App, die YouTube moeglichst nah an der Desktop-Erfahrung in einer touchfreundlichen App abbildet.

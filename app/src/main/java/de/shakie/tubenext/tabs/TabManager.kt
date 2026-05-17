@@ -1,4 +1,4 @@
-package de.shakie.youtubenext.tabs
+package de.shakie.tubenext.tabs
 
 import java.util.UUID
 

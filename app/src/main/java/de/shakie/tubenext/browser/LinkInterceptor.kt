@@ -1,4 +1,4 @@
-package de.shakie.youtubenext.browser
+package de.shakie.tubenext.browser
 
 import android.net.Uri
 

@@ -1,4 +1,4 @@
-package de.shakie.youtubenext.tabs
+package de.shakie.tubenext.tabs
 
 data class TabSession(
     val id: String,

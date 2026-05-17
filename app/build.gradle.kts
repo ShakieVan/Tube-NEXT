@@ -1,7 +1,17 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
+val keyProperties = Properties().apply {
+    val keyFile = rootProject.file("key.properties")
+    if (keyFile.exists()) {
+        keyFile.inputStream().use { load(it) }
+    }
+}
+val hasCustomReleaseSigning = keyProperties.getProperty("storeFile")?.isNotBlank() == true
 
 android {
     namespace = "de.shakie.tubenext"
@@ -26,9 +36,26 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasCustomReleaseSigning) {
+            create("release") {
+                storeFile = file(keyProperties.getProperty("storeFile"))
+                storePassword = keyProperties.getProperty("storePassword")
+                keyAlias = keyProperties.getProperty("keyAlias")
+                keyPassword = keyProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = if (hasCustomReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                // Fallback keeps local release builds possible before a private key exists.
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

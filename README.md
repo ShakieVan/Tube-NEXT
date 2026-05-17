@@ -1,0 +1,75 @@
+# Tube NEXT
+
+Tube NEXT ist eine Android-App fuer alle, die YouTube lieber wie im Browser nutzen, aber nicht auf eine touchfreundliche App-Oberflaeche verzichten wollen. Die App packt die offizielle YouTube-Webseite in eine eigene GeckoView-basierte Browser-Huelle mit Tabs, dunklem App-Rahmen, Video-Fokus und Hintergrund-Audio.
+
+> Tube NEXT ist ein privates, experimentelles Projekt und steht in keiner Verbindung zu YouTube oder Google. Die App nutzt die offizielle YouTube-Webseite. Sie ist keine eigene Videoplattform, kein Downloader und kein Adblocker.
+
+## Warum gibt es diese App?
+
+Der Ausloeser war ein sehr praktisches Problem: Die offizielle YouTube-App kann auf manchen Geraeten auffaellig energiehungrig sein. Das Handy wird warm, der Akku leert sich schneller, und trotzdem funktioniert YouTube im normalen Browser oft deutlich kuehler und entspannter.
+
+Tube NEXT ist der Versuch, genau diese Browser-Erfahrung in eine alltagstaugliche App zu bringen:
+
+- YouTube bleibt die offizielle Webseite.
+- Die App fuehlt sich trotzdem wie eine eigene mobile Anwendung an.
+- Videos laufen stabiler im gewuenschten Bedienkontext.
+- Hintergrund-Audio und Mediensteuerung sind in Android integriert.
+- Fuer Tanztraining, Tutorials und lange Videos gibt es Komfortfunktionen, die normale Browser so nicht anbieten.
+
+## Was macht Tube NEXT besonders?
+
+- **Mobile Oberflaeche fuer normale YouTube-Seiten:** Start, Suche, Kanal- und Uebersichtsseiten bleiben touchfreundlich.
+- **Desktop-Watch fuer Video-Seiten:** Watch-Seiten koennen Desktop-Funktionen nutzen, werden aber per CSS/Viewport-Anpassung mobil passend gemacht.
+- **Tabs wie im Browser:** Mehrere YouTube-Seiten parallel offen halten, wechseln, schliessen und per Vorschau wiederfinden.
+- **Hintergrund-Audio:** Audio kann weiterlaufen, wenn die App im Hintergrund ist. Android zeigt dazu eine Medienbenachrichtigung mit Steuerung.
+- **Fullscreen bei Querformat:** Dreht man das Telefon, wird die Watch-Ansicht immersiv und zoombar.
+- **Pinch-to-Zoom im Video:** Besonders praktisch fuer Tutorials, Tanzvideos oder Detailanalyse.
+- **Cue-Modus:** Per Long-Tap im Landscape-Player kann ein Cue-Punkt gesetzt werden. Der Cue-Button springt exakt zu dieser Stelle zurueck.
+- **Dunkles, eigenstaendiges Design:** App-Rahmen, Ladescreen und Tab-Uebersicht nutzen die Tube NEXT Optik statt Android-Standardgrau.
+
+## Screenshots
+
+<p>
+  <img src="docs/screenshots/tube-next-01.jpg" width="180" alt="Mobile YouTube-Suche in Tube NEXT" />
+  <img src="docs/screenshots/tube-next-02.jpg" width="180" alt="Tube NEXT Ladescreen" />
+  <img src="docs/screenshots/tube-next-03.jpg" width="180" alt="YouTube Watch-Seite in Tube NEXT" />
+</p>
+
+<p>
+  <img src="docs/screenshots/tube-next-04.jpg" width="420" alt="Landscape-Fullscreen mit YouTube-Overlay" />
+</p>
+
+<p>
+  <img src="docs/screenshots/tube-next-05.jpg" width="420" alt="Cue-Modus im Landscape-Player" />
+</p>
+
+<p>
+  <img src="docs/screenshots/tube-next-06.jpg" width="180" alt="Tube NEXT Tab-Manager" />
+</p>
+
+## Technischer Stand
+
+- Kotlin / Android
+- Min SDK 29
+- GeckoView statt Android WebView
+- eigene Tab-Verwaltung
+- eigene GeckoView WebExtension fuer Navigation, Dark-Mode-Hilfen, Watch-Layout und Player-Komfort
+- Hintergrund-Audio ueber Android MediaSession / Foreground Service
+
+## Was Tube NEXT bewusst nicht macht
+
+- keine Downloads von YouTube-Inhalten
+- keine DRM-Umgehung
+- kein Ad-Blocking
+- keine inoffiziellen YouTube-APIs
+- keine eigene Video-Plattform
+
+Stabilitaet, Login-Persistenz und regelkonforme Nutzung der offiziellen Webseite haben Vorrang vor aggressiven Hacks.
+
+## Build
+
+```powershell
+.\gradlew.bat assembleDebug --console=plain
+```
+
+Fuer lokale Tests wird aktuell der Debug-Build genutzt. Ein sauber signierter Release-Build ist ein eigener naechster Schritt, sobald der Paketname und die Release-Linie stabil sind.

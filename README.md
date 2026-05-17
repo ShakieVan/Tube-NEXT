@@ -21,10 +21,12 @@ Tube NEXT ist der Versuch, genau diese Browser-Erfahrung in eine alltagstauglich
 - **Mobile Oberflaeche fuer normale YouTube-Seiten:** Start, Suche, Kanal- und Uebersichtsseiten bleiben touchfreundlich.
 - **Desktop-Watch fuer Video-Seiten:** Watch-Seiten koennen Desktop-Funktionen nutzen, werden aber per CSS/Viewport-Anpassung mobil passend gemacht.
 - **Tabs wie im Browser:** Mehrere YouTube-Seiten parallel offen halten, wechseln, schliessen und per Vorschau wiederfinden.
+- **Schnelles Oeffnen in neuen Tabs:** Long-Tap auf einen YouTube-Link oeffnet ihn direkt in einem neuen Tab.
 - **Hintergrund-Audio:** Audio kann weiterlaufen, wenn die App im Hintergrund ist. Android zeigt dazu eine Medienbenachrichtigung mit Steuerung.
 - **Fullscreen bei Querformat:** Dreht man das Telefon, wird die Watch-Ansicht immersiv und zoombar.
 - **Pinch-to-Zoom im Video:** Besonders praktisch fuer Tutorials, Tanzvideos oder Detailanalyse.
 - **Cue-Modus:** Per Long-Tap im Landscape-Player kann ein Cue-Punkt gesetzt werden. Der Cue-Button springt exakt zu dieser Stelle zurueck.
+- **Saubere Links teilen:** Tap auf die Adressleiste kopiert die sichtbare URL, ohne zusaetzliche YouTube-Share-Parameter. Long-Tap auf die Adressleiste oeffnet den URL-Editor.
 - **Dunkles, eigenstaendiges Design:** App-Rahmen, Ladescreen und Tab-Uebersicht nutzen die Tube NEXT Optik statt Android-Standardgrau.
 
 ## Screenshots

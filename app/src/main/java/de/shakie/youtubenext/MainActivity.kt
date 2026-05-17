@@ -112,8 +112,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        currentTab()?.engineTab?.onPause()
         super.onPause()
         tabManager.persist()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        currentTab()?.engineTab?.onResume()
     }
 
     override fun onStart() {
@@ -144,16 +150,23 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        val keepBrowserSessions = isChangingConfigurations
         browserTabs.values.forEach { tab ->
             webViewContainer.removeView(tab.engineTab.view)
-            tab.engineTab.stopLoading()
-            tab.engineTab.destroy()
+            if (keepBrowserSessions) {
+                tab.engineTab.detach()
+            } else {
+                tab.engineTab.stopLoading()
+                tab.engineTab.destroy()
+            }
         }
         browserTabs.clear()
-        if (::backgroundAudioCoordinator.isInitialized) {
+        if (!keepBrowserSessions && ::backgroundAudioCoordinator.isInitialized) {
             backgroundAudioCoordinator.shutdown()
         }
-        browserEngine.shutdown()
+        if (!keepBrowserSessions) {
+            browserEngine.shutdown()
+        }
     }
 
     private fun setupToolbar() {
@@ -366,13 +379,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun selectTab(tabId: String, persistSelection: Boolean = true) {
         if (!browserTabs.containsKey(tabId)) return
-        currentTab()
-            ?.takeIf { it.id != tabId }
-            ?.let(::captureAndStoreTabPreview)
+        val previousTab = currentTab()?.takeIf { it.id != tabId }
+        previousTab?.engineTab?.onPause()
+        previousTab?.let(::captureAndStoreTabPreview)
         selectedTabId = tabId
         browserTabs.forEach { (id, tab) ->
             tab.engineTab.view.visibility = if (id == tabId) View.VISIBLE else View.GONE
         }
+        currentTab()?.engineTab?.onResume()
         updateToolbarState()
         if (persistSelection) {
             tabManager.select(tabId)
@@ -654,25 +668,31 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun captureAndStoreTabPreview(tab: AppTab, onPreview: ((Bitmap) -> Unit)? = null) {
-        val contentView = tab.engineTab.view
-        if (contentView.width <= 0 || contentView.height <= 0) return
-        if (contentView is GeckoView) {
-            if (contentView.visibility != View.VISIBLE) return
-            contentView.capturePixels().accept(
-                { captured ->
-                    if (captured == null) return@accept
-                    val preview = createTabPreviewBitmap(captured)
-                    tabPreviewStore.save(tab.id, preview)
-                    runOnUiThread {
-                        onPreview?.invoke(preview)
+        runCatching {
+            val contentView = tab.engineTab.view
+            if (contentView.width <= 0 || contentView.height <= 0) return
+            if (contentView is GeckoView) {
+                if (contentView.visibility != View.VISIBLE) return
+                contentView.capturePixels().accept(
+                    { captured ->
+                        if (captured == null) return@accept
+                        val preview = createTabPreviewBitmap(captured)
+                        tabPreviewStore.save(tab.id, preview)
+                        runOnUiThread {
+                            onPreview?.invoke(preview)
+                        }
+                    },
+                    { error ->
+                        Log.w("YTNEXT_STATE", "tab preview capture failed tab=${tab.id}", error)
                     }
-                },
-                { /* Hidden or failed Gecko captures should not overwrite saved previews. */ }
-            )
-            return
-        }
-        captureTabPreviewFallback(tab)?.let { preview ->
-            onPreview?.invoke(preview)
+                )
+                return
+            }
+            captureTabPreviewFallback(tab)?.let { preview ->
+                onPreview?.invoke(preview)
+            }
+        }.onFailure { error ->
+            Log.w("YTNEXT_STATE", "tab preview capture skipped tab=${tab.id}", error)
         }
     }
 
@@ -687,15 +707,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun captureTabPreviewFallback(tab: AppTab): Bitmap? {
-        val contentView = tab.engineTab.view
-        val width = contentView.width.takeIf { it > 0 } ?: return null
-        val height = contentView.height.takeIf { it > 0 } ?: return null
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        contentView.draw(canvas)
-        val preview = createTabPreviewBitmap(bitmap)
-        tabPreviewStore.save(tab.id, preview)
-        return preview
+        return runCatching {
+            val contentView = tab.engineTab.view
+            val width = contentView.width.takeIf { it > 0 } ?: return null
+            val height = contentView.height.takeIf { it > 0 } ?: return null
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            contentView.draw(canvas)
+            val preview = createTabPreviewBitmap(bitmap)
+            tabPreviewStore.save(tab.id, preview)
+            preview
+        }.onFailure { error ->
+            Log.w("YTNEXT_STATE", "fallback preview capture failed tab=${tab.id}", error)
+        }.getOrNull()
     }
 
     private fun createTabPreviewBitmap(source: Bitmap): Bitmap {

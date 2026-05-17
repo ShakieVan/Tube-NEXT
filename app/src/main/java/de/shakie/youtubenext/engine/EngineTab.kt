@@ -13,6 +13,7 @@ interface EngineTab {
     fun canGoBack(): Boolean
     fun goBack()
     fun stopLoading()
+    fun detach()
     fun destroy()
     fun setDesktopMode(enabled: Boolean)
     fun isInCustomView(): Boolean

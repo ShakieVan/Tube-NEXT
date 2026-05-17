@@ -24,6 +24,7 @@ class BackgroundAudioService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        isRunning = true
         ensureChannel()
         mediaSession = MediaSession(this, MEDIA_SESSION_TAG).apply {
             setCallback(object : MediaSession.Callback() {
@@ -67,6 +68,10 @@ class BackgroundAudioService : Service() {
                 stopSelf()
                 return START_NOT_STICKY
             }
+            ACTION_DISMISS -> {
+                stopSelf()
+                return START_NOT_STICKY
+            }
         }
 
         val state = notificationState ?: NotificationState(
@@ -82,10 +87,26 @@ class BackgroundAudioService : Service() {
             "service foreground playing=${state.isPlaying} artwork=${state.artwork != null} title=${state.title}"
         )
         startForeground(NOTIFICATION_ID, buildNotification(state))
-        return START_STICKY
+        foregroundStartPending = false
+        if (stopAfterForegroundStart) {
+            stopAfterForegroundStart = false
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        if (!state.isPlaying) {
+            // Samsung keeps media-style notifications non-clearable in a few
+            // timing paths. Once playback is paused, remove our background
+            // player completely instead of leaving a sticky paused row behind.
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
+        return if (state.isPlaying) START_STICKY else START_NOT_STICKY
     }
 
     override fun onDestroy() {
+        isRunning = false
+        foregroundStartPending = false
+        stopAfterForegroundStart = false
         updateWakeLock(false)
         mediaSession.release()
         super.onDestroy()
@@ -128,6 +149,7 @@ class BackgroundAudioService : Service() {
             .setContentTitle(state.title.ifBlank { getString(R.string.app_name) })
             .setContentText(state.text)
             .setContentIntent(contentIntent)
+            .setDeleteIntent(serviceIntent(ACTION_DISMISS, 4))
             .setOngoing(state.isPlaying)
             .setShowWhen(false)
             .addAction(playPauseAction)
@@ -231,6 +253,7 @@ class BackgroundAudioService : Service() {
         private const val ACTION_PLAY = "de.shakie.youtubenext.audio.PLAY"
         private const val ACTION_PAUSE = "de.shakie.youtubenext.audio.PAUSE"
         private const val ACTION_STOP = "de.shakie.youtubenext.audio.STOP"
+        private const val ACTION_DISMISS = "de.shakie.youtubenext.audio.DISMISS"
 
         @Volatile
         var controller: Controller? = null
@@ -238,14 +261,37 @@ class BackgroundAudioService : Service() {
         @Volatile
         private var notificationState: NotificationState? = null
 
+        @Volatile
+        private var isRunning = false
+
+        @Volatile
+        private var foregroundStartPending = false
+
+        @Volatile
+        private var stopAfterForegroundStart = false
+
         fun update(context: Context, state: NotificationState) {
             notificationState = state
             val intent = Intent(context, BackgroundAudioService::class.java)
-            context.startForegroundService(intent)
+            if (state.isPlaying) {
+                foregroundStartPending = true
+                context.startForegroundService(intent)
+            } else if (isRunning) {
+                context.startService(intent)
+            } else {
+                Log.i("YTNEXT_AUDIO", "skip paused notification update; service not running")
+            }
         }
 
         fun stop(context: Context) {
-            context.stopService(Intent(context, BackgroundAudioService::class.java))
+            if (foregroundStartPending) {
+                stopAfterForegroundStart = true
+                Log.i("YTNEXT_AUDIO", "defer service stop until foreground start completes")
+                return
+            }
+            if (isRunning) {
+                context.stopService(Intent(context, BackgroundAudioService::class.java))
+            }
         }
     }
 }

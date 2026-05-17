@@ -1,6 +1,7 @@
 package de.shakie.youtubenext.engine.gecko
 
 import android.app.Activity
+import android.content.Context
 import android.net.Uri
 import android.util.Log
 import android.view.ViewGroup
@@ -28,7 +29,7 @@ class GeckoBrowserEngine(
 ) : BrowserEngine {
 
     override val type: EngineType = EngineType.GECKO
-    private val runtime: GeckoRuntime = GeckoRuntime.create(activity)
+    private val runtime: GeckoRuntime = runtimeFor(activity.applicationContext)
     private var navExtensionInstallRequested = false
     private var navExtension: WebExtension? = null
     private val navBridgeBySession = WeakHashMap<GeckoSession, NavBridge>()
@@ -43,12 +44,33 @@ class GeckoBrowserEngine(
         title: String,
         callbacks: EngineCallbacks
     ): EngineTab {
-        val settings = GeckoSessionSettings.Builder()
-            .usePrivateMode(false)
-            .userAgentMode(GeckoSessionSettings.USER_AGENT_MODE_DESKTOP)
-            .suspendMediaWhenInactive(false)
-            .build()
-        val session = GeckoSession(settings)
+        var createdSession = false
+        val retainedTab = retainedTabs[tabId] ?: run {
+            val desktopMode = shouldUseDesktopMode(initialUrl)
+            val settings = GeckoSessionSettings.Builder()
+                .usePrivateMode(false)
+                .userAgentMode(
+                    if (desktopMode) {
+                        GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
+                    } else {
+                        GeckoSessionSettings.USER_AGENT_MODE_MOBILE
+                    }
+                )
+                .suspendMediaWhenInactive(false)
+                .build()
+            RetainedGeckoTab(
+                session = GeckoSession(settings),
+                currentUrl = initialUrl,
+                title = title,
+                desktopMode = desktopMode
+            ).also { retained ->
+                createdSession = true
+                retained.session.open(runtime)
+                retainedTabs[tabId] = retained
+            }
+        }
+        val shouldLoadInitialUrl = createdSession && initialUrl.isNotBlank()
+        val session = retainedTab.session
         val geckoView = GeckoView(activity).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -57,16 +79,13 @@ class GeckoBrowserEngine(
             setSession(session)
         }
 
-        var canGoBack = false
-        var currentUrl = initialUrl
-        var desktopMode = shouldUseDesktopMode(initialUrl)
         var activeMediaSession: MediaSession? = null
-        var mediaTitle = title
+        var mediaTitle = retainedTab.title.ifBlank { title }
         var mediaArtist = ""
         var mediaPlaying = false
         var mediaPositionMs = 0L
         var mediaDurationMs: Long? = null
-        session.settings.userAgentMode = if (desktopMode) {
+        session.settings.userAgentMode = if (retainedTab.desktopMode) {
             GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
         } else {
             GeckoSessionSettings.USER_AGENT_MODE_MOBILE
@@ -96,8 +115,8 @@ class GeckoBrowserEngine(
             callbacks.onPlaybackStateChanged(
                 tabId,
                 EnginePlaybackState(
-                    url = currentUrl,
-                    title = mediaTitle.ifBlank { title.ifBlank { currentUrl } },
+                    url = retainedTab.currentUrl,
+                    title = mediaTitle.ifBlank { title.ifBlank { retainedTab.currentUrl } },
                     isPlaying = mediaPlaying,
                     positionMs = mediaPositionMs,
                     durationMs = mediaDurationMs,
@@ -108,23 +127,23 @@ class GeckoBrowserEngine(
         fun applyUserAgentForUrl(url: String, source: String): Boolean {
             if (!shouldApplyUserAgentForUrl(url)) return false
             val targetDesktopMode = shouldUseDesktopMode(url)
-            if (desktopMode == targetDesktopMode) return false
-            desktopMode = targetDesktopMode
-            session.settings.userAgentMode = if (desktopMode) {
+            if (retainedTab.desktopMode == targetDesktopMode) return false
+            retainedTab.desktopMode = targetDesktopMode
+            session.settings.userAgentMode = if (retainedTab.desktopMode) {
                 GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
             } else {
                 GeckoSessionSettings.USER_AGENT_MODE_MOBILE
             }
             Log.i(
                 "YTNEXT_ENGINE",
-                "tab=$tabId source=$source uaMode=${if (desktopMode) "DESKTOP" else "MOBILE"} url=$url"
+                "tab=$tabId source=$source uaMode=${if (retainedTab.desktopMode) "DESKTOP" else "MOBILE"} url=$url"
             )
             return true
         }
 
         session.navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onCanGoBack(session: GeckoSession, value: Boolean) {
-                canGoBack = value
+                retainedTab.canGoBack = value
             }
 
             override fun onLocationChange(
@@ -135,7 +154,7 @@ class GeckoBrowserEngine(
             ) {
                 val location = url.orEmpty()
                 if (location.isBlank()) return
-                currentUrl = location
+                retainedTab.currentUrl = location
                 callbacks.onMainUrlUpdated(tabId, location)
             }
 
@@ -169,12 +188,12 @@ class GeckoBrowserEngine(
 
         session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
-                currentUrl = url
+                retainedTab.currentUrl = url
                 callbacks.onMainNavigationStarted(tabId, url)
             }
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
-                callbacks.onMainPageFinished(tabId, currentUrl)
+                callbacks.onMainPageFinished(tabId, retainedTab.currentUrl)
             }
 
             override fun onProgressChange(session: GeckoSession, progress: Int) {
@@ -189,7 +208,7 @@ class GeckoBrowserEngine(
                 lastVisitedURL: String?,
                 flags: Int
             ): GeckoResult<Boolean> {
-                currentUrl = url
+                retainedTab.currentUrl = url
                 return GeckoResult.fromValue(true)
             }
 
@@ -202,10 +221,11 @@ class GeckoBrowserEngine(
                 val currentItem = history[index]
                 val uri = currentItem.uri.orEmpty()
                 if (uri.isNotBlank()) {
-                    currentUrl = uri
+                    retainedTab.currentUrl = uri
                 }
                 val title = currentItem.title.orEmpty()
                 if (title.isNotBlank()) {
+                    retainedTab.title = title
                     callbacks.onMainTitleUpdated(tabId, title)
                 }
             }
@@ -277,7 +297,6 @@ class GeckoBrowserEngine(
             }
         }
 
-        session.open(runtime)
         registerNavigationBridge(
             session = session,
             tabId = tabId,
@@ -291,12 +310,19 @@ class GeckoBrowserEngine(
             session = session,
             geckoView = geckoView,
             title = title,
-            url = initialUrl,
-            canGoBackProvider = { canGoBack },
+            url = retainedTab.currentUrl.ifBlank { initialUrl },
+            canGoBackProvider = { retainedTab.canGoBack },
             shouldUseDesktopMode = shouldUseDesktopMode,
-            onDestroy = { removeNavigationBridge(session) }
+            onDetach = {
+                removeNavigationBridge(session)
+                geckoView.releaseSession()
+            },
+            onDestroy = {
+                removeNavigationBridge(session)
+                retainedTabs.remove(tabId)
+            }
         )
-        if (initialUrl.isNotBlank()) {
+        if (shouldLoadInitialUrl) {
             tab.loadUrl(initialUrl)
         }
         return tab
@@ -427,18 +453,37 @@ class GeckoBrowserEngine(
         val applyUserAgentForUrl: (String, String) -> Boolean
     )
 
+    private data class RetainedGeckoTab(
+        val session: GeckoSession,
+        var currentUrl: String,
+        var title: String,
+        var desktopMode: Boolean,
+        var canGoBack: Boolean = false
+    )
+
     private data class NavigationIntent(
         val type: String,
         val url: String
     )
 
     private companion object {
+        @Volatile
+        private var sharedRuntime: GeckoRuntime? = null
+        private val retainedTabs = mutableMapOf<String, RetainedGeckoTab>()
+
         private const val NAV_EXTENSION_LOCATION =
             "resource://android/assets/web_extensions/ytnext_nav_switch/"
         private const val NAV_EXTENSION_ID = "ytnext-nav-switch@shakie.de"
         private const val NAV_NATIVE_APP_ID = "ytnext_nav_switch"
         private const val MODE_NAV_TYPE = "MODE_NAV"
         private const val OPEN_NEW_TAB_TYPE = "OPEN_NEW_TAB"
+
+        fun runtimeFor(context: Context): GeckoRuntime {
+            sharedRuntime?.let { return it }
+            return synchronized(this) {
+                sharedRuntime ?: GeckoRuntime.create(context).also { sharedRuntime = it }
+            }
+        }
     }
 }
 
@@ -450,6 +495,7 @@ private data class GeckoEngineTab(
     override var url: String,
     val canGoBackProvider: () -> Boolean,
     val shouldUseDesktopMode: (String) -> Boolean,
+    val onDetach: () -> Unit,
     val onDestroy: () -> Unit
 ) : EngineTab {
     override val view: GeckoView = geckoView
@@ -475,8 +521,13 @@ private data class GeckoEngineTab(
         session.stop()
     }
 
+    override fun detach() {
+        onDetach()
+    }
+
     override fun destroy() {
         onDestroy()
+        geckoView.releaseSession()
         session.close()
     }
 
@@ -498,7 +549,13 @@ private data class GeckoEngineTab(
         callback?.invoke(null)
     }
 
-    override fun onPause() = Unit
+    override fun onPause() {
+        session.setFocused(false)
+        session.setActive(false)
+    }
 
-    override fun onResume() = Unit
+    override fun onResume() {
+        session.setActive(true)
+        session.setFocused(true)
+    }
 }

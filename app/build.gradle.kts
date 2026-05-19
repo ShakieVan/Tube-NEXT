@@ -21,10 +21,15 @@ android {
         applicationId = "de.shakie.tubenext"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["appLabel"] = "Tube NEXT"
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     splits {
@@ -48,8 +53,15 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            manifestPlaceholders["appLabel"] = "Tube NEXT Debug"
+        }
+
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             signingConfig = if (hasCustomReleaseSigning) {
                 signingConfigs.getByName("release")
             } else {

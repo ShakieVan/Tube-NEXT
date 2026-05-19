@@ -257,11 +257,11 @@ class MainActivity : AppCompatActivity() {
             createAndSelectTab(DEFAULT_URL)
             return
         }
+        val selectedId = tabManager.selectedTabId() ?: restored.first().id
         restored.forEach { session ->
-            createBrowserTab(session)
+            createBrowserTab(session, loadInitialUrl = session.id == selectedId)
         }
         syncTabLayout()
-        val selectedId = tabManager.selectedTabId() ?: restored.first().id
         selectTab(selectedId, persistSelection = false)
     }
 
@@ -288,11 +288,12 @@ class MainActivity : AppCompatActivity() {
         return browserTab
     }
 
-    private fun createBrowserTab(session: TabSession): AppTab {
+    private fun createBrowserTab(session: TabSession, loadInitialUrl: Boolean = true): AppTab {
         val engineTab = browserEngine.createTab(
             tabId = session.id,
             initialUrl = session.url,
             title = session.title,
+            loadInitialUrl = loadInitialUrl,
             callbacks = EngineCallbacks(
                 onOpenExternalUrl = ::openExternalUrl,
                 onMainNavigationStarted = { tabId, url ->
@@ -339,7 +340,8 @@ class MainActivity : AppCompatActivity() {
             engineTab = engineTab,
             isDesktopMode = shouldUseDesktopMode(session.url),
             title = session.title,
-            url = session.url
+            url = session.url,
+            hasLoadedInitialUrl = loadInitialUrl
         )
         browserTab.engineTab.setDesktopMode(browserTab.isDesktopMode)
         browserTab.engineTab.view.layoutParams = ViewGroup.LayoutParams(
@@ -347,6 +349,9 @@ class MainActivity : AppCompatActivity() {
             ViewGroup.LayoutParams.MATCH_PARENT
         )
         browserTab.engineTab.view.visibility = View.GONE
+        if (!loadInitialUrl) {
+            browserTab.engineTab.onPause()
+        }
         configureLongPressMenu(browserTab)
         browserTabs[session.id] = browserTab
         webViewContainer.addView(browserTab.engineTab.view)
@@ -377,16 +382,28 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun selectTab(tabId: String, persistSelection: Boolean = true) {
+    private fun selectTab(
+        tabId: String,
+        persistSelection: Boolean = true,
+        capturePreviousPreview: Boolean = true
+    ) {
         if (!browserTabs.containsKey(tabId)) return
         val previousTab = currentTab()?.takeIf { it.id != tabId }
+        if (capturePreviousPreview) {
+            previousTab?.let(::captureAndStoreTabPreview)
+        }
         previousTab?.engineTab?.onPause()
-        previousTab?.let(::captureAndStoreTabPreview)
         selectedTabId = tabId
         browserTabs.forEach { (id, tab) ->
             tab.engineTab.view.visibility = if (id == tabId) View.VISIBLE else View.GONE
         }
-        currentTab()?.engineTab?.onResume()
+        currentTab()?.let { tab ->
+            tab.engineTab.onResume()
+            if (!tab.hasLoadedInitialUrl) {
+                tab.hasLoadedInitialUrl = true
+                tab.engineTab.loadUrl(tab.url.ifBlank { DEFAULT_URL })
+            }
+        }
         updateToolbarState()
         if (persistSelection) {
             tabManager.select(tabId)
@@ -561,8 +578,8 @@ class MainActivity : AppCompatActivity() {
         lateinit var adapter: TabOverviewAdapter
         adapter = TabOverviewAdapter(
             onTabClick = { tabId ->
-                selectTab(tabId)
-                refreshTabOverview(adapter, title)
+                selectTab(tabId, capturePreviousPreview = false)
+                dialog.dismiss()
             },
             onTabClose = { tabId ->
                 closeTabById(tabId)
@@ -592,6 +609,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         dialog.setContentView(content)
+        currentTab()?.let(::captureAndStoreTabPreview)
         refreshTabOverview(adapter, title)
         dialog.show()
         dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
@@ -660,11 +678,6 @@ class MainActivity : AppCompatActivity() {
             )
         }
         adapter.submitList(items)
-        browserTabs.values.forEach { tab ->
-            captureAndStoreTabPreview(tab) { bitmap ->
-                adapter.updatePreview(tab.id, bitmap)
-            }
-        }
     }
 
     private fun captureAndStoreTabPreview(tab: AppTab, onPreview: ((Bitmap) -> Unit)? = null) {
@@ -677,6 +690,7 @@ class MainActivity : AppCompatActivity() {
                     { captured ->
                         if (captured == null) return@accept
                         val preview = createTabPreviewBitmap(captured)
+                        if (isEffectivelyBlankPreview(preview)) return@accept
                         tabPreviewStore.save(tab.id, preview)
                         runOnUiThread {
                             onPreview?.invoke(preview)
@@ -689,6 +703,7 @@ class MainActivity : AppCompatActivity() {
                 return
             }
             captureTabPreviewFallback(tab)?.let { preview ->
+                if (isEffectivelyBlankPreview(preview)) return
                 onPreview?.invoke(preview)
             }
         }.onFailure { error ->
@@ -715,6 +730,7 @@ class MainActivity : AppCompatActivity() {
             val canvas = Canvas(bitmap)
             contentView.draw(canvas)
             val preview = createTabPreviewBitmap(bitmap)
+            if (isEffectivelyBlankPreview(preview)) return null
             tabPreviewStore.save(tab.id, preview)
             preview
         }.onFailure { error ->
@@ -751,6 +767,49 @@ class MainActivity : AppCompatActivity() {
         val targetRect = android.graphics.Rect(0, 0, previewWidth, previewHeight)
         canvas.drawBitmap(source, sourceRect, targetRect, null)
         return bitmap
+    }
+
+    private fun isEffectivelyBlankPreview(bitmap: Bitmap): Boolean {
+        val stepX = (bitmap.width / 16).coerceAtLeast(1)
+        val stepY = (bitmap.height / 10).coerceAtLeast(1)
+        var samples = 0
+        var darkSamples = 0
+        var lightSamples = 0
+        var transparentSamples = 0
+        var minLuminance = 255
+        var maxLuminance = 0
+
+        var y = 0
+        while (y < bitmap.height) {
+            var x = 0
+            while (x < bitmap.width) {
+                val pixel = bitmap.getPixel(x, y)
+                val alpha = Color.alpha(pixel)
+                val luminance = (
+                    Color.red(pixel) * 0.299f +
+                        Color.green(pixel) * 0.587f +
+                        Color.blue(pixel) * 0.114f
+                    ).toInt()
+                samples += 1
+                if (alpha < 8) transparentSamples += 1
+                if (alpha >= 8) {
+                    if (luminance <= 6) darkSamples += 1
+                    if (luminance >= 248) lightSamples += 1
+                    minLuminance = minOf(minLuminance, luminance)
+                    maxLuminance = maxOf(maxLuminance, luminance)
+                }
+                x += stepX
+            }
+            y += stepY
+        }
+
+        if (samples == 0) return true
+        val darkOrTransparentSamples = darkSamples + transparentSamples
+        val lightOrTransparentSamples = lightSamples + transparentSamples
+        val nearlySingleTone = transparentSamples == 0 && maxLuminance - minLuminance <= 4
+        return darkOrTransparentSamples >= samples * 98 / 100 ||
+            lightOrTransparentSamples >= samples * 98 / 100 ||
+            nearlySingleTone
     }
 
     private fun formatToolbarUrl(url: String): String {
@@ -1261,7 +1320,9 @@ class MainActivity : AppCompatActivity() {
                     })();
                     """.trimIndent()
                 ) { rectJson ->
-                    Log.i("TUBENEXT_WATCH_FIX", "post-fix moviePlayerRect=$rectJson")
+                    if (BuildConfig.DEBUG) {
+                        Log.i("TUBENEXT_WATCH_FIX", "post-fix moviePlayerRect=$rectJson")
+                    }
                 }
             }, 950L)
         }

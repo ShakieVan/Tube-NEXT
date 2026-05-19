@@ -15,6 +15,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
+import de.shakie.tubenext.BuildConfig
 import de.shakie.tubenext.MainActivity
 import de.shakie.tubenext.R
 
@@ -82,10 +83,7 @@ class BackgroundAudioService : Service() {
         updateWakeLock(state.isPlaying)
         mediaSession.setMetadata(buildMetadata(state))
         mediaSession.setPlaybackState(buildPlaybackState(state.isPlaying))
-        Log.i(
-            "TUBENEXT_AUDIO",
-            "service foreground playing=${state.isPlaying} artwork=${state.artwork != null} title=${state.title}"
-        )
+        debugLog("service foreground playing=${state.isPlaying} artwork=${state.artwork != null} title=${state.title}")
         startForeground(NOTIFICATION_ID, buildNotification(state))
         foregroundStartPending = false
         if (stopAfterForegroundStart) {
@@ -279,18 +277,24 @@ class BackgroundAudioService : Service() {
             } else if (isRunning) {
                 context.startService(intent)
             } else {
-                Log.i("TUBENEXT_AUDIO", "skip paused notification update; service not running")
+                debugLog("skip paused notification update; service not running")
             }
         }
 
         fun stop(context: Context) {
             if (foregroundStartPending) {
                 stopAfterForegroundStart = true
-                Log.i("TUBENEXT_AUDIO", "defer service stop until foreground start completes")
+                debugLog("defer service stop until foreground start completes")
                 return
             }
             if (isRunning) {
                 context.stopService(Intent(context, BackgroundAudioService::class.java))
+            }
+        }
+
+        private fun debugLog(message: String) {
+            if (BuildConfig.DEBUG) {
+                Log.i("TUBENEXT_AUDIO", message)
             }
         }
     }

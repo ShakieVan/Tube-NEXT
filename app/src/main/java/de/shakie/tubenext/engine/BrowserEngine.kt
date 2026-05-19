@@ -7,6 +7,7 @@ interface BrowserEngine {
         tabId: String,
         initialUrl: String,
         title: String,
+        loadInitialUrl: Boolean = true,
         callbacks: EngineCallbacks
     ): EngineTab
 

@@ -10,6 +10,7 @@ import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import de.shakie.tubenext.BuildConfig
 import de.shakie.tubenext.engine.EngineMediaControls
 import de.shakie.tubenext.engine.EnginePlaybackState
 
@@ -48,12 +49,12 @@ class AndroidBackgroundAudioCoordinator(
         controlsGeneration += 1
         val generation = controlsGeneration
         BackgroundAudioService.controller = if (controls == null) null else this
-        Log.i("TUBENEXT_AUDIO", "controls=${controls != null}")
+        debugLog("controls=${controls != null}")
         if (controls == null) {
             if (appInBackground && lastState?.isPlaying == true) {
                 handler.postDelayed({
                     if (controlsGeneration == generation && this.controls == null && appInBackground) {
-                        Log.i("TUBENEXT_AUDIO", "controls grace expired")
+                        debugLog("controls grace expired")
                         BackgroundAudioService.stop(context)
                     }
                 }, CONTROLS_LOST_GRACE_MS)
@@ -68,10 +69,7 @@ class AndroidBackgroundAudioCoordinator(
     fun setArtwork(bitmap: Bitmap?) {
         artwork = bitmap?.let(::createSoftArtwork)
         artworkVersion += 1
-        Log.i(
-            "TUBENEXT_AUDIO",
-            "artwork=${artwork != null} source=${bitmap?.width ?: 0}x${bitmap?.height ?: 0}"
-        )
+        debugLog("artwork=${artwork != null} source=${bitmap?.width ?: 0}x${bitmap?.height ?: 0}")
         if (appInBackground) {
             lastState?.let { showNotification(it, force = true) }
         }
@@ -94,7 +92,7 @@ class AndroidBackgroundAudioCoordinator(
     override fun onAppBackgrounded() {
         appInBackground = true
         handler.removeCallbacks(foregroundServiceStopRunnable)
-        Log.i("TUBENEXT_AUDIO", "app backgrounded playing=${lastState?.isPlaying}")
+        debugLog("app backgrounded playing=${lastState?.isPlaying}")
         if (controls != null) {
             lastState?.let { showNotification(it, force = true) }
         }
@@ -103,7 +101,7 @@ class AndroidBackgroundAudioCoordinator(
     override fun onAppForegrounded() {
         appInBackground = false
         lastNotification = null
-        Log.i("TUBENEXT_AUDIO", "app foregrounded")
+        debugLog("app foregrounded")
         handler.postDelayed(foregroundServiceStopRunnable, FOREGROUND_SERVICE_STOP_DELAY_MS)
     }
 
@@ -149,10 +147,7 @@ class AndroidBackgroundAudioCoordinator(
         )
         if (!force && snapshot == lastNotification) return
         lastNotification = snapshot
-        Log.i(
-            "TUBENEXT_AUDIO",
-            "notify playing=${snapshot.isPlaying} artwork=${artwork != null} title=${snapshot.title}"
-        )
+        debugLog("notify playing=${snapshot.isPlaying} artwork=${artwork != null} title=${snapshot.title}")
         BackgroundAudioService.update(
             context,
             BackgroundAudioService.NotificationState(
@@ -168,7 +163,7 @@ class AndroidBackgroundAudioCoordinator(
         if (hasAudioFocus) return true
         val result = audioManager.requestAudioFocus(audioFocusRequest)
         hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-        Log.i("TUBENEXT_AUDIO", "audioFocus granted=$hasAudioFocus result=$result")
+        debugLog("audioFocus granted=$hasAudioFocus result=$result")
         return hasAudioFocus
     }
 
@@ -176,11 +171,11 @@ class AndroidBackgroundAudioCoordinator(
         if (!hasAudioFocus) return
         audioManager.abandonAudioFocusRequest(audioFocusRequest)
         hasAudioFocus = false
-        Log.i("TUBENEXT_AUDIO", "audioFocus abandoned")
+        debugLog("audioFocus abandoned")
     }
 
     private fun onAudioFocusChanged(focusChange: Int) {
-        Log.i("TUBENEXT_AUDIO", "audioFocus change=$focusChange")
+        debugLog("audioFocus change=$focusChange")
         when (focusChange) {
             AudioManager.AUDIOFOCUS_LOSS,
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
@@ -195,7 +190,7 @@ class AndroidBackgroundAudioCoordinator(
     }
 
     private fun pauseForAudioFocus(reason: String) {
-        Log.i("TUBENEXT_AUDIO", "pause for audio focus: $reason")
+        debugLog("pause for audio focus: $reason")
         controls?.pause()
         lastState = lastState?.copy(isPlaying = false)
         lastState?.let { state ->
@@ -220,6 +215,12 @@ class AndroidBackgroundAudioCoordinator(
     private companion object {
         private const val CONTROLS_LOST_GRACE_MS = 5_000L
         private const val FOREGROUND_SERVICE_STOP_DELAY_MS = 750L
+
+        fun debugLog(message: String) {
+            if (BuildConfig.DEBUG) {
+                Log.i("TUBENEXT_AUDIO", message)
+            }
+        }
     }
 
     private data class NotificationSnapshot(

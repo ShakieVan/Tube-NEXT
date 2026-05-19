@@ -74,4 +74,10 @@ Stabilitaet, Login-Persistenz und regelkonforme Nutzung der offiziellen Webseite
 .\gradlew.bat assembleDebug --console=plain
 ```
 
-Fuer lokale Tests wird aktuell der Debug-Build genutzt. Ein sauber signierter Release-Build ist ein eigener naechster Schritt, sobald der Paketname und die Release-Linie stabil sind.
+Debug-Builds verwenden die App-ID `de.shakie.tubenext.debug` und koennen
+parallel zur Release-App installiert werden. Signierte Release-APKs werden mit
+folgendem Befehl erzeugt:
+
+```powershell
+.\gradlew.bat :app:assembleRelease --console=plain
+```

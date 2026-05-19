@@ -14,6 +14,7 @@ data class AppTab(
     var watchStabilizationGeneration: Long = 0L,
     var pageLoadGeneration: Long = 0L,
     var loadingOverlayVisible: Boolean = false,
-    var loadingProgress: Int = 0
+    var loadingProgress: Int = 0,
+    var hasLoadedInitialUrl: Boolean = true
 ) {
 }

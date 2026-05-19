@@ -21,8 +21,8 @@ android {
         applicationId = "de.shakie.tubenext"
         minSdk = 29
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appLabel"] = "Tube NEXT"
@@ -60,8 +60,11 @@ android {
         }
 
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // GeckoView 136 can crash in native startup code when this release is
+            // minified on real arm64 devices. Keep release builds unminified until
+            // we can validate a Gecko/R8 rule set on hardware.
+            isMinifyEnabled = false
+            isShrinkResources = false
             signingConfig = if (hasCustomReleaseSigning) {
                 signingConfigs.getByName("release")
             } else {

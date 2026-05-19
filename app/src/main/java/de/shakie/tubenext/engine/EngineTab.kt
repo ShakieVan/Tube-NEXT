@@ -19,6 +19,7 @@ interface EngineTab {
     fun isInCustomView(): Boolean
     fun exitFullscreenIfNeeded()
     fun evaluateJavascript(script: String, callback: ((String?) -> Unit)? = null)
+    fun setHomeFeedSettings(settings: EngineHomeFeedSettings)
     fun onPause()
     fun onResume()
 }

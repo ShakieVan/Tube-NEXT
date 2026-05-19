@@ -6,8 +6,11 @@
   var OPEN_NEW_TAB = "OPEN_NEW_TAB";
   var DARK_MODE_STYLE_ID = "tubenext_dark_mode_style";
   var WATCH_FIT_STYLE_ID = "tubenext_watch_fit_style";
+  var HOME_FEED_FILTER_STYLE_ID = "tubenext_home_feed_filter_style";
   var SCROLL_TOP_BUTTON_ID = "tubenext_scroll_top_button";
   var LANDSCAPE_STYLE_ID = "tubenext_landscape_watch_style";
+  var HOME_FEED_READY = "HOME_FEED_READY";
+  var HOME_FEED_SETTINGS = "HOME_FEED_SETTINGS";
   var TAP_CONFIRM_DELAY_MS = 320;
   var LONG_PRESS_TRIGGER_MS = 520;
   var LONG_TAP_SUPPRESS_MS = 650;
@@ -21,6 +24,14 @@
   var cueOverlay = null;
   var scrollTopButton = null;
   var suppressPlayerTapUntil = 0;
+  var homeFeedFilterTimer = null;
+  var homeFeedObserver = null;
+  var nativePort = null;
+  var homeFeedSettings = {
+    showShorts: true,
+    showCommunityPosts: true,
+    showWatchHistory: true
+  };
 
   function isYouTubeHost(host) {
     var normalized = (host || "").toLowerCase();
@@ -48,6 +59,250 @@
 
   function isWatchPage() {
     return shouldUseDesktop(window.location.href);
+  }
+
+  function isHomePage() {
+    if (!isYouTubeHost(window.location.hostname)) {
+      return false;
+    }
+    var path = window.location.pathname || "/";
+    return path === "/" || path === "";
+  }
+
+  function ensureHomeFeedFilterStyle() {
+    if (document.getElementById(HOME_FEED_FILTER_STYLE_ID)) {
+      return;
+    }
+    var style = document.createElement("style");
+    style.id = HOME_FEED_FILTER_STYLE_ID;
+    style.textContent = [
+      "html.tubenext-home-feed-filter .tubenext-home-feed-hidden {",
+      "  display: none !important;",
+      "}"
+    ].join("\n");
+    (document.documentElement || document.head || document.body).appendChild(style);
+  }
+
+  function textOf(node) {
+    return ((node && node.textContent) || "").replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
+  function hasAnyText(node, words) {
+    var text = textOf(node);
+    return words.some(function (word) {
+      return text.indexOf(word) >= 0;
+    });
+  }
+
+  function nearestHomeFeedCard(node) {
+    if (!node || typeof node.closest !== "function") {
+      return null;
+    }
+    return node.closest([
+      "ytd-rich-section-renderer",
+      "ytd-rich-item-renderer",
+      "ytd-shelf-renderer",
+      "ytd-reel-shelf-renderer",
+      "ytd-backstage-post-thread-renderer",
+      "ytd-post-renderer",
+      "ytm-rich-section-renderer",
+      "ytm-rich-item-renderer",
+      "ytm-item-section-renderer",
+      "ytm-reel-shelf-renderer",
+      "ytm-shorts-shelf-renderer",
+      "ytm-backstage-post-thread-renderer",
+      "ytm-post-renderer",
+      "ytm-community-post-renderer"
+    ].join(","));
+  }
+
+  function isShortsCard(card) {
+    if (!card || homeFeedSettings.showShorts) {
+      return false;
+    }
+    if (card.matches && card.matches([
+      "ytd-reel-shelf-renderer",
+      "ytm-reel-shelf-renderer",
+      "ytm-shorts-shelf-renderer"
+    ].join(","))) {
+      return true;
+    }
+    if (card.querySelector("a[href*='/shorts/'], a[href^='/shorts/']")) {
+      return true;
+    }
+    return card.matches &&
+      card.matches([
+        "ytd-rich-section-renderer",
+        "ytd-shelf-renderer",
+        "ytm-rich-section-renderer",
+        "ytm-item-section-renderer"
+      ].join(",")) &&
+      hasAnyText(card, ["shorts"]);
+  }
+
+  function isCommunityCard(card) {
+    if (!card || homeFeedSettings.showCommunityPosts) {
+      return false;
+    }
+    if (card.matches && card.matches([
+      "ytd-backstage-post-thread-renderer",
+      "ytd-post-renderer",
+      "ytm-backstage-post-thread-renderer",
+      "ytm-post-renderer",
+      "ytm-community-post-renderer"
+    ].join(","))) {
+      return true;
+    }
+    if (card.querySelector([
+      "ytd-backstage-post-thread-renderer",
+      "ytd-post-renderer",
+      "ytm-backstage-post-thread-renderer",
+      "ytm-post-renderer",
+      "ytm-community-post-renderer"
+    ].join(","))) {
+      return true;
+    }
+    return card.matches &&
+      card.matches([
+        "ytd-rich-section-renderer",
+        "ytd-shelf-renderer",
+        "ytm-rich-section-renderer",
+        "ytm-rich-item-renderer",
+        "ytm-item-section-renderer"
+      ].join(",")) &&
+      hasAnyText(card, ["community", "community-post", "community post", "community-beitrag"]);
+  }
+
+  function isWatchHistoryCard(card) {
+    if (!card || homeFeedSettings.showWatchHistory) {
+      return false;
+    }
+    return card.matches &&
+      card.matches([
+        "ytd-rich-section-renderer",
+        "ytd-shelf-renderer",
+        "ytm-rich-section-renderer",
+        "ytm-item-section-renderer"
+      ].join(",")) &&
+      hasAnyText(card, [
+      "zuletzt gesehen",
+      "zuletzt angesehen",
+      "noch einmal ansehen",
+      "weiterschauen",
+      "recently watched",
+      "watch again",
+      "continue watching"
+    ]);
+  }
+
+  function updateHomeFeedCard(card) {
+    if (!card || !card.classList) {
+      return;
+    }
+    var hidden = isHomePage() && (
+      isShortsCard(card) ||
+      isCommunityCard(card) ||
+      isWatchHistoryCard(card)
+    );
+    card.classList.toggle("tubenext-home-feed-hidden", hidden);
+  }
+
+  function applyHomeFeedFilters() {
+    if (!document.documentElement) {
+      return;
+    }
+    ensureHomeFeedFilterStyle();
+    var enabled = isHomePage() && (
+      !homeFeedSettings.showShorts ||
+      !homeFeedSettings.showCommunityPosts ||
+      !homeFeedSettings.showWatchHistory
+    );
+    document.documentElement.classList.toggle("tubenext-home-feed-filter", enabled);
+    document.querySelectorAll(".tubenext-home-feed-hidden").forEach(function (node) {
+      if (!enabled) {
+        node.classList.remove("tubenext-home-feed-hidden");
+      }
+    });
+    if (!enabled) {
+      return;
+    }
+    document.querySelectorAll([
+      "ytd-rich-section-renderer",
+      "ytd-rich-item-renderer",
+      "ytd-shelf-renderer",
+      "ytd-reel-shelf-renderer",
+      "ytd-backstage-post-thread-renderer",
+      "ytd-post-renderer",
+      "ytm-rich-section-renderer",
+      "ytm-rich-item-renderer",
+      "ytm-item-section-renderer",
+      "ytm-reel-shelf-renderer",
+      "ytm-shorts-shelf-renderer",
+      "ytm-backstage-post-thread-renderer",
+      "ytm-post-renderer",
+      "ytm-community-post-renderer"
+    ].join(",")).forEach(updateHomeFeedCard);
+  }
+
+  function scheduleHomeFeedFilters() {
+    if (homeFeedFilterTimer) {
+      window.clearTimeout(homeFeedFilterTimer);
+    }
+    homeFeedFilterTimer = window.setTimeout(function () {
+      homeFeedFilterTimer = null;
+      applyHomeFeedFilters();
+    }, 120);
+  }
+
+  function ensureHomeFeedObserver() {
+    if (homeFeedObserver || typeof MutationObserver !== "function") {
+      return;
+    }
+    homeFeedObserver = new MutationObserver(function (mutations) {
+      if (!isHomePage()) {
+        scheduleHomeFeedFilters();
+        return;
+      }
+      var shouldScan = mutations.some(function (mutation) {
+        return mutation.addedNodes && mutation.addedNodes.length > 0;
+      });
+      if (shouldScan) {
+        scheduleHomeFeedFilters();
+      }
+    });
+    homeFeedObserver.observe(document.documentElement || document, {
+      childList: true,
+      subtree: true
+    });
+  }
+
+  function connectNativeSettingsPort() {
+    if (nativePort ||
+        typeof browser === "undefined" ||
+        !browser.runtime ||
+        !browser.runtime.connectNative) {
+      return;
+    }
+    try {
+      nativePort = browser.runtime.connectNative(NATIVE_APP);
+      nativePort.onMessage.addListener(function (message) {
+        if (!message || message.type !== HOME_FEED_SETTINGS) {
+          return;
+        }
+        homeFeedSettings = {
+          showShorts: message.showShorts !== false,
+          showCommunityPosts: message.showCommunityPosts !== false,
+          showWatchHistory: message.showWatchHistory !== false
+        };
+        scheduleHomeFeedFilters();
+      });
+      nativePort.onDisconnect.addListener(function () {
+        nativePort = null;
+      });
+      nativePort.postMessage({ type: HOME_FEED_READY });
+    } catch (_) {
+      nativePort = null;
+    }
   }
 
   function ensureYouTubeDarkPreference() {
@@ -109,6 +364,8 @@
 
   ensureYouTubeDarkPreference();
   ensureDarkModeStyle();
+  connectNativeSettingsPort();
+  ensureHomeFeedObserver();
 
   function ensureWatchFitStyle() {
     if (document.getElementById(WATCH_FIT_STYLE_ID)) {
@@ -1000,8 +1257,13 @@
   window.addEventListener("yt-navigate-finish", function () {
     forceTopAfterLoad();
     scheduleLandscapeWatchMode();
+    scheduleHomeFeedFilters();
   }, true);
-  window.addEventListener("popstate", scheduleLandscapeWatchMode, true);
+  window.addEventListener("popstate", function () {
+    scheduleLandscapeWatchMode();
+    scheduleHomeFeedFilters();
+  }, true);
   scheduleLandscapeWatchMode();
+  scheduleHomeFeedFilters();
   updateScrollTopButton();
 })();

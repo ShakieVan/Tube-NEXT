@@ -26,4 +26,9 @@
     <string name="background_audio_play">Starten</string>
     <string name="background_audio_pause">Pausieren</string>
     <string name="background_audio_stop">Stoppen</string>
+    <string name="home_feed_menu_button">Startseiten-Filter</string>
+    <string name="home_feed_menu_title">In Startseite anzeigen:</string>
+    <string name="home_feed_show_shorts">Shorts</string>
+    <string name="home_feed_show_community">Community-Posts</string>
+    <string name="home_feed_show_history">Zuletzt gesehen</string>
 </resources>

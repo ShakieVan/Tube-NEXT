@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -25,6 +26,7 @@ import android.widget.TextView
 import androidx.core.content.getSystemService
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.PopupMenu
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -39,6 +41,7 @@ import de.shakie.tubenext.browser.LinkInterceptor
 import de.shakie.tubenext.browser.YouTubeNavigationPolicy
 import de.shakie.tubenext.engine.BrowserEngine
 import de.shakie.tubenext.engine.EngineCallbacks
+import de.shakie.tubenext.engine.EngineHomeFeedSettings
 import de.shakie.tubenext.engine.EngineType
 import de.shakie.tubenext.engine.gecko.GeckoBrowserEngine
 import de.shakie.tubenext.tabs.AppTab
@@ -56,6 +59,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var urlTextView: TextView
     private lateinit var reloadButton: ImageButton
     private lateinit var tabSwitcherButton: FrameLayout
+    private lateinit var homeFeedMenuButton: ImageButton
     private lateinit var tabCountBadge: TextView
     private lateinit var loadingOverlay: FrameLayout
     private lateinit var loadingProgress: ProgressBar
@@ -66,6 +70,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabManager: TabManager
     private lateinit var tabPreviewStore: TabPreviewStore
     private lateinit var backgroundAudioCoordinator: AndroidBackgroundAudioCoordinator
+    private lateinit var preferences: SharedPreferences
 
     private val browserTabs = linkedMapOf<String, AppTab>()
     private var selectedTabId: String? = null
@@ -84,6 +89,7 @@ class MainActivity : AppCompatActivity() {
         urlTextView = findViewById(R.id.urlText)
         reloadButton = findViewById(R.id.reloadButton)
         tabSwitcherButton = findViewById(R.id.tabSwitcherButton)
+        homeFeedMenuButton = findViewById(R.id.homeFeedMenuButton)
         tabCountBadge = findViewById(R.id.tabCountBadge)
         loadingOverlay = findViewById(R.id.loadingOverlay)
         loadingProgress = findViewById(R.id.loadingProgress)
@@ -97,6 +103,7 @@ class MainActivity : AppCompatActivity() {
         tabManager = TabManager(TabPersistence(this))
         tabPreviewStore = TabPreviewStore(this)
         backgroundAudioCoordinator = AndroidBackgroundAudioCoordinator(applicationContext)
+        preferences = getSharedPreferences(PREFERENCES_NAME, MODE_PRIVATE)
 
         setupToolbar()
         setupTabs()
@@ -177,6 +184,9 @@ class MainActivity : AppCompatActivity() {
         }
         tabSwitcherButton.setOnClickListener {
             showTabOverview()
+        }
+        homeFeedMenuButton.setOnClickListener {
+            showHomeFeedMenu()
         }
         urlTextView.setOnClickListener {
             currentTab()?.url?.takeIf { it.isNotBlank() }?.let(::copyToClipboard)
@@ -344,6 +354,7 @@ class MainActivity : AppCompatActivity() {
             hasLoadedInitialUrl = loadInitialUrl
         )
         browserTab.engineTab.setDesktopMode(browserTab.isDesktopMode)
+        browserTab.engineTab.setHomeFeedSettings(currentHomeFeedSettings())
         browserTab.engineTab.view.layoutParams = ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
@@ -426,6 +437,67 @@ class MainActivity : AppCompatActivity() {
     private fun duplicateCurrentTab() {
         val currentId = selectedTabId ?: return
         duplicateTabById(currentId)
+    }
+
+    private fun showHomeFeedMenu() {
+        val settings = currentHomeFeedSettings()
+        val popup = PopupMenu(this, homeFeedMenuButton)
+        popup.menu.add(R.string.home_feed_menu_title).apply {
+            isEnabled = false
+        }
+        popup.menu.add(0, MENU_SHOW_SHORTS, 1, R.string.home_feed_show_shorts).apply {
+            isCheckable = true
+            isChecked = settings.showShorts
+        }
+        popup.menu.add(0, MENU_SHOW_COMMUNITY, 2, R.string.home_feed_show_community).apply {
+            isCheckable = true
+            isChecked = settings.showCommunityPosts
+        }
+        popup.menu.add(0, MENU_SHOW_HISTORY, 3, R.string.home_feed_show_history).apply {
+            isCheckable = true
+            isChecked = settings.showWatchHistory
+        }
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                MENU_SHOW_SHORTS -> {
+                    setHomeFeedPreference(KEY_SHOW_SHORTS, !settings.showShorts)
+                    true
+                }
+
+                MENU_SHOW_COMMUNITY -> {
+                    setHomeFeedPreference(KEY_SHOW_COMMUNITY_POSTS, !settings.showCommunityPosts)
+                    true
+                }
+
+                MENU_SHOW_HISTORY -> {
+                    setHomeFeedPreference(KEY_SHOW_WATCH_HISTORY, !settings.showWatchHistory)
+                    true
+                }
+
+                else -> false
+            }
+        }
+        popup.show()
+    }
+
+    private fun currentHomeFeedSettings(): EngineHomeFeedSettings {
+        return EngineHomeFeedSettings(
+            showShorts = preferences.getBoolean(KEY_SHOW_SHORTS, true),
+            showCommunityPosts = preferences.getBoolean(KEY_SHOW_COMMUNITY_POSTS, true),
+            showWatchHistory = preferences.getBoolean(KEY_SHOW_WATCH_HISTORY, true)
+        )
+    }
+
+    private fun setHomeFeedPreference(key: String, enabled: Boolean) {
+        preferences.edit().putBoolean(key, enabled).apply()
+        applyHomeFeedSettingsToTabs()
+    }
+
+    private fun applyHomeFeedSettingsToTabs() {
+        val settings = currentHomeFeedSettings()
+        browserTabs.values.forEach { tab ->
+            tab.engineTab.setHomeFeedSettings(settings)
+        }
     }
 
     private fun loadInCurrentTab(url: String) {
@@ -1545,6 +1617,13 @@ class MainActivity : AppCompatActivity() {
         private const val WATCH_VIEWPORT_STABILIZE_DELAY_MS = 1000L
         private const val OVERLAY_HIDE_DELAY_MS = 2000L
         private const val TAB_PREVIEW_TOP_OFFSET_RATIO = 0.12f
+        private const val PREFERENCES_NAME = "tube_next_preferences"
+        private const val KEY_SHOW_SHORTS = "home_feed_show_shorts"
+        private const val KEY_SHOW_COMMUNITY_POSTS = "home_feed_show_community_posts"
+        private const val KEY_SHOW_WATCH_HISTORY = "home_feed_show_watch_history"
+        private const val MENU_SHOW_SHORTS = 20_001
+        private const val MENU_SHOW_COMMUNITY = 20_002
+        private const val MENU_SHOW_HISTORY = 20_003
         private val LEADING_COUNT_PREFIX_REGEX = Regex("^\\(\\d+\\)\\s*")
     }
 

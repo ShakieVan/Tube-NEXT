@@ -9,6 +9,7 @@ import de.shakie.tubenext.browser.LinkInterceptor
 import de.shakie.tubenext.BuildConfig
 import de.shakie.tubenext.engine.BrowserEngine
 import de.shakie.tubenext.engine.EngineCallbacks
+import de.shakie.tubenext.engine.EngineHomeFeedSettings
 import de.shakie.tubenext.engine.EngineMediaControls
 import de.shakie.tubenext.engine.EnginePlaybackState
 import de.shakie.tubenext.engine.EngineTab
@@ -322,6 +323,9 @@ class GeckoBrowserEngine(
             onDestroy = {
                 removeNavigationBridge(session)
                 retainedTabs.remove(tabId)
+            },
+            onHomeFeedSettingsChanged = { settings ->
+                updateHomeFeedSettings(session, settings)
             }
         )
         if (shouldLoadInitialUrl) {
@@ -383,7 +387,7 @@ class GeckoBrowserEngine(
     }
 
     private fun removeNavigationBridge(session: GeckoSession) {
-        navBridgeBySession.remove(session)
+        navBridgeBySession.remove(session)?.homeFeedPort?.disconnect()
     }
 
     private fun bindAllNavigationBridges() {
@@ -428,8 +432,49 @@ class GeckoBrowserEngine(
                     session.loadUri(intent.url)
                     return GeckoResult.fromValue(null)
                 }
+
+                override fun onConnect(port: WebExtension.Port) {
+                    if (port.sender.session != session || !port.sender.isTopLevel()) {
+                        port.disconnect()
+                        return
+                    }
+                    bridge.homeFeedPort?.disconnect()
+                    bridge.homeFeedPort = port
+                    port.setDelegate(object : WebExtension.PortDelegate {
+                        override fun onPortMessage(message: Any, port: WebExtension.Port) {
+                            if (parseMessageType(message) == HOME_FEED_READY_TYPE) {
+                                postHomeFeedSettings(bridge)
+                            }
+                        }
+
+                        override fun onDisconnect(port: WebExtension.Port) {
+                            if (bridge.homeFeedPort == port) {
+                                bridge.homeFeedPort = null
+                            }
+                        }
+                    })
+                    postHomeFeedSettings(bridge)
+                }
             },
             NAV_NATIVE_APP_ID
+        )
+    }
+
+    private fun updateHomeFeedSettings(session: GeckoSession, settings: EngineHomeFeedSettings) {
+        val bridge = navBridgeBySession[session] ?: return
+        bridge.homeFeedSettings = settings
+        postHomeFeedSettings(bridge)
+    }
+
+    private fun postHomeFeedSettings(bridge: NavBridge) {
+        val port = bridge.homeFeedPort ?: return
+        val settings = bridge.homeFeedSettings
+        port.postMessage(
+            JSONObject()
+                .put("type", HOME_FEED_SETTINGS_TYPE)
+                .put("showShorts", settings.showShorts)
+                .put("showCommunityPosts", settings.showCommunityPosts)
+                .put("showWatchHistory", settings.showWatchHistory)
         )
     }
 
@@ -449,10 +494,20 @@ class GeckoBrowserEngine(
         }
     }
 
+    private fun parseMessageType(message: Any?): String? {
+        return when (message) {
+            is JSONObject -> message.optString("type").takeIf { it.isNotBlank() }
+            is Map<*, *> -> message["type"] as? String
+            else -> null
+        }
+    }
+
     private data class NavBridge(
         val tabId: String,
         val callbacks: EngineCallbacks,
-        val applyUserAgentForUrl: (String, String) -> Boolean
+        val applyUserAgentForUrl: (String, String) -> Boolean,
+        var homeFeedSettings: EngineHomeFeedSettings = EngineHomeFeedSettings(),
+        var homeFeedPort: WebExtension.Port? = null
     )
 
     private data class RetainedGeckoTab(
@@ -479,6 +534,8 @@ class GeckoBrowserEngine(
         private const val NAV_NATIVE_APP_ID = "tubenext_nav_switch"
         private const val MODE_NAV_TYPE = "MODE_NAV"
         private const val OPEN_NEW_TAB_TYPE = "OPEN_NEW_TAB"
+        private const val HOME_FEED_READY_TYPE = "HOME_FEED_READY"
+        private const val HOME_FEED_SETTINGS_TYPE = "HOME_FEED_SETTINGS"
 
         fun debugLog(tag: String, message: String) {
             if (BuildConfig.DEBUG) {
@@ -504,7 +561,8 @@ private data class GeckoEngineTab(
     val canGoBackProvider: () -> Boolean,
     val shouldUseDesktopMode: (String) -> Boolean,
     val onDetach: () -> Unit,
-    val onDestroy: () -> Unit
+    val onDestroy: () -> Unit,
+    val onHomeFeedSettingsChanged: (EngineHomeFeedSettings) -> Unit
 ) : EngineTab {
     override val view: GeckoView = geckoView
     private var desktopMode: Boolean = true
@@ -555,6 +613,10 @@ private data class GeckoEngineTab(
 
     override fun evaluateJavascript(script: String, callback: ((String?) -> Unit)?) {
         callback?.invoke(null)
+    }
+
+    override fun setHomeFeedSettings(settings: EngineHomeFeedSettings) {
+        onHomeFeedSettingsChanged(settings)
     }
 
     override fun onPause() {

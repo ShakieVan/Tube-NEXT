@@ -31,4 +31,6 @@
     <string name="home_feed_show_shorts">Shorts</string>
     <string name="home_feed_show_community">Community-Posts</string>
     <string name="home_feed_show_history">Zuletzt gesehen</string>
+    <string name="watch_page_menu_title">Watch-Seite:</string>
+    <string name="watch_page_hide_branding">Kanal-Branding ausblenden</string>
 </resources>

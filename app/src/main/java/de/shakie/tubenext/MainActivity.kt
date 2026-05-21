@@ -442,7 +442,7 @@ class MainActivity : AppCompatActivity() {
     private fun showHomeFeedMenu() {
         val settings = currentHomeFeedSettings()
         val popup = PopupMenu(this, homeFeedMenuButton)
-        popup.menu.add(R.string.home_feed_menu_title).apply {
+        popup.menu.add(0, MENU_SECTION_HOME_FEED, 0, R.string.home_feed_menu_title).apply {
             isEnabled = false
         }
         popup.menu.add(0, MENU_SHOW_SHORTS, 1, R.string.home_feed_show_shorts).apply {
@@ -456,6 +456,13 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(0, MENU_SHOW_HISTORY, 3, R.string.home_feed_show_history).apply {
             isCheckable = true
             isChecked = settings.showWatchHistory
+        }
+        popup.menu.add(0, MENU_SECTION_WATCH_PAGE, 4, R.string.watch_page_menu_title).apply {
+            isEnabled = false
+        }
+        popup.menu.add(0, MENU_HIDE_WATCH_BRANDING, 5, R.string.watch_page_hide_branding).apply {
+            isCheckable = true
+            isChecked = settings.hideWatchBranding
         }
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
@@ -474,6 +481,11 @@ class MainActivity : AppCompatActivity() {
                     true
                 }
 
+                MENU_HIDE_WATCH_BRANDING -> {
+                    setHomeFeedPreference(KEY_HIDE_WATCH_BRANDING, !settings.hideWatchBranding)
+                    true
+                }
+
                 else -> false
             }
         }
@@ -484,7 +496,8 @@ class MainActivity : AppCompatActivity() {
         return EngineHomeFeedSettings(
             showShorts = preferences.getBoolean(KEY_SHOW_SHORTS, true),
             showCommunityPosts = preferences.getBoolean(KEY_SHOW_COMMUNITY_POSTS, true),
-            showWatchHistory = preferences.getBoolean(KEY_SHOW_WATCH_HISTORY, true)
+            showWatchHistory = preferences.getBoolean(KEY_SHOW_WATCH_HISTORY, true),
+            hideWatchBranding = preferences.getBoolean(KEY_HIDE_WATCH_BRANDING, false)
         )
     }
 
@@ -1621,9 +1634,13 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_SHOW_SHORTS = "home_feed_show_shorts"
         private const val KEY_SHOW_COMMUNITY_POSTS = "home_feed_show_community_posts"
         private const val KEY_SHOW_WATCH_HISTORY = "home_feed_show_watch_history"
+        private const val KEY_HIDE_WATCH_BRANDING = "watch_page_hide_branding"
         private const val MENU_SHOW_SHORTS = 20_001
         private const val MENU_SHOW_COMMUNITY = 20_002
         private const val MENU_SHOW_HISTORY = 20_003
+        private const val MENU_HIDE_WATCH_BRANDING = 20_004
+        private const val MENU_SECTION_HOME_FEED = 20_101
+        private const val MENU_SECTION_WATCH_PAGE = 20_102
         private val LEADING_COUNT_PREFIX_REGEX = Regex("^\\(\\d+\\)\\s*")
     }
 

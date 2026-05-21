@@ -442,8 +442,8 @@ class GeckoBrowserEngine(
                     bridge.homeFeedPort = port
                     port.setDelegate(object : WebExtension.PortDelegate {
                         override fun onPortMessage(message: Any, port: WebExtension.Port) {
-                            if (parseMessageType(message) == HOME_FEED_READY_TYPE) {
-                                postHomeFeedSettings(bridge)
+                            when (parseMessageType(message)) {
+                                HOME_FEED_READY_TYPE -> postHomeFeedSettings(bridge)
                             }
                         }
 
@@ -475,6 +475,7 @@ class GeckoBrowserEngine(
                 .put("showShorts", settings.showShorts)
                 .put("showCommunityPosts", settings.showCommunityPosts)
                 .put("showWatchHistory", settings.showWatchHistory)
+                .put("hideWatchBranding", settings.hideWatchBranding)
         )
     }
 

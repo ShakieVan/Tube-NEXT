@@ -126,7 +126,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        currentTab()?.engineTab?.onResume()
+        currentTab()?.engineTab?.let { engineTab ->
+            engineTab.onResume()
+            if (::backgroundAudioCoordinator.isInitialized &&
+                backgroundAudioCoordinator.consumeForegroundRecoveryPending()
+            ) {
+                engineTab.recoverFromAudioRouteChange()
+            }
+        }
     }
 
     override fun onStart() {
@@ -336,11 +343,11 @@ class MainActivity : AppCompatActivity() {
                     completeTabLoading(tabId, browserTabs[tabId]?.pageLoadGeneration)
                     Snackbar.make(webViewContainer, R.string.page_load_error, Snackbar.LENGTH_SHORT).show()
                 },
-                onPlaybackStateChanged = { _, state ->
-                    backgroundAudioCoordinator.onForegroundPlaybackState(state)
+                onPlaybackStateChanged = { tabId, state ->
+                    backgroundAudioCoordinator.onForegroundPlaybackState(tabId, state)
                 },
-                onMediaControlsChanged = { _, controls ->
-                    backgroundAudioCoordinator.setControls(controls)
+                onMediaControlsChanged = { tabId, controls ->
+                    backgroundAudioCoordinator.onMediaControlsChanged(tabId, controls)
                 }
             )
         )
@@ -624,6 +631,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun closeTabById(tabId: String, showMessage: Boolean = true) {
         val tab = browserTabs.remove(tabId) ?: return
+        backgroundAudioCoordinator.onTabClosing(tabId)
         webViewContainer.removeView(tab.engineTab.view)
         tab.engineTab.stopLoading()
         tab.engineTab.destroy()

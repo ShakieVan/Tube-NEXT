@@ -22,4 +22,5 @@ interface EngineTab {
     fun setHomeFeedSettings(settings: EngineHomeFeedSettings)
     fun onPause()
     fun onResume()
+    fun recoverFromAudioRouteChange()
 }

@@ -537,7 +537,6 @@ class GeckoBrowserEngine(
         private const val OPEN_NEW_TAB_TYPE = "OPEN_NEW_TAB"
         private const val HOME_FEED_READY_TYPE = "HOME_FEED_READY"
         private const val HOME_FEED_SETTINGS_TYPE = "HOME_FEED_SETTINGS"
-
         fun debugLog(tag: String, message: String) {
             if (BuildConfig.DEBUG) {
                 Log.i(tag, message)
@@ -628,5 +627,17 @@ private data class GeckoEngineTab(
     override fun onResume() {
         session.setActive(true)
         session.setFocused(true)
+    }
+
+    override fun recoverFromAudioRouteChange() {
+        if (BuildConfig.DEBUG) {
+            Log.i("TUBENEXT_AUDIO", "tab=$id recover from audio route change")
+        }
+        session.setFocused(false)
+        session.setActive(false)
+        geckoView.postDelayed({
+            session.setActive(true)
+            session.setFocused(true)
+        }, 250L)
     }
 }

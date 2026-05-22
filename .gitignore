@@ -4,6 +4,7 @@ build/
 */build/
 local.properties
 key.properties
+release-artifacts/
 
 # IDE
 .idea/

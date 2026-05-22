@@ -5,9 +5,13 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
+import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
@@ -15,6 +19,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
+import android.view.KeyEvent
 import de.shakie.tubenext.BuildConfig
 import de.shakie.tubenext.MainActivity
 import de.shakie.tubenext.R
@@ -22,6 +27,15 @@ import de.shakie.tubenext.R
 class BackgroundAudioService : Service() {
     private lateinit var mediaSession: MediaSession
     private var wakeLock: PowerManager.WakeLock? = null
+    private var noisyReceiverRegistered = false
+    private val noisyReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != AudioManager.ACTION_AUDIO_BECOMING_NOISY) return
+            debugLog("audio becoming noisy; pause playback")
+            notificationState = notificationState?.copy(isPlaying = false)
+            BackgroundAudioService.controller?.pauseForAudioRouteChange()
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -49,7 +63,29 @@ class BackgroundAudioService : Service() {
                 override fun onRewind() {
                     BackgroundAudioService.controller?.seekBackward()
                 }
+
+                override fun onMediaButtonEvent(mediaButtonIntent: Intent): Boolean {
+                    val event = mediaButtonIntent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
+                    if (event?.action != KeyEvent.ACTION_UP) return true
+                    when (event.keyCode) {
+                        KeyEvent.KEYCODE_MEDIA_PLAY -> BackgroundAudioService.controller?.play()
+                        KeyEvent.KEYCODE_MEDIA_PAUSE,
+                        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> BackgroundAudioService.controller?.pause()
+                        KeyEvent.KEYCODE_MEDIA_STOP -> BackgroundAudioService.controller?.stop()
+                        KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> BackgroundAudioService.controller?.seekForward()
+                        KeyEvent.KEYCODE_MEDIA_REWIND -> BackgroundAudioService.controller?.seekBackward()
+                        else -> return super.onMediaButtonEvent(mediaButtonIntent)
+                    }
+                    return true
+                }
             })
+            setPlaybackToLocal(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
+                    .build()
+            )
+            setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS)
             isActive = true
         }
     }
@@ -81,6 +117,7 @@ class BackgroundAudioService : Service() {
             isPlaying = false
         )
         updateWakeLock(state.isPlaying)
+        updateNoisyReceiver(state.isPlaying)
         mediaSession.setMetadata(buildMetadata(state))
         mediaSession.setPlaybackState(buildPlaybackState(state.isPlaying))
         debugLog("service foreground playing=${state.isPlaying} artwork=${state.artwork != null} title=${state.title}")
@@ -106,6 +143,7 @@ class BackgroundAudioService : Service() {
         foregroundStartPending = false
         stopAfterForegroundStart = false
         updateWakeLock(false)
+        updateNoisyReceiver(false)
         mediaSession.release()
         super.onDestroy()
     }
@@ -229,6 +267,16 @@ class BackgroundAudioService : Service() {
         }
     }
 
+    private fun updateNoisyReceiver(shouldListen: Boolean) {
+        if (shouldListen && !noisyReceiverRegistered) {
+            registerReceiver(noisyReceiver, IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY))
+            noisyReceiverRegistered = true
+        } else if (!shouldListen && noisyReceiverRegistered) {
+            unregisterReceiver(noisyReceiver)
+            noisyReceiverRegistered = false
+        }
+    }
+
     data class NotificationState(
         val title: String,
         val text: String,
@@ -239,6 +287,7 @@ class BackgroundAudioService : Service() {
     interface Controller {
         fun play()
         fun pause()
+        fun pauseForAudioRouteChange()
         fun stop()
         fun seekForward()
         fun seekBackward()

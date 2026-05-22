@@ -30,10 +30,13 @@ class AndroidBackgroundAudioCoordinator(
         .setOnAudioFocusChangeListener(::onAudioFocusChanged, Handler(Looper.getMainLooper()))
         .build()
     private var controls: EngineMediaControls? = null
+    private var controlsTabId: String? = null
     private var lastState: EnginePlaybackState? = null
+    private var lastStateTabId: String? = null
     private var artwork: Bitmap? = null
     private var appInBackground = false
     private var hasAudioFocus = false
+    private var foregroundRecoveryPending = false
     private var artworkVersion = 0
     private var controlsGeneration = 0
     private var lastNotification: NotificationSnapshot? = null
@@ -44,25 +47,35 @@ class AndroidBackgroundAudioCoordinator(
         }
     }
 
-    fun setControls(controls: EngineMediaControls?) {
+    override fun onMediaControlsChanged(tabId: String, controls: EngineMediaControls?) {
+        if (controls == null && controlsTabId != tabId) {
+            debugLog("ignore controls=false tab=$tabId active=$controlsTabId")
+            return
+        }
         this.controls = controls
+        controlsTabId = if (controls == null) null else tabId
         controlsGeneration += 1
         val generation = controlsGeneration
         BackgroundAudioService.controller = if (controls == null) null else this
-        debugLog("controls=${controls != null}")
+        debugLog("controls=${controls != null} tab=$tabId")
         if (controls == null) {
-            if (appInBackground && lastState?.isPlaying == true) {
+            if (lastStateTabId == tabId && lastState?.isPlaying != true) {
+                clearPlaybackState()
+            }
+            if (appInBackground && lastStateTabId == tabId && lastState?.isPlaying == true) {
                 handler.postDelayed({
                     if (controlsGeneration == generation && this.controls == null && appInBackground) {
                         debugLog("controls grace expired")
-                        BackgroundAudioService.stop(context)
+                        clearPlaybackState()
                     }
                 }, CONTROLS_LOST_GRACE_MS)
             } else {
                 BackgroundAudioService.stop(context)
             }
         } else if (appInBackground) {
-            lastState?.let(::showNotification)
+            lastState
+                ?.takeIf { lastStateTabId == tabId && it.isPlaying }
+                ?.let(::showNotification)
         }
     }
 
@@ -71,12 +84,17 @@ class AndroidBackgroundAudioCoordinator(
         artworkVersion += 1
         debugLog("artwork=${artwork != null} source=${bitmap?.width ?: 0}x${bitmap?.height ?: 0}")
         if (appInBackground) {
-            lastState?.let { showNotification(it, force = true) }
+            lastState?.takeIf { it.isPlaying }?.let { showNotification(it, force = true) }
         }
     }
 
-    override fun onForegroundPlaybackState(state: EnginePlaybackState) {
+    override fun onForegroundPlaybackState(tabId: String, state: EnginePlaybackState) {
+        if (!state.isPlaying && lastStateTabId != null && lastStateTabId != tabId) {
+            debugLog("ignore paused state tab=$tabId active=$lastStateTabId")
+            return
+        }
         lastState = state
+        lastStateTabId = tabId
         if (state.isPlaying && controls != null && !requestAudioFocus()) {
             pauseForAudioFocus("request denied")
             return
@@ -84,17 +102,24 @@ class AndroidBackgroundAudioCoordinator(
         if (!state.isPlaying) {
             abandonAudioFocus()
         }
-        if (appInBackground && controls != null) {
+        if (appInBackground && controls != null && controlsTabId == tabId) {
             showNotification(state)
         }
+    }
+
+    override fun onTabClosing(tabId: String) {
+        if (controlsTabId != tabId && lastStateTabId != tabId) return
+        debugLog("tab closing clears playback tab=$tabId")
+        controls?.stop()
+        clearPlaybackState()
     }
 
     override fun onAppBackgrounded() {
         appInBackground = true
         handler.removeCallbacks(foregroundServiceStopRunnable)
-        debugLog("app backgrounded playing=${lastState?.isPlaying}")
-        if (controls != null) {
-            lastState?.let { showNotification(it, force = true) }
+        debugLog("app backgrounded playing=${lastState?.isPlaying} tab=$lastStateTabId controlsTab=$controlsTabId")
+        if (controls != null && controlsTabId == lastStateTabId) {
+            lastState?.takeIf { it.isPlaying }?.let { showNotification(it, force = true) }
         }
     }
 
@@ -109,6 +134,7 @@ class AndroidBackgroundAudioCoordinator(
         BackgroundAudioService.controller = null
         handler.removeCallbacksAndMessages(null)
         abandonAudioFocus()
+        clearPlaybackState(stopService = false)
         BackgroundAudioService.stop(context)
     }
 
@@ -122,6 +148,16 @@ class AndroidBackgroundAudioCoordinator(
 
     override fun pause() {
         controls?.pause()
+        abandonAudioFocus()
+    }
+
+    override fun pauseForAudioRouteChange() {
+        debugLog("pause for audio route change")
+        if (appInBackground) {
+            foregroundRecoveryPending = true
+        }
+        controls?.pause()
+        lastState = lastState?.copy(isPlaying = false)
         abandonAudioFocus()
     }
 
@@ -198,6 +234,26 @@ class AndroidBackgroundAudioCoordinator(
                 showNotification(state, force = true)
             }
         }
+    }
+
+    private fun clearPlaybackState(stopService: Boolean = true) {
+        controls = null
+        controlsTabId = null
+        lastState = null
+        lastStateTabId = null
+        lastNotification = null
+        foregroundRecoveryPending = false
+        BackgroundAudioService.controller = null
+        abandonAudioFocus()
+        if (stopService) {
+            BackgroundAudioService.stop(context)
+        }
+    }
+
+    fun consumeForegroundRecoveryPending(): Boolean {
+        if (!foregroundRecoveryPending) return false
+        foregroundRecoveryPending = false
+        return true
     }
 
     private fun createSoftArtwork(source: Bitmap): Bitmap {

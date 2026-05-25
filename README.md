@@ -81,3 +81,19 @@ folgendem Befehl erzeugt:
 ```powershell
 .\gradlew.bat :app:assembleRelease --console=plain
 ```
+
+## Release-Checkliste
+
+GitHub-Release-Notes muessen bei jedem Release kurz erklaeren, welche APK fuer
+welches Geraet gedacht ist:
+
+- `arm64-v8a`: moderne Android-Smartphones und -Tablets
+- `armeabi-v7a`: aeltere 32-Bit-ARM-Geraete
+- `x86_64`: Android-Emulatoren und manche Chromebooks
+- `x86`: aeltere Emulatoren oder Intel-Android-Geraete
+
+Tube NEXT kann in der integrierten Updateverwaltung automatisch das passende
+APK auswaehlen, wenn die GitHub-Release-Assets die ABI im Dateinamen tragen,
+zum Beispiel `Tube-NEXT-v1.3.0-arm64-v8a.apk`. Fuer Nutzer, die manuell aus
+GitHub herunterladen, bleibt die APK-Erklaerung in den Release-Notes trotzdem
+Pflicht.

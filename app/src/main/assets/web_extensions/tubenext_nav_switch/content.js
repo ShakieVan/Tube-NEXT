@@ -9,6 +9,7 @@
   var HOME_FEED_FILTER_STYLE_ID = "tubenext_home_feed_filter_style";
   var WATCH_PAGE_STYLE_ID = "tubenext_watch_page_style";
   var SCROLL_TOP_BUTTON_ID = "tubenext_scroll_top_button";
+  var COMMENTS_BUTTON_ID = "tubenext_comments_button";
   var LANDSCAPE_STYLE_ID = "tubenext_landscape_watch_style";
   var HOME_FEED_READY = "HOME_FEED_READY";
   var HOME_FEED_SETTINGS = "HOME_FEED_SETTINGS";
@@ -24,6 +25,8 @@
   var cueTime = null;
   var cueOverlay = null;
   var scrollTopButton = null;
+  var commentsButton = null;
+  var commentsScrollTimer = null;
   var suppressPlayerTapUntil = 0;
   var homeFeedFilterTimer = null;
   var homeFeedObserver = null;
@@ -603,10 +606,10 @@
       "html.tubenext-watch-fit:not(.tubenext-landscape-watch) .ytp-tooltip {",
       "  display: none !important;",
       "}",
-      "#" + SCROLL_TOP_BUTTON_ID + " {",
+      "#" + SCROLL_TOP_BUTTON_ID + ",",
+      "#" + COMMENTS_BUTTON_ID + " {",
       "  position: fixed !important;",
       "  right: 16px !important;",
-      "  bottom: 88px !important;",
       "  z-index: 2147483647 !important;",
       "  width: 44px !important;",
       "  height: 44px !important;",
@@ -617,11 +620,36 @@
       "  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;",
       "  font: 800 24px/44px sans-serif !important;",
       "  text-align: center !important;",
+      "  display: flex !important;",
+      "  align-items: center !important;",
+      "  justify-content: center !important;",
+      "  padding: 0 !important;",
       "  opacity: 0 !important;",
       "  pointer-events: none !important;",
+      "  touch-action: manipulation !important;",
       "  transition: opacity 160ms ease !important;",
       "}",
+      "#" + SCROLL_TOP_BUTTON_ID + " {",
+      "  bottom: 88px !important;",
+      "}",
+      "#" + COMMENTS_BUTTON_ID + " {",
+      "  bottom: 32px !important;",
+      "}",
+      "#" + COMMENTS_BUTTON_ID + " svg {",
+      "  width: 24px !important;",
+      "  height: 24px !important;",
+      "  fill: none !important;",
+      "  stroke: currentColor !important;",
+      "  stroke-width: 2.4 !important;",
+      "  stroke-linecap: round !important;",
+      "  stroke-linejoin: round !important;",
+      "  pointer-events: none !important;",
+      "}",
       "html.tubenext-show-scroll-top:not(.tubenext-landscape-watch) #" + SCROLL_TOP_BUTTON_ID + " {",
+      "  opacity: 1 !important;",
+      "  pointer-events: auto !important;",
+      "}",
+      "html.tubenext-show-comments-button:not(.tubenext-landscape-watch) #" + COMMENTS_BUTTON_ID + " {",
       "  opacity: 1 !important;",
       "  pointer-events: auto !important;",
       "}"
@@ -804,8 +832,11 @@
 
   function scheduleLandscapeWatchMode() {
     window.setTimeout(applyLandscapeWatchMode, 0);
+    window.setTimeout(updateScrollTopButton, 0);
     window.setTimeout(applyLandscapeWatchMode, 150);
+    window.setTimeout(updateScrollTopButton, 150);
     window.setTimeout(applyLandscapeWatchMode, 700);
+    window.setTimeout(updateScrollTopButton, 700);
     window.setTimeout(applyLandscapeWatchMode, 1500);
     window.setTimeout(applyLandscapeWatchMode, 2600);
   }
@@ -844,14 +875,187 @@
     return scrollTopButton;
   }
 
+  function clearCommentsScrollTimer() {
+    if (commentsScrollTimer) {
+      window.clearInterval(commentsScrollTimer);
+      commentsScrollTimer = null;
+    }
+  }
+
+  function isUsableCommentsTarget(element) {
+    if (!element || !document.documentElement.contains(element)) {
+      return false;
+    }
+    var rect = element.getBoundingClientRect();
+    if (rect.width > 1 || rect.height > 1) {
+      return true;
+    }
+    return !!element.querySelector([
+      "ytd-comments-header-renderer",
+      "ytd-comment-thread-renderer",
+      "ytd-comments",
+      "#header",
+      "#sections"
+    ].join(","));
+  }
+
+  function findCommentsTarget() {
+    var selectors = [
+      "#comments",
+      "ytd-comments",
+      "ytd-comments-header-renderer",
+      "ytd-engagement-panel-section-list-renderer[target-id='engagement-panel-comments-section']"
+    ];
+    for (var i = 0; i < selectors.length; i += 1) {
+      var target = document.querySelector(selectors[i]);
+      if (isUsableCommentsTarget(target)) {
+        return target;
+      }
+    }
+    return null;
+  }
+
+  function findCommentsFallbackTarget() {
+    return findCommentsTarget() || document.querySelector([
+      "ytd-watch-flexy #below",
+      "#below",
+      "ytd-watch-flexy #primary-inner",
+      "#primary-inner"
+    ].join(","));
+  }
+
+  function isCommentsTargetInView() {
+    var target = findCommentsTarget();
+    if (!target || typeof target.getBoundingClientRect !== "function") {
+      return false;
+    }
+    var rect = target.getBoundingClientRect();
+    return rect.top < window.innerHeight * 0.9 && rect.bottom > 72;
+  }
+
+  function scrollToCommentsTarget(target, behavior) {
+    if (!target || typeof target.getBoundingClientRect !== "function") {
+      return;
+    }
+    var top = Math.max(0, window.scrollY + target.getBoundingClientRect().top - 8);
+    window.scrollTo({ top: top, left: 0, behavior: behavior || "smooth" });
+    window.setTimeout(function () {
+      if (!document.documentElement.contains(target)) {
+        return;
+      }
+      var adjustedTop = Math.max(0, window.scrollY + target.getBoundingClientRect().top - 8);
+      if (Math.abs(adjustedTop - window.scrollY) > 24) {
+        window.scrollTo({ top: adjustedTop, left: 0, behavior: "smooth" });
+      }
+    }, 260);
+  }
+
+  function scrollDownTowardComments() {
+    var body = document.body || document.documentElement;
+    var root = document.documentElement || body;
+    var maxScrollY = Math.max(
+      body.scrollHeight || 0,
+      root.scrollHeight || 0,
+      body.offsetHeight || 0,
+      root.offsetHeight || 0
+    ) - window.innerHeight;
+    var currentY = window.scrollY || window.pageYOffset || 0;
+    var nextY = Math.min(maxScrollY, currentY + Math.max(360, Math.floor(window.innerHeight * 0.78)));
+    if (nextY <= currentY + 4) {
+      return false;
+    }
+    window.scrollTo({ top: nextY, left: 0, behavior: "smooth" });
+    return true;
+  }
+
+  function scrollToComments() {
+    if (!isWatchPage() || isLandscapeWatch()) {
+      return;
+    }
+    clearCommentsScrollTimer();
+    var target = findCommentsTarget();
+    if (target) {
+      scrollToCommentsTarget(target, "smooth");
+      return;
+    }
+
+    var startedAt = Date.now();
+    var stalledTicks = 0;
+    var tick = function () {
+      if (!isWatchPage() || isLandscapeWatch()) {
+        clearCommentsScrollTimer();
+        return;
+      }
+      target = findCommentsTarget();
+      if (target) {
+        clearCommentsScrollTimer();
+        scrollToCommentsTarget(target, "smooth");
+        return;
+      }
+      if (Date.now() - startedAt >= 8500) {
+        clearCommentsScrollTimer();
+        scrollToCommentsTarget(findCommentsFallbackTarget(), "smooth");
+        return;
+      }
+      if (!scrollDownTowardComments()) {
+        stalledTicks += 1;
+        if (stalledTicks >= 2) {
+          clearCommentsScrollTimer();
+          scrollToCommentsTarget(findCommentsFallbackTarget(), "smooth");
+        }
+      } else {
+        stalledTicks = 0;
+      }
+    };
+
+    tick();
+    commentsScrollTimer = window.setInterval(tick, 480);
+  }
+
+  function ensureCommentsButton() {
+    if (commentsButton && document.documentElement.contains(commentsButton)) {
+      return commentsButton;
+    }
+    commentsButton = document.createElement("button");
+    commentsButton.id = COMMENTS_BUTTON_ID;
+    commentsButton.type = "button";
+    commentsButton.setAttribute("aria-label", "Kommentare");
+    commentsButton.innerHTML = [
+      "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" focusable=\"false\">",
+      "<path d=\"M5 5.5h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-7l-5 3.5v-3.5H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z\"></path>",
+      "</svg>"
+    ].join("");
+    ["click", "pointerup", "touchend"].forEach(function (type) {
+      commentsButton.addEventListener(type, function (event) {
+        stopGenericOverlayEvent(event, true);
+        scrollToComments();
+      }, true);
+    });
+    ["pointerdown", "touchstart", "mousedown", "contextmenu"].forEach(function (type) {
+      commentsButton.addEventListener(type, function (event) {
+        stopGenericOverlayEvent(event, true);
+      }, true);
+    });
+    (document.body || document.documentElement).appendChild(commentsButton);
+    return commentsButton;
+  }
+
   function updateScrollTopButton() {
     if (!document.documentElement) {
       return;
     }
     ensureWatchFitStyle();
     ensureScrollTopButton();
-    var show = !isLandscapeWatch() && window.scrollY > 480;
-    document.documentElement.classList.toggle("tubenext-show-scroll-top", show);
+    ensureCommentsButton();
+    var isWatch = isWatchPage();
+    var isLandscape = isLandscapeWatch();
+    var showScrollTop = !isLandscape && window.scrollY > 480;
+    var showComments = isWatch && !isLandscape && !isCommentsTargetInView();
+    document.documentElement.classList.toggle("tubenext-show-scroll-top", showScrollTop);
+    document.documentElement.classList.toggle("tubenext-show-comments-button", showComments);
+    if (isLandscape || !isWatch) {
+      clearCommentsScrollTimer();
+    }
   }
 
   function forceTopAfterLoad() {

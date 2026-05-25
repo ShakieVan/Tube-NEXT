@@ -47,6 +47,10 @@
     <string name="update_action_open_manager">Anzeigen</string>
     <string name="update_action_ignore_version">Diese Version ignorieren</string>
     <string name="update_action_disable_notifications">Keine Hinweise mehr</string>
+    <string name="update_notification_permission_title">Update gefunden</string>
+    <string name="update_notification_permission_message">Tube NEXT %1$s ist verfügbar. Android blockiert Benachrichtigungen für Tube NEXT noch, deshalb kann der Update-Hinweis nicht als Notification erscheinen.</string>
+    <string name="update_notification_permission_allow">Benachrichtigungen erlauben</string>
+    <string name="update_notification_permission_denied">Benachrichtigungen sind weiterhin deaktiviert.</string>
     <string name="update_manager_title">Updates</string>
     <string name="update_current_version">Aktuell: %1$s</string>
     <string name="update_latest_version">Neu: %1$s</string>

@@ -1,10 +1,12 @@
 package de.shakie.tubenext
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -33,6 +35,7 @@ import android.widget.TextView
 import androidx.core.content.getSystemService
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -93,7 +96,7 @@ class MainActivity : AppCompatActivity() {
     private val browserTabs = linkedMapOf<String, AppTab>()
     private val updateCheckHandler = Handler(Looper.getMainLooper())
     private val dailyUpdateCheckRunnable = Runnable {
-        checkForUpdates(showDialog = false, force = false)
+        checkForUpdates(showDialog = false, force = true)
         scheduleNextDailyUpdateCheck()
     }
     private var selectedTabId: String? = null
@@ -102,6 +105,8 @@ class MainActivity : AppCompatActivity() {
     private var latestUpdateResult: UpdateCheckResult? = null
     private var updateDownloadHandle: UpdateDownloader.DownloadHandle? = null
     private var settingsDialog: androidx.appcompat.app.AlertDialog? = null
+    private var pendingUpdateNotificationRelease: UpdateRelease? = null
+    private var updatePermissionDialogVisible = false
     private var landscapeVideoModeActive = false
     private var landscapeVideoScale = 1f
     private var landscapeVideoTranslationX = 0f
@@ -147,6 +152,26 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIncomingIntent(intent)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != UPDATE_NOTIFICATION_PERMISSION_REQUEST_CODE) return
+        val release = pendingUpdateNotificationRelease ?: return
+        pendingUpdateNotificationRelease = null
+        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            UpdateNotifier.showUpdateAvailable(this, release)
+        } else {
+            Snackbar.make(webViewContainer, R.string.update_notification_permission_denied, Snackbar.LENGTH_LONG)
+                .setAction(R.string.update_action_open_manager) {
+                    showUpdateManager(UpdateCheckResult(UpdateCheckStatus.UPDATE_AVAILABLE, release))
+                }
+                .show()
+        }
     }
 
     override fun onPause() {
@@ -1974,12 +1999,56 @@ class MainActivity : AppCompatActivity() {
                 latestUpdateResult = result
                 if (result.status == UpdateCheckStatus.UPDATE_AVAILABLE) {
                     result.release?.let { release ->
-                        UpdateNotifier.showUpdateAvailable(this, release)
+                        handleAvailableUpdate(release)
                     }
                 }
                 callback?.invoke(result)
             }
         }.start()
+    }
+
+    private fun handleAvailableUpdate(release: UpdateRelease) {
+        if (!updatePreferences.notificationsEnabled) return
+        if (updatePreferences.ignoredReleaseTag == release.tagName) return
+        if (UpdateNotifier.canPostNotifications(this)) {
+            UpdateNotifier.showUpdateAvailable(this, release)
+            return
+        }
+        showUpdateNotificationPermissionDialog(release)
+    }
+
+    private fun showUpdateNotificationPermissionDialog(release: UpdateRelease) {
+        if (updatePermissionDialogVisible) return
+        updatePermissionDialogVisible = true
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.update_notification_permission_title)
+            .setMessage(
+                getString(
+                    R.string.update_notification_permission_message,
+                    release.versionName
+                )
+            )
+            .setPositiveButton(R.string.update_notification_permission_allow) { _, _ ->
+                pendingUpdateNotificationRelease = release
+                requestUpdateNotificationPermission()
+            }
+            .setNeutralButton(R.string.update_action_open_manager) { _, _ ->
+                showUpdateManager(UpdateCheckResult(UpdateCheckStatus.UPDATE_AVAILABLE, release))
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .setOnDismissListener {
+                updatePermissionDialogVisible = false
+            }
+            .show()
+    }
+
+    private fun requestUpdateNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            UPDATE_NOTIFICATION_PERMISSION_REQUEST_CODE
+        )
     }
 
     private fun showInstallPermissionBeforeDownloadDialog(onDownloadAnyway: () -> Unit) {
@@ -2083,6 +2152,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_SHOW_UPDATE_MANAGER = "de.shakie.tubenext.SHOW_UPDATE_MANAGER"
+        private const val UPDATE_NOTIFICATION_PERMISSION_REQUEST_CODE = 73
         private const val DEFAULT_URL = "https://www.youtube.com/"
         private const val MAX_TAB_LABEL_LENGTH = 24
         private const val WATCH_VIEWPORT_STABILIZE_DELAY_MS = 1000L

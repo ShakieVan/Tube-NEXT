@@ -175,6 +175,10 @@ class GeckoBrowserEngine(
                     callbacks.onMainNavigationStarted(tabId, request.uri)
                     return GeckoResult.fromValue(AllowOrDeny.ALLOW)
                 }
+                if (callbacks.shouldOpenInApp(targetUri)) {
+                    callbacks.onMainNavigationStarted(tabId, request.uri)
+                    return GeckoResult.fromValue(AllowOrDeny.ALLOW)
+                }
                 callbacks.onOpenExternalUrl(targetUri)
                 return GeckoResult.fromValue(AllowOrDeny.DENY)
             }

@@ -16,4 +16,8 @@
         android:id="@+id/action_reload"
         android:title="@string/menu_reload"
         android:showAsAction="never" />
+    <item
+        android:id="@+id/action_updates"
+        android:title="@string/menu_updates"
+        android:showAsAction="never" />
 </menu>

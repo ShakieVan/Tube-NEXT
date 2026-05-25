@@ -9,24 +9,30 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.ViewConfiguration
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.content.getSystemService
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.PopupMenu
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -49,9 +55,20 @@ import de.shakie.tubenext.tabs.TabManager
 import de.shakie.tubenext.tabs.TabPersistence
 import de.shakie.tubenext.tabs.TabPreviewStore
 import de.shakie.tubenext.tabs.TabSession
+import de.shakie.tubenext.update.GitHubReleaseClient
+import de.shakie.tubenext.update.UpdateAsset
+import de.shakie.tubenext.update.UpdateCheckResult
+import de.shakie.tubenext.update.UpdateCheckStatus
+import de.shakie.tubenext.update.UpdateDownloader
+import de.shakie.tubenext.update.UpdateInstallHelper
+import de.shakie.tubenext.update.UpdateNotifier
+import de.shakie.tubenext.update.UpdatePreferences
+import de.shakie.tubenext.update.UpdateRelease
+import de.shakie.tubenext.update.VersionNames
 import de.shakie.tubenext.ui.TabOverviewAdapter
 import de.shakie.tubenext.ui.TabOverviewItem
 import org.mozilla.geckoview.GeckoView
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
     private lateinit var toolbar: MaterialToolbar
@@ -71,10 +88,20 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabPreviewStore: TabPreviewStore
     private lateinit var backgroundAudioCoordinator: AndroidBackgroundAudioCoordinator
     private lateinit var preferences: SharedPreferences
+    private lateinit var updatePreferences: UpdatePreferences
 
     private val browserTabs = linkedMapOf<String, AppTab>()
+    private val updateCheckHandler = Handler(Looper.getMainLooper())
+    private val dailyUpdateCheckRunnable = Runnable {
+        checkForUpdates(showDialog = false, force = false)
+        scheduleNextDailyUpdateCheck()
+    }
     private var selectedTabId: String? = null
     private var tabSelectionUpdateInProgress = false
+    private var updateCheckInProgress = false
+    private var latestUpdateResult: UpdateCheckResult? = null
+    private var updateDownloadHandle: UpdateDownloader.DownloadHandle? = null
+    private var settingsDialog: androidx.appcompat.app.AlertDialog? = null
     private var landscapeVideoModeActive = false
     private var landscapeVideoScale = 1f
     private var landscapeVideoTranslationX = 0f
@@ -104,12 +131,16 @@ class MainActivity : AppCompatActivity() {
         tabPreviewStore = TabPreviewStore(this)
         backgroundAudioCoordinator = AndroidBackgroundAudioCoordinator(applicationContext)
         preferences = getSharedPreferences(PREFERENCES_NAME, MODE_PRIVATE)
+        updatePreferences = UpdatePreferences(this)
 
         setupToolbar()
         setupTabs()
         setupBackNavigation()
         restoreOrCreateInitialTab()
         handleIncomingIntent(intent)
+        maybeShowPostInstallPermissionReminder()
+        checkForUpdates(showDialog = false, force = false)
+        scheduleNextDailyUpdateCheck()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -164,6 +195,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        updateCheckHandler.removeCallbacks(dailyUpdateCheckRunnable)
+        updateDownloadHandle?.cancel()
         val keepBrowserSessions = isChangingConfigurations
         browserTabs.values.forEach { tab ->
             webViewContainer.removeView(tab.engineTab.view)
@@ -193,7 +226,7 @@ class MainActivity : AppCompatActivity() {
             showTabOverview()
         }
         homeFeedMenuButton.setOnClickListener {
-            showHomeFeedMenu()
+            showSettingsPage()
         }
         urlTextView.setOnClickListener {
             currentTab()?.url?.takeIf { it.isNotBlank() }?.let(::copyToClipboard)
@@ -221,6 +254,11 @@ class MainActivity : AppCompatActivity() {
 
                 R.id.action_reload -> {
                     currentTab()?.engineTab?.reload()
+                    true
+                }
+
+                R.id.action_updates -> {
+                    showUpdateManager()
                     true
                 }
 
@@ -283,6 +321,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleIncomingIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_SHOW_UPDATE_MANAGER, false) == true) {
+            showUpdateManager()
+        }
         val data = intent?.data ?: return
         if (intent.action != Intent.ACTION_VIEW) return
         if (!LinkInterceptor.isYouTubeUri(data)) return
@@ -313,6 +354,7 @@ class MainActivity : AppCompatActivity() {
             loadInitialUrl = loadInitialUrl,
             callbacks = EngineCallbacks(
                 onOpenExternalUrl = ::openExternalUrl,
+                shouldOpenInApp = ::shouldOpenInApp,
                 onMainNavigationStarted = { tabId, url ->
                     onTabMainNavigationStarted(tabId)
                 },
@@ -446,57 +488,110 @@ class MainActivity : AppCompatActivity() {
         duplicateTabById(currentId)
     }
 
-    private fun showHomeFeedMenu() {
-        val settings = currentHomeFeedSettings()
-        val popup = PopupMenu(this, homeFeedMenuButton)
-        popup.menu.add(0, MENU_SECTION_HOME_FEED, 0, R.string.home_feed_menu_title).apply {
-            isEnabled = false
+    private fun showSettingsPage() {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(8), dp(24), dp(4))
         }
-        popup.menu.add(0, MENU_SHOW_SHORTS, 1, R.string.home_feed_show_shorts).apply {
-            isCheckable = true
-            isChecked = settings.showShorts
-        }
-        popup.menu.add(0, MENU_SHOW_COMMUNITY, 2, R.string.home_feed_show_community).apply {
-            isCheckable = true
-            isChecked = settings.showCommunityPosts
-        }
-        popup.menu.add(0, MENU_SHOW_HISTORY, 3, R.string.home_feed_show_history).apply {
-            isCheckable = true
-            isChecked = settings.showWatchHistory
-        }
-        popup.menu.add(0, MENU_SECTION_WATCH_PAGE, 4, R.string.watch_page_menu_title).apply {
-            isEnabled = false
-        }
-        popup.menu.add(0, MENU_HIDE_WATCH_BRANDING, 5, R.string.watch_page_hide_branding).apply {
-            isCheckable = true
-            isChecked = settings.hideWatchBranding
-        }
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                MENU_SHOW_SHORTS -> {
-                    setHomeFeedPreference(KEY_SHOW_SHORTS, !settings.showShorts)
-                    true
-                }
+        container.addView(settingsSectionTitle(R.string.settings_section_home_feed))
+        container.addView(settingsCheckBox(KEY_SHOW_SHORTS, R.string.home_feed_show_shorts, true))
+        container.addView(
+            settingsCheckBox(
+                KEY_SHOW_COMMUNITY_POSTS,
+                R.string.home_feed_show_community,
+                true
+            )
+        )
+        container.addView(
+            settingsCheckBox(
+                KEY_SHOW_WATCH_HISTORY,
+                R.string.home_feed_show_history,
+                true
+            )
+        )
+        container.addView(settingsDivider())
+        container.addView(settingsSectionTitle(R.string.settings_section_watch_page))
+        container.addView(
+            settingsCheckBox(
+                KEY_HIDE_WATCH_BRANDING,
+                R.string.watch_page_hide_branding,
+                false
+            )
+        )
+        container.addView(settingsDivider())
+        container.addView(settingsSectionTitle(R.string.settings_section_updates))
+        container.addView(updateStatusTextView())
+        container.addView(updateButton(R.string.settings_open_update_manager).apply {
+            setOnClickListener {
+                showUpdateManager()
+            }
+        })
+        container.addView(updateButton(R.string.update_open_install_settings).apply {
+            setOnClickListener {
+                openInstallSettings()
+            }
+        })
 
-                MENU_SHOW_COMMUNITY -> {
-                    setHomeFeedPreference(KEY_SHOW_COMMUNITY_POSTS, !settings.showCommunityPosts)
-                    true
-                }
+        val scrollView = ScrollView(this).apply {
+            addView(container)
+        }
+        settingsDialog?.dismiss()
+        settingsDialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.settings_title)
+            .setView(scrollView)
+            .setPositiveButton(android.R.string.ok, null)
+            .create()
+        settingsDialog?.setOnDismissListener {
+            settingsDialog = null
+        }
+        settingsDialog?.show()
+    }
 
-                MENU_SHOW_HISTORY -> {
-                    setHomeFeedPreference(KEY_SHOW_WATCH_HISTORY, !settings.showWatchHistory)
-                    true
-                }
-
-                MENU_HIDE_WATCH_BRANDING -> {
-                    setHomeFeedPreference(KEY_HIDE_WATCH_BRANDING, !settings.hideWatchBranding)
-                    true
-                }
-
-                else -> false
+    private fun settingsCheckBox(
+        preferenceKey: String,
+        labelResId: Int,
+        defaultValue: Boolean
+    ): CheckBox {
+        return CheckBox(this).apply {
+            text = getString(labelResId)
+            isChecked = preferences.getBoolean(preferenceKey, defaultValue)
+            setOnCheckedChangeListener { _, checked ->
+                setHomeFeedPreference(preferenceKey, checked)
             }
         }
-        popup.show()
+    }
+
+    private fun updateStatusTextView(): TextView {
+        val permissionStatus = if (UpdateInstallHelper.canRequestPackageInstalls(this)) {
+            getString(R.string.settings_install_permission_active)
+        } else {
+            getString(R.string.settings_install_permission_inactive)
+        }
+        return updateTextView().apply {
+            text = permissionStatus
+        }
+    }
+
+    private fun settingsSectionTitle(labelResId: Int): TextView {
+        return TextView(this).apply {
+            text = getString(labelResId)
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, dp(12), 0, dp(4))
+        }
+    }
+
+    private fun settingsDivider(): View {
+        return View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(1)
+            ).apply {
+                topMargin = dp(12)
+                bottomMargin = dp(4)
+            }
+            setBackgroundColor(Color.argb(80, 255, 255, 255))
+        }
     }
 
     private fun currentHomeFeedSettings(): EngineHomeFeedSettings {
@@ -1632,11 +1727,367 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun shouldOpenInApp(uri: Uri): Boolean {
+        val host = uri.host?.lowercase().orEmpty()
+        val path = uri.path.orEmpty()
+        return host == "github.com" &&
+            path.startsWith("/ShakieVan/Tube-NEXT/releases", ignoreCase = true)
+    }
+
+    private fun showUpdateManager(initialResult: UpdateCheckResult? = latestUpdateResult) {
+        var activeResult = initialResult
+        var activeRelease = activeResult?.release ?: latestUpdateResult?.release
+        var isDownloading = false
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(8), dp(24), dp(4))
+        }
+        val statusText = updateTextView()
+        val currentText = updateTextView()
+        val latestText = updateTextView()
+        val assetText = updateTextView()
+        val downloadStatusText = updateTextView()
+        val notificationsCheck = CheckBox(this).apply {
+            text = getString(R.string.update_notifications_enabled)
+            isChecked = updatePreferences.notificationsEnabled
+            setOnCheckedChangeListener { _, checked ->
+                updatePreferences.notificationsEnabled = checked
+            }
+        }
+        val postInstallReminderCheck = CheckBox(this).apply {
+            text = getString(R.string.update_post_install_reminder_enabled)
+            isChecked = !updatePreferences.postInstallReminderPermanentlyHidden
+            setOnCheckedChangeListener { _, checked ->
+                updatePreferences.postInstallReminderPermanentlyHidden = !checked
+                if (checked) {
+                    updatePreferences.postInstallReminderDismissedVersionName = null
+                }
+            }
+        }
+        val checkButton = updateButton(R.string.menu_reload)
+        val releaseNotesButton = updateButton(R.string.update_open_release_notes)
+        val downloadButton = updateButton(R.string.update_download)
+        val cancelDownloadButton = updateButton(R.string.update_cancel_download)
+        val installButton = updateButton(R.string.update_install)
+        val deleteButton = updateButton(R.string.update_delete_file)
+        val settingsButton = updateButton(R.string.update_open_install_settings)
+
+        listOf(
+            statusText,
+            currentText,
+            latestText,
+            assetText,
+            downloadStatusText,
+            notificationsCheck,
+            postInstallReminderCheck,
+            checkButton,
+            releaseNotesButton,
+            downloadButton,
+            cancelDownloadButton,
+            installButton,
+            deleteButton,
+            settingsButton
+        ).forEach(container::addView)
+
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.update_manager_title)
+            .setView(container)
+            .setPositiveButton(android.R.string.ok, null)
+            .create()
+
+        fun downloadedFile(): File? = activeRelease?.let(updatePreferences::downloadedApkFor)
+
+        fun render() {
+            val release = activeRelease
+            currentText.text = getString(R.string.update_current_version, BuildConfig.VERSION_NAME)
+            latestText.visibility = if (release == null) View.GONE else View.VISIBLE
+            latestText.text = release?.let {
+                getString(R.string.update_latest_version, it.versionName)
+            }.orEmpty()
+            assetText.visibility = if (release?.compatibleAsset == null) View.GONE else View.VISIBLE
+            assetText.text = release?.compatibleAsset?.let { asset ->
+                "${asset.name} (${formatBytes(asset.sizeBytes)})"
+            }.orEmpty()
+
+            statusText.text = when (activeResult?.status) {
+                UpdateCheckStatus.UPDATE_AVAILABLE -> getString(R.string.update_available)
+                UpdateCheckStatus.UP_TO_DATE -> getString(R.string.update_up_to_date)
+                UpdateCheckStatus.NO_COMPATIBLE_ASSET -> getString(R.string.update_no_compatible_asset)
+                UpdateCheckStatus.CHECK_FAILED -> getString(
+                    R.string.update_check_failed,
+                    activeResult?.message.orEmpty()
+                )
+                null -> getString(R.string.update_checking)
+            }
+
+            val file = downloadedFile()
+            downloadStatusText.visibility = if (isDownloading || file != null) View.VISIBLE else View.GONE
+            if (file != null && !isDownloading) {
+                downloadStatusText.text = getString(
+                    R.string.update_downloaded_status,
+                    formatBytes(file.length())
+                )
+            }
+
+            val updateAvailable = activeResult?.status == UpdateCheckStatus.UPDATE_AVAILABLE
+            releaseNotesButton.visibility = if (release?.htmlUrl.isNullOrBlank()) View.GONE else View.VISIBLE
+            downloadButton.visibility = if (updateAvailable && file == null && !isDownloading) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+            installButton.visibility = if (file != null && !isDownloading) View.VISIBLE else View.GONE
+            deleteButton.visibility = if (file != null && !isDownloading) View.VISIBLE else View.GONE
+            cancelDownloadButton.visibility = if (isDownloading) View.VISIBLE else View.GONE
+            checkButton.isEnabled = !updateCheckInProgress && !isDownloading
+            settingsButton.visibility = View.VISIBLE
+        }
+
+        fun runDialogCheck() {
+            activeResult = null
+            activeRelease = null
+            render()
+            requestUpdateCheck(force = true) { result ->
+                activeResult = result
+                activeRelease = result.release
+                render()
+            }
+        }
+
+        fun startDownload(release: UpdateRelease, asset: UpdateAsset) {
+            isDownloading = true
+            downloadStatusText.visibility = View.VISIBLE
+            downloadStatusText.text = getString(R.string.update_downloading_status, 0)
+            render()
+            updateDownloadHandle = UpdateDownloader(this, updatePreferences).download(
+                release = release,
+                asset = asset,
+                listener = object : UpdateDownloader.Listener {
+                    override fun onProgress(downloadedBytes: Long, totalBytes: Long) {
+                        val percent = if (totalBytes > 0L) {
+                            ((downloadedBytes * 100L) / totalBytes).coerceIn(0L, 100L).toInt()
+                        } else {
+                            0
+                        }
+                        downloadStatusText.text = getString(R.string.update_downloading_status, percent)
+                    }
+
+                    override fun onCompleted(file: File) {
+                        isDownloading = false
+                        updateDownloadHandle = null
+                        downloadStatusText.text = getString(R.string.update_download_completed)
+                        Snackbar.make(webViewContainer, R.string.update_download_completed, Snackbar.LENGTH_SHORT)
+                            .show()
+                        render()
+                    }
+
+                    override fun onCancelled() {
+                        isDownloading = false
+                        updateDownloadHandle = null
+                        downloadStatusText.text = getString(R.string.update_download_cancelled)
+                        render()
+                    }
+
+                    override fun onError(message: String) {
+                        isDownloading = false
+                        updateDownloadHandle = null
+                        downloadStatusText.text = getString(R.string.update_download_failed, message)
+                        render()
+                    }
+                }
+            )
+        }
+
+        checkButton.setOnClickListener {
+            runDialogCheck()
+        }
+        releaseNotesButton.setOnClickListener {
+            activeRelease?.htmlUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                settingsDialog?.dismiss()
+                createAndSelectTab(url)
+                dialog.dismiss()
+            }
+        }
+        downloadButton.setOnClickListener {
+            val release = activeRelease ?: return@setOnClickListener
+            val asset = release.compatibleAsset ?: return@setOnClickListener
+            if (UpdateInstallHelper.canRequestPackageInstalls(this)) {
+                startDownload(release, asset)
+            } else {
+                showInstallPermissionBeforeDownloadDialog {
+                    startDownload(release, asset)
+                }
+            }
+        }
+        installButton.setOnClickListener {
+            val release = activeRelease ?: return@setOnClickListener
+            val file = downloadedFile() ?: return@setOnClickListener
+            installDownloadedUpdate(release, file)
+        }
+        cancelDownloadButton.setOnClickListener {
+            updateDownloadHandle?.cancel()
+        }
+        deleteButton.setOnClickListener {
+            activeRelease?.let { release ->
+                UpdateDownloader(this, updatePreferences).deleteDownloadedApk(release)
+                render()
+            }
+        }
+        settingsButton.setOnClickListener {
+            openInstallSettings()
+        }
+        dialog.setOnShowListener {
+            render()
+            if (activeResult == null && !updateCheckInProgress) {
+                runDialogCheck()
+            }
+        }
+        dialog.setOnDismissListener {
+            updateDownloadHandle?.cancel()
+            updateDownloadHandle = null
+        }
+        dialog.show()
+    }
+
+    private fun checkForUpdates(showDialog: Boolean, force: Boolean) {
+        if (!force && !isUpdateCheckDue()) return
+        requestUpdateCheck(force = force) { result ->
+            if (showDialog) {
+                showUpdateManager(result)
+            }
+        }
+    }
+
+    private fun requestUpdateCheck(
+        force: Boolean,
+        callback: ((UpdateCheckResult) -> Unit)? = null
+    ) {
+        if (updateCheckInProgress) return
+        if (!force && !isUpdateCheckDue()) return
+        updateCheckInProgress = true
+        Thread {
+            val result = GitHubReleaseClient().checkLatestRelease()
+            runOnUiThread {
+                updateCheckInProgress = false
+                updatePreferences.lastCheckAtMillis = System.currentTimeMillis()
+                latestUpdateResult = result
+                if (result.status == UpdateCheckStatus.UPDATE_AVAILABLE) {
+                    result.release?.let { release ->
+                        UpdateNotifier.showUpdateAvailable(this, release)
+                    }
+                }
+                callback?.invoke(result)
+            }
+        }.start()
+    }
+
+    private fun showInstallPermissionBeforeDownloadDialog(onDownloadAnyway: () -> Unit) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.update_install_permission_needed_title)
+            .setMessage(R.string.update_install_permission_needed_before_download)
+            .setPositiveButton(R.string.update_open_install_settings) { _, _ ->
+                openInstallSettings()
+            }
+            .setNeutralButton(R.string.update_download_anyway) { _, _ ->
+                onDownloadAnyway()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun installDownloadedUpdate(release: UpdateRelease, apkFile: File) {
+        if (!UpdateInstallHelper.canRequestPackageInstalls(this)) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.update_install_permission_needed_title)
+                .setMessage(R.string.update_install_permission_needed_before_install)
+                .setPositiveButton(R.string.update_open_install_settings) { _, _ ->
+                    openInstallSettings()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+            return
+        }
+        try {
+            updatePreferences.markInstallAttempt(release)
+            startActivity(UpdateInstallHelper.installIntent(this, apkFile))
+        } catch (_: ActivityNotFoundException) {
+            Snackbar.make(webViewContainer, apkFile.absolutePath, Snackbar.LENGTH_LONG).show()
+        }
+    }
+
+    private fun maybeShowPostInstallPermissionReminder() {
+        if (!UpdateInstallHelper.canRequestPackageInstalls(this)) return
+        if (updatePreferences.postInstallReminderPermanentlyHidden) return
+        val attemptedVersion = updatePreferences.lastInstallAttemptVersionName ?: return
+        val currentVersion = VersionNames.normalize(BuildConfig.VERSION_NAME)
+        if (VersionNames.compare(currentVersion, attemptedVersion) < 0) return
+        if (updatePreferences.postInstallReminderDismissedVersionName == currentVersion) return
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.update_post_install_reminder_title)
+            .setMessage(R.string.update_post_install_reminder_text)
+            .setPositiveButton(R.string.update_open_install_settings) { _, _ ->
+                openInstallSettings()
+            }
+            .setNeutralButton(R.string.update_hide_forever) { _, _ ->
+                updatePreferences.postInstallReminderPermanentlyHidden = true
+            }
+            .setNegativeButton(R.string.update_hide_once) { _, _ ->
+                updatePreferences.postInstallReminderDismissedVersionName = currentVersion
+            }
+            .show()
+    }
+
+    private fun openInstallSettings() {
+        try {
+            startActivity(UpdateInstallHelper.installSettingsIntent(this))
+        } catch (_: ActivityNotFoundException) {
+            startActivity(Intent(android.provider.Settings.ACTION_SETTINGS))
+        }
+    }
+
+    private fun scheduleNextDailyUpdateCheck() {
+        updateCheckHandler.removeCallbacks(dailyUpdateCheckRunnable)
+        updateCheckHandler.postDelayed(dailyUpdateCheckRunnable, UPDATE_CHECK_INTERVAL_MS)
+    }
+
+    private fun isUpdateCheckDue(): Boolean {
+        return System.currentTimeMillis() - updatePreferences.lastCheckAtMillis >=
+            UPDATE_CHECK_INTERVAL_MS
+    }
+
+    private fun updateTextView(): TextView {
+        return TextView(this).apply {
+            setPadding(0, dp(6), 0, dp(6))
+            textSize = 15f
+        }
+    }
+
+    private fun updateButton(labelResId: Int): Button {
+        return Button(this).apply {
+            text = getString(labelResId)
+            isAllCaps = false
+        }
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        if (bytes <= 0L) return getString(R.string.update_unknown_size)
+        val mib = bytes / (1024.0 * 1024.0)
+        return String.format("%.1f MB", mib)
+    }
+
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density).toInt()
+    }
+
     companion object {
+        const val EXTRA_SHOW_UPDATE_MANAGER = "de.shakie.tubenext.SHOW_UPDATE_MANAGER"
         private const val DEFAULT_URL = "https://www.youtube.com/"
         private const val MAX_TAB_LABEL_LENGTH = 24
         private const val WATCH_VIEWPORT_STABILIZE_DELAY_MS = 1000L
         private const val OVERLAY_HIDE_DELAY_MS = 2000L
+        private const val UPDATE_CHECK_INTERVAL_MS = 24L * 60L * 60L * 1000L
         private const val TAB_PREVIEW_TOP_OFFSET_RATIO = 0.12f
         private const val PREFERENCES_NAME = "tube_next_preferences"
         private const val KEY_SHOW_SHORTS = "home_feed_show_shorts"

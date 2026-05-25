@@ -218,11 +218,7 @@
       return;
     }
     ensureHomeFeedFilterStyle();
-    var enabled = isHomePage() && (
-      !homeFeedSettings.showShorts ||
-      !homeFeedSettings.showCommunityPosts ||
-      !homeFeedSettings.showWatchHistory
-    );
+    var enabled = isHomePage() && isHomeFeedFilteringEnabled();
     document.documentElement.classList.toggle("tubenext-home-feed-filter", enabled);
     document.querySelectorAll(".tubenext-home-feed-hidden").forEach(function (node) {
       if (!enabled) {
@@ -248,6 +244,14 @@
       "ytm-post-renderer",
       "ytm-community-post-renderer"
     ].join(",")).forEach(updateHomeFeedCard);
+  }
+
+  function isHomeFeedFilteringEnabled() {
+    return (
+      !homeFeedSettings.showShorts ||
+      !homeFeedSettings.showCommunityPosts ||
+      !homeFeedSettings.showWatchHistory
+    );
   }
 
   function scheduleHomeFeedFilters() {
@@ -305,8 +309,13 @@
     window.setTimeout(scheduleWatchPageTweaks, 700);
   }
 
-  function ensureHomeFeedObserver() {
-    if (homeFeedObserver || typeof MutationObserver !== "function") {
+  function updateHomeFeedObserver() {
+    if (homeFeedObserver && !isHomeFeedFilteringEnabled()) {
+      homeFeedObserver.disconnect();
+      homeFeedObserver = null;
+      return;
+    }
+    if (homeFeedObserver || !isHomeFeedFilteringEnabled() || typeof MutationObserver !== "function") {
       return;
     }
     homeFeedObserver = new MutationObserver(function (mutations) {
@@ -346,6 +355,7 @@
           showWatchHistory: message.showWatchHistory !== false,
           hideWatchBranding: message.hideWatchBranding === true
         };
+        updateHomeFeedObserver();
         scheduleHomeFeedFilters();
         scheduleWatchPageTweaksBurst();
       });
@@ -418,7 +428,7 @@
   ensureYouTubeDarkPreference();
   ensureDarkModeStyle();
   connectNativeSettingsPort();
-  ensureHomeFeedObserver();
+  updateHomeFeedObserver();
 
   function ensureWatchFitStyle() {
     if (document.getElementById(WATCH_FIT_STYLE_ID)) {
@@ -1572,15 +1582,18 @@
   window.addEventListener("yt-navigate-finish", function () {
     forceTopAfterLoad();
     scheduleLandscapeWatchMode();
+    updateHomeFeedObserver();
     scheduleHomeFeedFilters();
     scheduleWatchPageTweaksBurst();
   }, true);
   window.addEventListener("popstate", function () {
     scheduleLandscapeWatchMode();
+    updateHomeFeedObserver();
     scheduleHomeFeedFilters();
     scheduleWatchPageTweaksBurst();
   }, true);
   scheduleLandscapeWatchMode();
+  updateHomeFeedObserver();
   scheduleHomeFeedFilters();
   scheduleWatchPageTweaksBurst();
   updateScrollTopButton();

@@ -15,8 +15,8 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
+import android.os.PowerManager
+import android.provider.Settings
 import android.util.Log
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
@@ -94,17 +94,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var updatePreferences: UpdatePreferences
 
     private val browserTabs = linkedMapOf<String, AppTab>()
-    private val updateCheckHandler = Handler(Looper.getMainLooper())
-    private val dailyUpdateCheckRunnable = Runnable {
-        checkForUpdates(showDialog = false, force = true)
-        scheduleNextDailyUpdateCheck()
-    }
     private var selectedTabId: String? = null
     private var tabSelectionUpdateInProgress = false
     private var updateCheckInProgress = false
     private var latestUpdateResult: UpdateCheckResult? = null
     private var updateDownloadHandle: UpdateDownloader.DownloadHandle? = null
     private var settingsDialog: androidx.appcompat.app.AlertDialog? = null
+    private var batteryOptimizationDialogVisible = false
     private var pendingUpdateNotificationRelease: UpdateRelease? = null
     private var updatePermissionDialogVisible = false
     private var landscapeVideoModeActive = false
@@ -143,9 +139,9 @@ class MainActivity : AppCompatActivity() {
         setupBackNavigation()
         restoreOrCreateInitialTab()
         handleIncomingIntent(intent)
-        maybeShowPostInstallPermissionReminder()
-        checkForUpdates(showDialog = false, force = false)
-        scheduleNextDailyUpdateCheck()
+        if (!maybeShowPostInstallPermissionReminder()) {
+            maybeShowBatteryOptimizationHint()
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -197,6 +193,7 @@ class MainActivity : AppCompatActivity() {
         if (::backgroundAudioCoordinator.isInitialized) {
             backgroundAudioCoordinator.onAppForegrounded()
         }
+        checkForUpdates(showDialog = false, force = false)
     }
 
     override fun onStop() {
@@ -220,7 +217,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        updateCheckHandler.removeCallbacks(dailyUpdateCheckRunnable)
         updateDownloadHandle?.cancel()
         val keepBrowserSessions = isChangingConfigurations
         browserTabs.values.forEach { tab ->
@@ -556,6 +552,15 @@ class MainActivity : AppCompatActivity() {
                 openInstallSettings()
             }
         })
+        container.addView(settingsDivider())
+        container.addView(settingsSectionTitle(R.string.settings_section_background_playback))
+        container.addView(batteryOptimizationStatusTextView())
+        container.addView(batteryOptimizationHintCheckBox())
+        container.addView(updateButton(R.string.battery_optimization_open_settings).apply {
+            setOnClickListener {
+                showBatteryOptimizationSettingsGuide()
+            }
+        })
 
         val scrollView = ScrollView(this).apply {
             addView(container)
@@ -594,6 +599,30 @@ class MainActivity : AppCompatActivity() {
         }
         return updateTextView().apply {
             text = permissionStatus
+        }
+    }
+
+    private fun batteryOptimizationStatusTextView(): TextView {
+        val status = if (isIgnoringBatteryOptimizations()) {
+            getString(R.string.battery_optimization_status_unrestricted)
+        } else {
+            getString(R.string.battery_optimization_status_optimized)
+        }
+        return updateTextView().apply {
+            text = status
+        }
+    }
+
+    private fun batteryOptimizationHintCheckBox(): CheckBox {
+        return CheckBox(this).apply {
+            text = getString(R.string.battery_optimization_hint_enabled)
+            isChecked = !preferences.getBoolean(KEY_BATTERY_OPTIMIZATION_HINT_DISABLED, false)
+            setOnCheckedChangeListener { _, checked ->
+                preferences.edit()
+                    .putBoolean(KEY_BATTERY_OPTIMIZATION_HINT_DISABLED, !checked)
+                    .remove(KEY_BATTERY_OPTIMIZATION_HINT_VERSION_CODE)
+                    .apply()
+            }
         }
     }
 
@@ -2085,13 +2114,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun maybeShowPostInstallPermissionReminder() {
-        if (!UpdateInstallHelper.canRequestPackageInstalls(this)) return
-        if (updatePreferences.postInstallReminderPermanentlyHidden) return
-        val attemptedVersion = updatePreferences.lastInstallAttemptVersionName ?: return
+    private fun maybeShowPostInstallPermissionReminder(): Boolean {
+        if (!UpdateInstallHelper.canRequestPackageInstalls(this)) return false
+        if (updatePreferences.postInstallReminderPermanentlyHidden) return false
+        val attemptedVersion = updatePreferences.lastInstallAttemptVersionName ?: return false
         val currentVersion = VersionNames.normalize(BuildConfig.VERSION_NAME)
-        if (VersionNames.compare(currentVersion, attemptedVersion) < 0) return
-        if (updatePreferences.postInstallReminderDismissedVersionName == currentVersion) return
+        if (VersionNames.compare(currentVersion, attemptedVersion) < 0) return false
+        if (updatePreferences.postInstallReminderDismissedVersionName == currentVersion) return false
 
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.update_post_install_reminder_title)
@@ -2106,6 +2135,7 @@ class MainActivity : AppCompatActivity() {
                 updatePreferences.postInstallReminderDismissedVersionName = currentVersion
             }
             .show()
+        return true
     }
 
     private fun openInstallSettings() {
@@ -2116,14 +2146,64 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun scheduleNextDailyUpdateCheck() {
-        updateCheckHandler.removeCallbacks(dailyUpdateCheckRunnable)
-        updateCheckHandler.postDelayed(dailyUpdateCheckRunnable, UPDATE_CHECK_INTERVAL_MS)
-    }
-
     private fun isUpdateCheckDue(): Boolean {
         return System.currentTimeMillis() - updatePreferences.lastCheckAtMillis >=
             UPDATE_CHECK_INTERVAL_MS
+    }
+
+    private fun maybeShowBatteryOptimizationHint() {
+        if (batteryOptimizationDialogVisible) return
+        if (preferences.getBoolean(KEY_BATTERY_OPTIMIZATION_HINT_DISABLED, false)) return
+        if (isIgnoringBatteryOptimizations()) return
+        batteryOptimizationDialogVisible = true
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.battery_optimization_hint_title)
+            .setMessage(R.string.battery_optimization_hint_message)
+            .setPositiveButton(R.string.battery_optimization_open_settings) { _, _ ->
+                showBatteryOptimizationSettingsGuide()
+            }
+            .setNegativeButton(R.string.battery_optimization_later, null)
+            .setNeutralButton(R.string.battery_optimization_never_show_again) { _, _ ->
+                preferences.edit()
+                    .putBoolean(KEY_BATTERY_OPTIMIZATION_HINT_DISABLED, true)
+                    .apply()
+            }
+            .setOnDismissListener {
+                batteryOptimizationDialogVisible = false
+            }
+            .show()
+    }
+
+    private fun isIgnoringBatteryOptimizations(): Boolean {
+        val powerManager = getSystemService<PowerManager>() ?: return false
+        return powerManager.isIgnoringBatteryOptimizations(packageName)
+    }
+
+    private fun showBatteryOptimizationSettingsGuide() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.battery_optimization_settings_guide_title)
+            .setMessage(R.string.battery_optimization_settings_guide_message)
+            .setPositiveButton(R.string.battery_optimization_open_settings) { _, _ ->
+                openBatteryOptimizationSettings()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun openBatteryOptimizationSettings() {
+        try {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", packageName, null)
+                }
+            )
+        } catch (_: ActivityNotFoundException) {
+            try {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (_: ActivityNotFoundException) {
+                startActivity(Intent(Settings.ACTION_SETTINGS))
+            }
+        }
     }
 
     private fun updateTextView(): TextView {
@@ -2164,6 +2244,10 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_SHOW_COMMUNITY_POSTS = "home_feed_show_community_posts"
         private const val KEY_SHOW_WATCH_HISTORY = "home_feed_show_watch_history"
         private const val KEY_HIDE_WATCH_BRANDING = "watch_page_hide_branding"
+        private const val KEY_BATTERY_OPTIMIZATION_HINT_VERSION_CODE =
+            "battery_optimization_hint_version_code"
+        private const val KEY_BATTERY_OPTIMIZATION_HINT_DISABLED =
+            "battery_optimization_hint_disabled"
         private const val MENU_SHOW_SHORTS = 20_001
         private const val MENU_SHOW_COMMUNITY = 20_002
         private const val MENU_SHOW_HISTORY = 20_003

@@ -435,7 +435,6 @@ class MainActivity : AppCompatActivity() {
         }
         configureLongPressMenu(browserTab)
         browserTabs[session.id] = browserTab
-        webViewContainer.addView(browserTab.engineTab.view)
         return browserTab
     }
 
@@ -475,9 +474,7 @@ class MainActivity : AppCompatActivity() {
         }
         previousTab?.engineTab?.onPause()
         selectedTabId = tabId
-        browserTabs.forEach { (id, tab) ->
-            tab.engineTab.view.visibility = if (id == tabId) View.VISIBLE else View.GONE
-        }
+        attachOnlySelectedTabView(tabId)
         currentTab()?.let { tab ->
             tab.engineTab.onResume()
             if (!tab.hasLoadedInitialUrl) {
@@ -497,6 +494,26 @@ class MainActivity : AppCompatActivity() {
         }
         updateBrowserChromeVisibility()
         syncTabLayout()
+    }
+
+    private fun attachOnlySelectedTabView(tabId: String) {
+        browserTabs.forEach { (id, tab) ->
+            val view = tab.engineTab.view
+            if (id == tabId) {
+                val parent = view.parent as? ViewGroup
+                if (parent != webViewContainer) {
+                    parent?.removeView(view)
+                    webViewContainer.addView(view)
+                }
+                view.visibility = View.VISIBLE
+                view.requestLayout()
+            } else {
+                if (view.parent == webViewContainer) {
+                    webViewContainer.removeView(view)
+                }
+                view.visibility = View.GONE
+            }
+        }
     }
 
     private fun closeCurrentTab() {

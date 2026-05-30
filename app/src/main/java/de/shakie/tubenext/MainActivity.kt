@@ -16,6 +16,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import android.view.MotionEvent
@@ -107,6 +108,8 @@ class MainActivity : AppCompatActivity() {
     private var landscapeVideoScale = 1f
     private var landscapeVideoTranslationX = 0f
     private var landscapeVideoTranslationY = 0f
+    private var geckoRenderHealthGeneration = 0L
+    private var lastGeckoSurfaceRecoveryAtMs = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -171,6 +174,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        geckoRenderHealthGeneration += 1
         currentTab()?.engineTab?.onPause()
         super.onPause()
         tabManager.persist()
@@ -186,6 +190,7 @@ class MainActivity : AppCompatActivity() {
                 engineTab.recoverFromAudioRouteChange()
             }
         }
+        scheduleGeckoRenderHealthCheck("activity-resume")
     }
 
     override fun onStart() {
@@ -494,6 +499,7 @@ class MainActivity : AppCompatActivity() {
         }
         updateBrowserChromeVisibility()
         syncTabLayout()
+        scheduleGeckoRenderHealthCheck("tab-selected")
     }
 
     private fun attachOnlySelectedTabView(tabId: String) {
@@ -513,6 +519,152 @@ class MainActivity : AppCompatActivity() {
                 }
                 view.visibility = View.GONE
             }
+        }
+    }
+
+    private fun scheduleGeckoRenderHealthCheck(
+        reason: String,
+        delayMs: Long = GECKO_RENDER_HEALTH_CHECK_DELAY_MS
+    ) {
+        if (browserEngine.type != EngineType.GECKO) return
+        val tabId = selectedTabId ?: return
+        val generation = ++geckoRenderHealthGeneration
+        webViewContainer.postDelayed({
+            checkGeckoRenderHealth(tabId, generation, reason, attempt = 1)
+        }, delayMs)
+    }
+
+    private fun scheduleGeckoRenderHealthRetry(
+        tabId: String,
+        generation: Long,
+        reason: String,
+        attempt: Int
+    ) {
+        webViewContainer.postDelayed({
+            checkGeckoRenderHealth(tabId, generation, reason, attempt)
+        }, GECKO_RENDER_HEALTH_RECHECK_DELAY_MS)
+    }
+
+    private fun checkGeckoRenderHealth(
+        tabId: String,
+        generation: Long,
+        reason: String,
+        attempt: Int
+    ) {
+        val tab = healthCheckedGeckoTab(tabId, generation) ?: return
+        val geckoView = tab.engineTab.view as? GeckoView ?: return
+        if (tab.loadingOverlayVisible) {
+            if (attempt < GECKO_RENDER_HEALTH_MAX_ATTEMPTS) {
+                scheduleGeckoRenderHealthRetry(tabId, generation, reason, attempt + 1)
+            }
+            return
+        }
+        if (geckoView.width <= 0 || geckoView.height <= 0 || geckoView.parent != webViewContainer) {
+            handleGeckoRenderHealthFailure(
+                tabId = tabId,
+                generation = generation,
+                reason = "$reason:no-visible-frame",
+                attempt = attempt,
+                error = null
+            )
+            return
+        }
+
+        runCatching {
+            geckoView.capturePixels().accept(
+                { captured ->
+                    runOnUiThread {
+                        handleGeckoRenderHealthCapture(tabId, generation, reason, attempt, captured)
+                    }
+                },
+                { error ->
+                    runOnUiThread {
+                        handleGeckoRenderHealthFailure(tabId, generation, reason, attempt, error)
+                    }
+                }
+            )
+        }.onFailure { error ->
+            handleGeckoRenderHealthFailure(tabId, generation, reason, attempt, error)
+        }
+    }
+
+    private fun handleGeckoRenderHealthCapture(
+        tabId: String,
+        generation: Long,
+        reason: String,
+        attempt: Int,
+        captured: Bitmap?
+    ) {
+        healthCheckedGeckoTab(tabId, generation) ?: return
+        if (captured == null) {
+            handleGeckoRenderHealthFailure(tabId, generation, "$reason:null-capture", attempt, null)
+            return
+        }
+        val isBlank = runCatching {
+            isEffectivelyBlankPreview(captured)
+        }.getOrDefault(false)
+        captured.recycle()
+        if (!isBlank) return
+
+        if (attempt < GECKO_RENDER_HEALTH_MAX_ATTEMPTS) {
+            Log.w("TUBENEXT_RENDER", "blank Gecko capture tab=$tabId attempt=$attempt reason=$reason")
+            scheduleGeckoRenderHealthRetry(tabId, generation, "$reason:blank", attempt + 1)
+            return
+        }
+        recoverVisibleGeckoSurface(tabId, "$reason:blank-capture")
+    }
+
+    private fun handleGeckoRenderHealthFailure(
+        tabId: String,
+        generation: Long,
+        reason: String,
+        attempt: Int,
+        error: Throwable?
+    ) {
+        healthCheckedGeckoTab(tabId, generation) ?: return
+        if (attempt < GECKO_RENDER_HEALTH_MAX_ATTEMPTS) {
+            Log.w("TUBENEXT_RENDER", "Gecko capture failed tab=$tabId attempt=$attempt reason=$reason", error)
+            scheduleGeckoRenderHealthRetry(tabId, generation, "$reason:capture-failed", attempt + 1)
+            return
+        }
+        recoverVisibleGeckoSurface(tabId, "$reason:capture-failed")
+    }
+
+    private fun recoverVisibleGeckoSurface(tabId: String, reason: String) {
+        val tab = healthCheckedGeckoTab(tabId, geckoRenderHealthGeneration) ?: return
+        val view = tab.engineTab.view as? GeckoView ?: return
+        val now = SystemClock.uptimeMillis()
+        if (now - lastGeckoSurfaceRecoveryAtMs < GECKO_SURFACE_RECOVERY_THROTTLE_MS) {
+            Log.w("TUBENEXT_RENDER", "skip throttled Gecko surface recovery tab=$tabId reason=$reason")
+            return
+        }
+        lastGeckoSurfaceRecoveryAtMs = now
+        Log.w("TUBENEXT_RENDER", "recover Gecko surface tab=$tabId reason=$reason url=${tab.url}")
+
+        (view.parent as? ViewGroup)?.removeView(view)
+        view.visibility = View.VISIBLE
+        webViewContainer.post {
+            val currentTab = healthCheckedGeckoTab(tabId, geckoRenderHealthGeneration) ?: return@post
+            val currentView = currentTab.engineTab.view
+            if (currentView.parent != webViewContainer) {
+                (currentView.parent as? ViewGroup)?.removeView(currentView)
+                webViewContainer.addView(currentView)
+            }
+            currentView.visibility = View.VISIBLE
+            currentView.requestLayout()
+            currentTab.engineTab.onResume()
+            scheduleGeckoRenderHealthCheck("post-recovery")
+        }
+    }
+
+    private fun healthCheckedGeckoTab(tabId: String, generation: Long): AppTab? {
+        if (generation != geckoRenderHealthGeneration) return null
+        if (selectedTabId != tabId) return null
+        if (isFinishing || isDestroyed) return null
+        return browserTabs[tabId]?.takeIf { tab ->
+            tab.engineTab.view is GeckoView &&
+                tab.engineTab.view.visibility == View.VISIBLE &&
+                tab.hasLoadedInitialUrl
         }
     }
 
@@ -2254,6 +2406,10 @@ class MainActivity : AppCompatActivity() {
         private const val MAX_TAB_LABEL_LENGTH = 24
         private const val WATCH_VIEWPORT_STABILIZE_DELAY_MS = 1000L
         private const val OVERLAY_HIDE_DELAY_MS = 2000L
+        private const val GECKO_RENDER_HEALTH_CHECK_DELAY_MS = 900L
+        private const val GECKO_RENDER_HEALTH_RECHECK_DELAY_MS = 650L
+        private const val GECKO_RENDER_HEALTH_MAX_ATTEMPTS = 2
+        private const val GECKO_SURFACE_RECOVERY_THROTTLE_MS = 12_000L
         private const val UPDATE_CHECK_INTERVAL_MS = 24L * 60L * 60L * 1000L
         private const val TAB_PREVIEW_TOP_OFFSET_RATIO = 0.12f
         private const val PREFERENCES_NAME = "tube_next_preferences"

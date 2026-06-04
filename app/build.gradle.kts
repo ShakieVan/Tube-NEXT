@@ -15,14 +15,14 @@ val hasCustomReleaseSigning = keyProperties.getProperty("storeFile")?.isNotBlank
 
 android {
     namespace = "de.shakie.tubenext"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "de.shakie.tubenext"
         minSdk = 29
         targetSdk = 35
-        versionCode = 11
-        versionName = "1.3.4"
+        versionCode = 12
+        versionName = "1.3.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appLabel"] = "Tube NEXT"
@@ -60,7 +60,7 @@ android {
         }
 
         release {
-            // GeckoView 136 can crash in native startup code when this release is
+            // GeckoView can crash in native startup code when this release is
             // minified on real arm64 devices. Keep release builds unminified until
             // we can validate a Gecko/R8 rule set on hardware.
             isMinifyEnabled = false
@@ -95,5 +95,5 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("androidx.constraintlayout:constraintlayout:2.2.1")
     implementation("androidx.recyclerview:recyclerview:1.4.0")
-    implementation("org.mozilla.geckoview:geckoview:136.0.20250317200840")
+    implementation("org.mozilla.geckoview:geckoview:151.0.20260601110758")
 }

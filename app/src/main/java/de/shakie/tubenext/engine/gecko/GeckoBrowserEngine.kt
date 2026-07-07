@@ -242,6 +242,34 @@ class GeckoBrowserEngine(
             override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
                 callbacks.onFullscreenChanged(tabId, fullScreen)
             }
+
+            override fun onCrash(session: GeckoSession) {
+                Log.e(
+                    "TUBENEXT_RENDER",
+                    "Gecko content process crashed tab=$tabId url=${retainedTab.currentUrl}"
+                )
+                callbacks.onEngineProcessGone(tabId, "crash")
+            }
+
+            override fun onKill(session: GeckoSession) {
+                Log.w(
+                    "TUBENEXT_RENDER",
+                    "Gecko content process killed tab=$tabId url=${retainedTab.currentUrl}"
+                )
+                callbacks.onEngineProcessGone(tabId, "kill")
+            }
+
+            override fun onPaintStatusReset(session: GeckoSession) {
+                Log.i("TUBENEXT_RENDER", "Gecko paint status reset tab=$tabId url=${retainedTab.currentUrl}")
+            }
+
+            override fun onFirstComposite(session: GeckoSession) {
+                Log.i("TUBENEXT_RENDER", "Gecko first composite tab=$tabId url=${retainedTab.currentUrl}")
+            }
+
+            override fun onFirstContentfulPaint(session: GeckoSession) {
+                Log.i("TUBENEXT_RENDER", "Gecko first contentful paint tab=$tabId url=${retainedTab.currentUrl}")
+            }
         }
 
         session.mediaSessionDelegate = object : MediaSession.Delegate {

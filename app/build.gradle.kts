@@ -21,8 +21,8 @@ android {
         applicationId = "de.shakie.tubenext"
         minSdk = 29
         targetSdk = 35
-        versionCode = 12
-        versionName = "1.3.5"
+        versionCode = 13
+        versionName = "1.3.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appLabel"] = "Tube NEXT"
@@ -95,5 +95,5 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("androidx.constraintlayout:constraintlayout:2.2.1")
     implementation("androidx.recyclerview:recyclerview:1.4.0")
-    implementation("org.mozilla.geckoview:geckoview:151.0.20260601110758")
+    implementation("org.mozilla.geckoview:geckoview:152.0.20260706120035")
 }

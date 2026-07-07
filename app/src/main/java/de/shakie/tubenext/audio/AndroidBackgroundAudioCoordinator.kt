@@ -114,6 +114,17 @@ class AndroidBackgroundAudioCoordinator(
         clearPlaybackState()
     }
 
+    fun isPlaybackActiveForTab(tabId: String): Boolean {
+        return lastStateTabId == tabId && lastState?.isPlaying == true
+    }
+
+    fun onTabSuspended(tabId: String) {
+        if (isPlaybackActiveForTab(tabId)) return
+        if (controlsTabId != tabId && lastStateTabId != tabId) return
+        debugLog("tab suspended clears playback tab=$tabId")
+        clearPlaybackState()
+    }
+
     override fun onAppBackgrounded() {
         appInBackground = true
         handler.removeCallbacks(foregroundServiceStopRunnable)

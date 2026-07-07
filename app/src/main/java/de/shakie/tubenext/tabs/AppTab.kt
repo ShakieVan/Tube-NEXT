@@ -4,7 +4,7 @@ import de.shakie.tubenext.engine.EngineTab
 
 data class AppTab(
     val id: String,
-    val engineTab: EngineTab,
+    var engineTab: EngineTab,
     var isDesktopMode: Boolean = false,
     var title: String = "",
     var url: String = "",
@@ -15,6 +15,9 @@ data class AppTab(
     var pageLoadGeneration: Long = 0L,
     var loadingOverlayVisible: Boolean = false,
     var loadingProgress: Int = 0,
-    var hasLoadedInitialUrl: Boolean = true
+    var hasLoadedInitialUrl: Boolean = true,
+    var isHibernated: Boolean = false,
+    var hibernatedReason: String = "",
+    var lastActivatedAtMs: Long = 0L
 ) {
 }

@@ -1,9 +1,12 @@
 package de.shakie.tubenext
 
 import android.Manifest
+import android.app.ActivityManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ActivityNotFoundException
+import android.content.ComponentCallbacks2
+import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
@@ -52,6 +55,7 @@ import de.shakie.tubenext.browser.YouTubeNavigationPolicy
 import de.shakie.tubenext.engine.BrowserEngine
 import de.shakie.tubenext.engine.EngineCallbacks
 import de.shakie.tubenext.engine.EngineHomeFeedSettings
+import de.shakie.tubenext.engine.EngineTab
 import de.shakie.tubenext.engine.EngineType
 import de.shakie.tubenext.engine.gecko.GeckoBrowserEngine
 import de.shakie.tubenext.tabs.AppTab
@@ -110,6 +114,7 @@ class MainActivity : AppCompatActivity() {
     private var landscapeVideoTranslationY = 0f
     private var geckoRenderHealthGeneration = 0L
     private var lastGeckoSurfaceRecoveryAtMs = 0L
+    private val loggedProcessExitKeys = mutableSetOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -182,7 +187,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        currentTab()?.engineTab?.let { engineTab ->
+        currentTab()?.let { tab ->
+            ensureTabAwake(tab.id, "activity-resume")
+        }?.engineTab?.let { engineTab ->
             engineTab.onResume()
             if (::backgroundAudioCoordinator.isInitialized &&
                 backgroundAudioCoordinator.consumeForegroundRecoveryPending()
@@ -190,6 +197,7 @@ class MainActivity : AppCompatActivity() {
                 engineTab.recoverFromAudioRouteChange()
             }
         }
+        logRecentProcessExitInfo("activity-resume")
         scheduleGeckoRenderHealthCheck("activity-resume")
     }
 
@@ -207,6 +215,18 @@ class MainActivity : AppCompatActivity() {
             backgroundAudioCoordinator.onAppBackgrounded()
         }
         super.onStop()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (!::browserEngine.isInitialized || !::tabManager.isInitialized) return
+        Log.i("TUBENEXT_MEMORY", "onTrimMemory level=$level tabs=${browserTabs.size}")
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+            prepareHiddenUiMemoryTrim("trim-memory-$level")
+        }
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) {
+            hibernateExpendableBackgroundTabs("trim-memory-$level")
+        }
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -378,46 +398,7 @@ class MainActivity : AppCompatActivity() {
             initialUrl = session.url,
             title = session.title,
             loadInitialUrl = loadInitialUrl,
-            callbacks = EngineCallbacks(
-                onOpenExternalUrl = ::openExternalUrl,
-                shouldOpenInApp = ::shouldOpenInApp,
-                onMainNavigationStarted = { tabId, url ->
-                    onTabMainNavigationStarted(tabId)
-                },
-                onMainUrlUpdated = { tabId, url ->
-                    updateTabState(tabId, newUrl = url)
-                },
-                onMainTitleUpdated = { tabId, title ->
-                    updateTabState(tabId, newTitle = title)
-                },
-                onMainPageFinished = { tabId, url ->
-                    scheduleWatchViewportStabilization(tabId, url)
-                },
-                onProgressChanged = { tabId, progress ->
-                    updateToolbarState()
-                    onTabProgress(tabId, progress)
-                },
-                onNewTabRequest = { targetUrl ->
-                    createAndSelectTab(targetUrl)
-                },
-                onFullscreenChanged = { _, isFullscreen ->
-                    if (isFullscreen) {
-                        disableLandscapeVideoMode()
-                        hideLoadingOverlay()
-                    }
-                    updateBrowserChromeVisibility()
-                },
-                onLoadError = { tabId ->
-                    completeTabLoading(tabId, browserTabs[tabId]?.pageLoadGeneration)
-                    Snackbar.make(webViewContainer, R.string.page_load_error, Snackbar.LENGTH_SHORT).show()
-                },
-                onPlaybackStateChanged = { tabId, state ->
-                    backgroundAudioCoordinator.onForegroundPlaybackState(tabId, state)
-                },
-                onMediaControlsChanged = { tabId, controls ->
-                    backgroundAudioCoordinator.onMediaControlsChanged(tabId, controls)
-                }
-            )
+            callbacks = createEngineCallbacks()
         )
 
         val browserTab = AppTab(
@@ -426,7 +407,8 @@ class MainActivity : AppCompatActivity() {
             isDesktopMode = shouldUseDesktopMode(session.url),
             title = session.title,
             url = session.url,
-            hasLoadedInitialUrl = loadInitialUrl
+            hasLoadedInitialUrl = loadInitialUrl,
+            lastActivatedAtMs = SystemClock.uptimeMillis()
         )
         browserTab.engineTab.setDesktopMode(browserTab.isDesktopMode)
         browserTab.engineTab.setHomeFeedSettings(currentHomeFeedSettings())
@@ -441,6 +423,182 @@ class MainActivity : AppCompatActivity() {
         configureLongPressMenu(browserTab)
         browserTabs[session.id] = browserTab
         return browserTab
+    }
+
+    private fun createEngineCallbacks(): EngineCallbacks {
+        return EngineCallbacks(
+            onOpenExternalUrl = ::openExternalUrl,
+            shouldOpenInApp = ::shouldOpenInApp,
+            onMainNavigationStarted = { tabId, _ ->
+                onTabMainNavigationStarted(tabId)
+            },
+            onMainUrlUpdated = { tabId, url ->
+                updateTabState(tabId, newUrl = url)
+            },
+            onMainTitleUpdated = { tabId, title ->
+                updateTabState(tabId, newTitle = title)
+            },
+            onMainPageFinished = { tabId, url ->
+                scheduleWatchViewportStabilization(tabId, url)
+            },
+            onProgressChanged = { tabId, progress ->
+                updateToolbarState()
+                onTabProgress(tabId, progress)
+            },
+            onNewTabRequest = { targetUrl ->
+                createAndSelectTab(targetUrl)
+            },
+            onFullscreenChanged = { _, isFullscreen ->
+                if (isFullscreen) {
+                    disableLandscapeVideoMode()
+                    hideLoadingOverlay()
+                }
+                updateBrowserChromeVisibility()
+            },
+            onLoadError = { tabId ->
+                completeTabLoading(tabId, browserTabs[tabId]?.pageLoadGeneration)
+                Snackbar.make(webViewContainer, R.string.page_load_error, Snackbar.LENGTH_SHORT).show()
+            },
+            onPlaybackStateChanged = { tabId, state ->
+                backgroundAudioCoordinator.onForegroundPlaybackState(tabId, state)
+            },
+            onMediaControlsChanged = { tabId, controls ->
+                backgroundAudioCoordinator.onMediaControlsChanged(tabId, controls)
+            },
+            onEngineProcessGone = { tabId, reason ->
+                recoverEngineTabAfterProcessExit(tabId, reason)
+            }
+        )
+    }
+
+    private fun prepareHiddenUiMemoryTrim(reason: String) {
+        currentTab()?.takeIf { !it.isHibernated }?.let(::captureAndStoreTabPreview)
+        browserTabs.values
+            .filter { it.id != selectedTabId && !it.isHibernated }
+            .forEach { tab ->
+                runCatching {
+                    tab.engineTab.onPause()
+                }.onFailure { error ->
+                    Log.w("TUBENEXT_MEMORY", "pause background tab failed tab=${tab.id} reason=$reason", error)
+                }
+            }
+    }
+
+    private fun hibernateExpendableBackgroundTabs(reason: String) {
+        val liveTabs = browserTabs.values.filterNot { it.isHibernated }
+        if (liveTabs.size <= TARGET_LIVE_GECKO_TABS_AFTER_TRIM) return
+
+        var liveCount = liveTabs.size
+        var hibernatedCount = 0
+        liveTabs
+            .filter(::canHibernateForMemoryPressure)
+            .sortedBy { it.lastActivatedAtMs }
+            .forEach { tab ->
+                if (liveCount <= TARGET_LIVE_GECKO_TABS_AFTER_TRIM) return@forEach
+                if (hibernateTabForMemoryPressure(tab, reason)) {
+                    liveCount -= 1
+                    hibernatedCount += 1
+                }
+            }
+
+        if (hibernatedCount > 0) {
+            Log.w(
+                "TUBENEXT_MEMORY",
+                "hibernated Gecko tabs count=$hibernatedCount reason=$reason liveRemaining=$liveCount"
+            )
+        }
+    }
+
+    private fun canHibernateForMemoryPressure(tab: AppTab): Boolean {
+        if (tab.id == selectedTabId) return false
+        if (tab.isHibernated) return false
+        if (tab.engineTab.isInCustomView()) return false
+        if (::backgroundAudioCoordinator.isInitialized &&
+            backgroundAudioCoordinator.isPlaybackActiveForTab(tab.id)
+        ) {
+            return false
+        }
+        if (isContextPreservingYouTubePage(tab.url)) return false
+        return isWatchYouTubeUrl(tab.url)
+    }
+
+    private fun isContextPreservingYouTubePage(url: String): Boolean {
+        return YouTubeNavigationPolicy.isSupportedYouTubeUrl(url) && !isWatchYouTubeUrl(url)
+    }
+
+    private fun hibernateTabForMemoryPressure(tab: AppTab, reason: String): Boolean {
+        val oldEngineTab = tab.engineTab
+        if (oldEngineTab is HibernatedEngineTab) return false
+
+        Log.w("TUBENEXT_MEMORY", "hibernate Gecko tab tab=${tab.id} reason=$reason url=${tab.url}")
+        if (::backgroundAudioCoordinator.isInitialized) {
+            backgroundAudioCoordinator.onTabSuspended(tab.id)
+        }
+        (oldEngineTab.view.parent as? ViewGroup)?.removeView(oldEngineTab.view)
+        runCatching {
+            oldEngineTab.stopLoading()
+        }.onFailure { error ->
+            Log.w("TUBENEXT_MEMORY", "stop hibernating tab failed tab=${tab.id}", error)
+        }
+        runCatching {
+            oldEngineTab.destroy()
+        }.onFailure { error ->
+            Log.w("TUBENEXT_MEMORY", "destroy hibernating tab failed tab=${tab.id}", error)
+        }
+
+        tab.engineTab = HibernatedEngineTab(this, tab.id, tab.title, tab.url).apply {
+            view.layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            view.visibility = View.GONE
+        }
+        tab.isHibernated = true
+        tab.hibernatedReason = reason
+        tab.hasLoadedInitialUrl = false
+        tab.loadingOverlayVisible = false
+        tab.loadingProgress = 0
+        tab.watchStabilizationGeneration += 1
+        return true
+    }
+
+    private fun ensureTabAwake(tabId: String, reason: String): AppTab? {
+        val tab = browserTabs[tabId] ?: return null
+        if (!tab.isHibernated) return tab
+
+        val url = tab.url.ifBlank { DEFAULT_URL }
+        val title = tab.title
+        Log.i(
+            "TUBENEXT_MEMORY",
+            "wake hibernated Gecko tab tab=$tabId reason=$reason hibernatedReason=${tab.hibernatedReason} url=$url"
+        )
+        (tab.engineTab.view.parent as? ViewGroup)?.removeView(tab.engineTab.view)
+
+        val engineTab = browserEngine.createTab(
+            tabId = tab.id,
+            initialUrl = url,
+            title = title,
+            loadInitialUrl = true,
+            callbacks = createEngineCallbacks()
+        )
+        tab.engineTab = engineTab
+        tab.isDesktopMode = shouldUseDesktopMode(url)
+        tab.isHibernated = false
+        tab.hibernatedReason = ""
+        tab.hasLoadedInitialUrl = true
+        tab.loadingOverlayVisible = true
+        tab.loadingProgress = 8
+        tab.pageLoadGeneration += 1
+        tab.watchStabilizationGeneration += 1
+        engineTab.setDesktopMode(tab.isDesktopMode)
+        engineTab.setHomeFeedSettings(currentHomeFeedSettings())
+        engineTab.view.layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
+        engineTab.view.visibility = View.GONE
+        configureLongPressMenu(tab)
+        return tab
     }
 
     private fun updateTabState(tabId: String, newUrl: String? = null, newTitle: String? = null) {
@@ -478,9 +636,11 @@ class MainActivity : AppCompatActivity() {
             previousTab?.let(::captureAndStoreTabPreview)
         }
         previousTab?.engineTab?.onPause()
+        ensureTabAwake(tabId, "tab-selected") ?: return
         selectedTabId = tabId
         attachOnlySelectedTabView(tabId)
         currentTab()?.let { tab ->
+            tab.lastActivatedAtMs = SystemClock.uptimeMillis()
             tab.engineTab.onResume()
             if (!tab.hasLoadedInitialUrl) {
                 tab.hasLoadedInitialUrl = true
@@ -518,6 +678,55 @@ class MainActivity : AppCompatActivity() {
                     webViewContainer.removeView(view)
                 }
                 view.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun recoverEngineTabAfterProcessExit(tabId: String, reason: String) {
+        webViewContainer.post {
+            val oldTab = browserTabs[tabId] ?: return@post
+            val wasSelected = selectedTabId == tabId
+            val url = oldTab.url.ifBlank { DEFAULT_URL }
+            val title = oldTab.title
+            val history = oldTab.navigationHistory.toList()
+            val historyIndex = oldTab.historyIndex
+            Log.w("TUBENEXT_RENDER", "recreate Gecko tab tab=$tabId reason=$reason selected=$wasSelected url=$url")
+
+            geckoRenderHealthGeneration += 1
+            browserTabs.remove(tabId)
+            (oldTab.engineTab.view.parent as? ViewGroup)?.removeView(oldTab.engineTab.view)
+            runCatching {
+                oldTab.engineTab.stopLoading()
+            }.onFailure { error ->
+                Log.w("TUBENEXT_RENDER", "stop crashed Gecko tab failed tab=$tabId", error)
+            }
+            runCatching {
+                oldTab.engineTab.destroy()
+            }.onFailure { error ->
+                Log.w("TUBENEXT_RENDER", "destroy crashed Gecko tab failed tab=$tabId", error)
+            }
+
+            val replacement = createBrowserTab(
+                TabSession(id = tabId, url = url, title = title),
+                loadInitialUrl = wasSelected
+            )
+            replacement.navigationHistory.clear()
+            replacement.navigationHistory.addAll(history)
+            replacement.historyIndex = historyIndex
+            replacement.title = title
+            replacement.url = url
+            tabManager.update(tabId, url, title)
+
+            if (wasSelected) {
+                selectedTabId = tabId
+                attachOnlySelectedTabView(tabId)
+                replacement.engineTab.onResume()
+                updateToolbarState()
+                refreshLoadingOverlayForSelectedTab()
+                syncTabLayout()
+                scheduleGeckoRenderHealthCheck("engine-$reason-recovered", delayMs = 1_500L)
+            } else {
+                syncTabLayout()
             }
         }
     }
@@ -627,7 +836,32 @@ class MainActivity : AppCompatActivity() {
             scheduleGeckoRenderHealthRetry(tabId, generation, "$reason:capture-failed", attempt + 1)
             return
         }
+        logRecentProcessExitInfo("render-health-failure:$reason")
         recoverVisibleGeckoSurface(tabId, "$reason:capture-failed")
+    }
+
+    private fun logRecentProcessExitInfo(reason: String) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        val activityManager = getSystemService<ActivityManager>() ?: return
+        val exits = runCatching {
+            activityManager.getHistoricalProcessExitReasons(packageName, 0, RECENT_EXIT_INFO_LIMIT)
+        }.getOrElse { error ->
+            Log.w("TUBENEXT_EXIT", "read process exit info failed reason=$reason", error)
+            return
+        }
+        exits.forEach { exit ->
+            val processName = exit.processName.orEmpty()
+            if (!processName.startsWith(packageName)) return@forEach
+            val key = "${exit.timestamp}:${exit.pid}:$processName:${exit.reason}:${exit.status}"
+            if (!loggedProcessExitKeys.add(key)) return@forEach
+            Log.w(
+                "TUBENEXT_EXIT",
+                "recent process exit trigger=$reason process=$processName pid=${exit.pid} " +
+                    "reason=${exit.reason} status=${exit.status} " +
+                    "importance=${exit.importance} pss=${exit.pss} rss=${exit.rss} " +
+                    "description=${exit.description.orEmpty()}"
+            )
+        }
     }
 
     private fun recoverVisibleGeckoSurface(tabId: String, reason: String) {
@@ -839,7 +1073,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadInCurrentTab(url: String) {
-        val tab = currentTab() ?: createAndSelectTab(url)
+        val tab = currentTab()?.let { ensureTabAwake(it.id, "load-current-tab") }
+            ?: createAndSelectTab(url)
         val normalizedUrl = normalizeStartUrl(url)
         val targetUrl = normalizedUrl
         tab.engineTab.loadUrl(targetUrl)
@@ -878,16 +1113,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun navigateBackInTabHistory(tab: AppTab): Boolean {
-        if (tab.historyIndex <= 0) return false
-        val currentCanonicalUrl = canonicalHistoryUrl(tab.url)
+        val activeTab = ensureTabAwake(tab.id, "history-back") ?: return false
+        if (activeTab.historyIndex <= 0) return false
+        val currentCanonicalUrl = canonicalHistoryUrl(activeTab.url)
         do {
-            tab.historyIndex -= 1
+            activeTab.historyIndex -= 1
         } while (
-            tab.historyIndex > 0 &&
-            tab.navigationHistory.getOrNull(tab.historyIndex) == currentCanonicalUrl
+            activeTab.historyIndex > 0 &&
+            activeTab.navigationHistory.getOrNull(activeTab.historyIndex) == currentCanonicalUrl
         )
-        tab.pendingHistoryNavigation = true
-        tab.engineTab.loadUrl(tab.navigationHistory[tab.historyIndex])
+        activeTab.pendingHistoryNavigation = true
+        activeTab.engineTab.loadUrl(activeTab.navigationHistory[activeTab.historyIndex])
         return true
     }
 
@@ -2399,6 +2635,49 @@ class MainActivity : AppCompatActivity() {
         return (value * resources.displayMetrics.density).toInt()
     }
 
+    private class HibernatedEngineTab(
+        context: Context,
+        override val id: String,
+        override var title: String,
+        override var url: String
+    ) : EngineTab {
+        override val view: View = FrameLayout(context)
+
+        override fun loadUrl(url: String) {
+            this.url = url
+        }
+
+        override fun reload() = Unit
+
+        override fun canGoBack(): Boolean = false
+
+        override fun goBack() = Unit
+
+        override fun stopLoading() = Unit
+
+        override fun detach() = Unit
+
+        override fun destroy() = Unit
+
+        override fun setDesktopMode(enabled: Boolean) = Unit
+
+        override fun isInCustomView(): Boolean = false
+
+        override fun exitFullscreenIfNeeded() = Unit
+
+        override fun evaluateJavascript(script: String, callback: ((String?) -> Unit)?) {
+            callback?.invoke(null)
+        }
+
+        override fun setHomeFeedSettings(settings: EngineHomeFeedSettings) = Unit
+
+        override fun onPause() = Unit
+
+        override fun onResume() = Unit
+
+        override fun recoverFromAudioRouteChange() = Unit
+    }
+
     companion object {
         const val EXTRA_SHOW_UPDATE_MANAGER = "de.shakie.tubenext.SHOW_UPDATE_MANAGER"
         private const val UPDATE_NOTIFICATION_PERMISSION_REQUEST_CODE = 73
@@ -2410,6 +2689,8 @@ class MainActivity : AppCompatActivity() {
         private const val GECKO_RENDER_HEALTH_RECHECK_DELAY_MS = 650L
         private const val GECKO_RENDER_HEALTH_MAX_ATTEMPTS = 2
         private const val GECKO_SURFACE_RECOVERY_THROTTLE_MS = 12_000L
+        private const val RECENT_EXIT_INFO_LIMIT = 16
+        private const val TARGET_LIVE_GECKO_TABS_AFTER_TRIM = 2
         private const val UPDATE_CHECK_INTERVAL_MS = 24L * 60L * 60L * 1000L
         private const val TAB_PREVIEW_TOP_OFFSET_RATIO = 0.12f
         private const val PREFERENCES_NAME = "tube_next_preferences"

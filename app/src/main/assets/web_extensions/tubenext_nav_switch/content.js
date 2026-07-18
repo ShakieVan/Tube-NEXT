@@ -754,6 +754,10 @@
       "  z-index: 2147483647 !important;",
       "  pointer-events: auto !important;",
       "}",
+      "html.tubenext-landscape-watch .ytp-contextmenu {",
+      "  display: none !important;",
+      "  pointer-events: none !important;",
+      "}",
       "html.tubenext-landscape-watch .ytp-chrome-bottom {",
       "  left: 12px !important;",
       "  right: 12px !important;",
@@ -1103,6 +1107,14 @@
     return document.querySelector("#movie_player, .html5-video-player");
   }
 
+  function isFullscreenPlayerMode() {
+    return isLandscapeWatch() ||
+      !!document.fullscreenElement ||
+      !!(document.documentElement &&
+        document.documentElement.classList.contains("tubenext-landscape-watch")) ||
+      !!document.querySelector("#movie_player.ytp-fullscreen, .html5-video-player.ytp-fullscreen");
+  }
+
   function isPlayerOverlayVisible() {
     var player = getMoviePlayer();
     if (!player) {
@@ -1358,10 +1370,7 @@
   }
 
   function handleLandscapeCueContextMenu(event) {
-    if (!isLandscapeWatch()) {
-      return;
-    }
-    if (event.defaultPrevented || isPlayerControlTarget(event.target)) {
+    if (!isFullscreenPlayerMode()) {
       return;
     }
     stopPlayerTapEvent(event);
@@ -1369,6 +1378,9 @@
     if (pendingSingleTapTimer) {
       window.clearTimeout(pendingSingleTapTimer);
       pendingSingleTapTimer = null;
+    }
+    if (isPlayerControlTarget(event.target)) {
+      return;
     }
     setCuePointFromVideo();
   }
@@ -1572,6 +1584,7 @@
   document.addEventListener("click", handleLandscapePlayerClick, true);
   document.addEventListener("click", handleDocumentClick, true);
   document.addEventListener("dblclick", handleLandscapePlayerDoubleClick, true);
+  window.addEventListener("contextmenu", handleLandscapeCueContextMenu, true);
   document.addEventListener("contextmenu", handleLandscapeCueContextMenu, true);
   document.addEventListener("contextmenu", handleDocumentContextMenu, true);
   window.addEventListener("scroll", updateScrollTopButton, { passive: true });

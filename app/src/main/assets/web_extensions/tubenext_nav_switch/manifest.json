@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Tube NEXT Nav Switch",
-  "version": "1.10",
+  "version": "1.11",
   "description": "Intercepts YouTube mode-boundary clicks before SPA navigation.",
   "applications": {
     "gecko": {

@@ -368,6 +368,61 @@
     }
   }
 
+  function commentManagementEndpoint(rawRenderer) {
+    var data = rawRenderer && (
+      rawRenderer.data ||
+      rawRenderer.__data && rawRenderer.__data.data
+    );
+    var endpoint = data && data.navigationEndpoint;
+    if (!endpoint) {
+      return null;
+    }
+    if (endpoint.updateCommentDialogEndpoint ||
+        endpoint.updateCommentReplyDialogEndpoint) {
+      return endpoint;
+    }
+    var confirmDialog = endpoint.confirmDialogEndpoint &&
+      endpoint.confirmDialogEndpoint.content &&
+      endpoint.confirmDialogEndpoint.content.confirmDialogRenderer;
+    var confirmButton = confirmDialog && confirmDialog.confirmButton;
+    var serviceEndpoint = confirmButton &&
+      confirmButton.buttonRenderer &&
+      confirmButton.buttonRenderer.serviceEndpoint;
+    return serviceEndpoint && serviceEndpoint.performCommentActionEndpoint
+      ? endpoint
+      : null;
+  }
+
+  function handleCommentManagementTap(event) {
+    if (typeof event.composedPath !== "function") {
+      return;
+    }
+    var eventPath = event.composedPath();
+    var renderer = eventPath.find(function (node) {
+      return node &&
+        node.tagName === "YTD-MENU-NAVIGATION-ITEM-RENDERER";
+    });
+    if (!renderer) {
+      return;
+    }
+    var rawRenderer = renderer.wrappedJSObject || renderer;
+    if (!commentManagementEndpoint(rawRenderer) ||
+        typeof rawRenderer.onEndpointTap_ !== "function") {
+      return;
+    }
+    var dropdown = eventPath.find(function (node) {
+      return node && node.tagName === "TP-YT-IRON-DROPDOWN";
+    });
+    var rawDropdown = dropdown &&
+      (dropdown.wrappedJSObject || dropdown);
+    try {
+      rawRenderer.onEndpointTap_(event.wrappedJSObject || event);
+      if (rawDropdown && typeof rawDropdown.close === "function") {
+        rawDropdown.close();
+      }
+    } catch (_) {}
+  }
+
   function ensureYouTubeDarkPreference() {
     if (!isYouTubeHost(window.location.hostname)) {
       return;
@@ -1582,6 +1637,7 @@
   document.addEventListener("touchend", handleLandscapePlayerTouchEnd, true);
   document.addEventListener("touchcancel", handleLandscapePlayerTouchCancel, true);
   document.addEventListener("click", handleLandscapePlayerClick, true);
+  document.addEventListener("tap", handleCommentManagementTap, true);
   document.addEventListener("click", handleDocumentClick, true);
   document.addEventListener("dblclick", handleLandscapePlayerDoubleClick, true);
   window.addEventListener("contextmenu", handleLandscapeCueContextMenu, true);

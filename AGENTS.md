@@ -191,3 +191,22 @@ Fuer Link-Oeffnung sind Intent-Filter fuer mindestens folgende Hosts relevant:
 - Dokumentiere Annahmen direkt im Code oder in kurzen Projekt-Notizen.
 - Wenn technische Grenzen von WebView oder YouTube die Wunschfunktion blockieren, benenne die Einschraenkung klar statt fragilen Workaround-Code zu bauen.
 - Schlage nur dann komplexere Architektur vor, wenn ein konkreter Engpass sichtbar ist.
+
+## Projektdokumentation
+- Beginne bei [`docs/README.md`](docs/README.md). Dort ist festgelegt, welche
+  Information in welche Datei gehoert.
+- Lies vor einer Aenderung die einschlaegigen Entscheidungen und technischen
+  Notizen. Fuer die Watch-Seite ist
+  [`docs/decisions/desktop-watch-mobile-layout.md`](docs/decisions/desktop-watch-mobile-layout.md)
+  verbindlich.
+- Halte nicht offensichtliche Erkenntnisse zu YouTube, GeckoView oder
+  Android-Laufzeitverhalten unter `docs/technical-notes/` fest.
+- Dokumentiere dauerhafte Architektur- und Produktentscheidungen unter
+  `docs/decisions/`.
+- Aktualisiere bei einem Release sowohl die Versionswerte als auch eine Datei
+  `docs/releases/vX.Y.Z.md`.
+- Code-Kommentare erklaeren nur lokale Implementierungsdetails. Wissen, das
+  fuer kuenftige Aenderungen oder Regressionstests relevant ist, gehoert
+  zusaetzlich in die Projektdokumentation.
+- Wenn ein Workaround ersetzt oder eine Erkenntnis widerlegt wird, aktualisiere
+  die kanonische Notiz und markiere ueberholte historische Aussagen deutlich.

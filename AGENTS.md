@@ -195,6 +195,9 @@ Fuer Link-Oeffnung sind Intent-Filter fuer mindestens folgende Hosts relevant:
 ## Projektdokumentation
 - Beginne bei [`docs/README.md`](docs/README.md). Dort ist festgelegt, welche
   Information in welche Datei gehoert.
+- Pruefe beim Start eines neuen Tasks mit Git und dem aktuellen Arbeitsordner,
+  dass wirklich dieses Repository bearbeitet wird. Verlasse dich fuer Branch,
+  Release und Arbeitsstand nicht auf einen alten Chat-Handoff.
 - Lies vor einer Aenderung die einschlaegigen Entscheidungen und technischen
   Notizen. Fuer die Watch-Seite ist
   [`docs/decisions/desktop-watch-mobile-layout.md`](docs/decisions/desktop-watch-mobile-layout.md)

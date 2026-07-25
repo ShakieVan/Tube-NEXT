@@ -22,6 +22,24 @@ Release in kleinen, separat committeten Schritten bearbeitet.
 Vollstaendige Chat-Transkripte werden nicht ins Repository kopiert. Der Index
 enthaelt nur Herkunft, Bearbeitungsstand und Ziel der verdichteten Erkenntnis.
 
+## Wiederanlauf in einem neuen Task
+
+Ein manueller Chat-Handoff mit fest eingetragenem Branch, Release oder
+Arbeitsstand veraltet schnell und kann sogar auf den falschen Ordner zeigen.
+Ein neuer Task beginnt deshalb mit:
+
+1. `AGENTS.md` und [`../README.md`](../README.md) lesen,
+2. Repository-Wurzel, Branch und Arbeitsbaum mit Git pruefen,
+3. letzten Release-Tag und aktuelle Versionswerte aus Git und Gradle
+   ermitteln,
+4. fuer das Thema relevante Entscheidungen und technische Notizen lesen,
+5. den offenen Audit-Stand aus [`chat-index.md`](chat-index.md) nur dann
+   heranziehen, wenn historische Aufarbeitung Teil des Tasks ist.
+
+Alte Handoff-Texte sind Quellen fuer die Historie, aber keine Autoritaet fuer
+den aktuellen Projektstand. Der korrekte Repository-Ordner heisst
+`Tube-NEXT`; ein alter Workspace `Youtube-NEXT` ist nicht gleichbedeutend.
+
 ## Status
 
 - `ungeprueft`: Task wurde nur inventarisiert.

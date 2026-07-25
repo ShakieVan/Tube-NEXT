@@ -140,6 +140,8 @@ Nachrichtentyp und Ziel-URL validiert.
 
 ## Verwandte Schutzschichten
 
+- Login-, Consent- und Link-Handling:
+  [`login-consent-and-link-handling.md`](login-consent-and-link-handling.md)
 - Hintergrundwiedergabe und System-Mediensteuerung:
   [`background-audio-notification.md`](background-audio-notification.md)
 - Schwarze Surfaces und Prozessverlust:
@@ -174,4 +176,3 @@ unbemerkt durch vorsorgliche Reloads ersetzen.
 - `f91ab43`: kanonische Back-History und Gecko-Landscape-Pfad.
 - `3c470b8`: gemeinsame Runtime und Session-Retention bei
   Activity-Neustarts stabilisiert.
-

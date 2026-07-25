@@ -20,7 +20,7 @@ Inventur: 25.07.2026
 | 15.03.2026 | Trace fullscreen regression from RC1 | `019cf1f5-ec4f-7df3-b22b-fe409f83f30c` | bestaetigt (25.07.2026) | [`watch-fullscreen-lifecycle.md`](../technical-notes/watch-fullscreen-lifecycle.md) |
 | 15.03.2026 | Ersetze Watch-Timer durch Check | `019cf138-481a-7601-9076-31bd7f0fb5c5` | bestaetigt (25.07.2026) | [`watch-readiness-and-retries.md`](../technical-notes/watch-readiness-and-retries.md) |
 | 15.03.2026 | Analysiere YouTube Desktop CSS | `019cf03e-705c-7441-bdab-6a42f6e84f47` | bestaetigt (25.07.2026) | [`youtube-responsive-layout-diagnostics.md`](../technical-notes/youtube-responsive-layout-diagnostics.md), [`desktop-watch-mobile-layout.md`](../decisions/desktop-watch-mobile-layout.md) |
-| 13.03.2026 | Setze AGENTS-Anweisungen um | `019ce74d-92d1-78b0-ba1b-94bdb6035bf7` | ungeprueft | Arbeits- und Dokumentationsregeln |
+| 13.03.2026 | Setze AGENTS-Anweisungen um | `019ce74d-92d1-78b0-ba1b-94bdb6035bf7` | bestaetigt (25.07.2026) | [`login-consent-and-link-handling.md`](../technical-notes/login-consent-and-link-handling.md), bestehende Watch- und Navigationsnotizen |
 | 13.03.2026 | Ueberpruefe AGENTS.md | `019ce743-346e-7960-a98c-9b89c5ba5858` | ungeprueft | Arbeits- und Dokumentationsregeln |
 
 ## Naechste Pruefgruppe

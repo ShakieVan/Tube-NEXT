@@ -26,6 +26,9 @@ Bestehende Querschnittsdokumente:
   Umstellung von Android WebView auf GeckoView.
 - [`technical-notes/geckoview-runtime-and-navigation.md`](technical-notes/geckoview-runtime-and-navigation.md):
   aktueller GeckoView-Laufzeit-, Session- und Navigationsvertrag.
+- [`technical-notes/login-consent-and-link-handling.md`](technical-notes/login-consent-and-link-handling.md):
+  interne Login-/Consent-Flows, externe Ziele und der begrenzte
+  Long-Press-Neuer-Tab-Pfad.
 - [`technical-notes/watch-fullscreen-lifecycle.md`](technical-notes/watch-fullscreen-lifecycle.md):
   heutige Aufgabenteilung und historische Erkenntnisse zu Watch,
   Landscape, Fullscreen und Lade-Overlay.

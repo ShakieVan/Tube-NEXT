@@ -20,6 +20,8 @@ Bestehende Querschnittsdokumente:
 
 - [`rebuild-log.md`](rebuild-log.md): historische Umsetzung und manuelle
   Abnahme des fruehen Neuaufbaus.
+- [`decisions/geckoview-only-browser-engine.md`](decisions/geckoview-only-browser-engine.md):
+  verbindliche Engine- und Medienarchitektur.
 - [`hotrod-engine-migration.md`](hotrod-engine-migration.md): Verlauf der
   Umstellung von Android WebView auf GeckoView.
 - [`technical-notes/geckoview-runtime-and-navigation.md`](technical-notes/geckoview-runtime-and-navigation.md):

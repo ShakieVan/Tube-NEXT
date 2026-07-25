@@ -16,7 +16,7 @@ Inventur: 25.07.2026
 | 19.05.2026 | Neue Chat-Infos speichern | `019e3e9e-b95c-7662-bff3-2ff4ab735fec` | ersetzt (25.07.2026) | [`README.md`](README.md), [`AGENTS.md`](../../AGENTS.md) |
 | 15.05.2026 | Android Studio-Fehler beheben | `019e2b0b-b6b9-77e1-8a63-bc79c782f642` | ohne-dauerwissen (25.07.2026) | kein Projektfehler; damaliger IDE-Directory-Lock |
 | 17.03.2026 | Gecko Engine 2 | `019cfcd2-b9c3-7803-92a7-dd6e5480869c` | bestaetigt (25.07.2026) | [`geckoview-runtime-and-navigation.md`](../technical-notes/geckoview-runtime-and-navigation.md), bestehende Audio-, Surface- und Watch-Notizen |
-| 17.03.2026 | Gecko Engine | `019cfc40-8477-7743-a05e-164bfa25ca39` | ungeprueft | GeckoView- und Hintergrund-Audio-Architektur |
+| 17.03.2026 | Gecko Engine | `019cfc40-8477-7743-a05e-164bfa25ca39` | bestaetigt (25.07.2026) | [`geckoview-only-browser-engine.md`](../decisions/geckoview-only-browser-engine.md), [`hotrod-engine-migration.md`](../hotrod-engine-migration.md), [`AGENTS.md`](../../AGENTS.md) |
 | 15.03.2026 | Trace fullscreen regression from RC1 | `019cf1f5-ec4f-7df3-b22b-fe409f83f30c` | ungeprueft | Fullscreen-/Watch-Notiz |
 | 15.03.2026 | Ersetze Watch-Timer durch Check | `019cf138-481a-7601-9076-31bd7f0fb5c5` | ungeprueft | Watch-Lebenszyklus-Notiz |
 | 15.03.2026 | Analysiere YouTube Desktop CSS | `019cf03e-705c-7441-bdab-6a42f6e84f47` | ungeprueft | Watch-Layout-Entscheidung |
@@ -25,9 +25,9 @@ Inventur: 25.07.2026
 
 ## Naechste Pruefgruppe
 
-1. `019cfc40-8477-7743-a05e-164bfa25ca39`: erste Gecko-Engine-Runde
-   und die Abloesung der alten WebView-Architektur.
-2. `019cf1f5-ec4f-7df3-b22b-fe409f83f30c`: Fullscreen-Regression
+1. `019cf1f5-ec4f-7df3-b22b-fe409f83f30c`: Fullscreen-Regression
    seit RC1 gegen die heutige Watch-Implementierung abgleichen.
-3. `019cf138-481a-7601-9076-31bd7f0fb5c5`: Watch-Timer und
+2. `019cf138-481a-7601-9076-31bd7f0fb5c5`: Watch-Timer und
    Lebenszyklus gegen die heutige WebExtension pruefen.
+3. `019cf03e-705c-7441-bdab-6a42f6e84f47`: Desktop-CSS-Analyse
+   gegen die verbindliche Watch-Layout-Entscheidung pruefen.

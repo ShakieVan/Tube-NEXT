@@ -1,61 +1,76 @@
-# Hot Rod Engine Migration (Background-Audio Fokus)
+# Hot-Rod-Migration von WebView zu GeckoView
 
-## Ziel
-Die bisherige WebView-zentrierte Laufzeit wird durch eine einzelne, vollwertige Engine ersetzt.
-Die App-Shell (Toolbar, Tabs, Persistenz, Link-Einstieg) bleibt erhalten.
+Status: historische Migrationsnotiz; die aktuelle verbindliche Entscheidung
+steht in
+[`decisions/geckoview-only-browser-engine.md`](decisions/geckoview-only-browser-engine.md).
 
-## Leitprinzipien
-- Keine Hybrid-Tabs im Produktbetrieb.
-- Kleine, testbare Schritte.
-- Stabilitaet und Sitzungs-Persistenz vor Komfortfunktionen.
-- Background-Audio und Notification-Player sind Kernziele.
+## Ausgangslage
 
-## Phase 0 (abgeschlossen in diesem Branch-Stand)
-- Engine-Vertrag eingefuehrt:
-  - `BrowserEngine`
-  - `EngineTab`
-  - `EngineCallbacks`
-  - `EnginePlaybackState`
-  - `EngineType`
-- WebView als erste Engine-Implementierung hinter dem Vertrag vorbereitet:
-  - `WebViewBrowserEngine`
-- Background-Audio-Orchestrierung als eigenes Interface vorbereitet:
-  - `BackgroundAudioCoordinator`
+Die fruehe Tube-NEXT-App verwendete Android WebView. Hintergrundwiedergabe
+blieb trotz Foreground-Service, JavaScript-Zustandsabfrage und Media-Key-
+Experimenten unzuverlaessig. Ein Custom-Tab-Test konnte Audio zwar besser im
+Hintergrund halten, passte aber nicht zur eigenen Tab-Verwaltung und zum
+einheitlichen App-Erlebnis.
 
-## Phase 1 (naechster Schritt)
-- WebView-Anbindung hinter `BrowserEngine` kapseln.
-- `MainActivity` nur noch gegen `EngineTab` programmieren.
-- Keine direkten `WebView`-Typannahmen mehr in `MainActivity`.
+Der Arbeitsbranch `codex/background-audio` wurde deshalb im Maerz 2026 als
+"Hot Rod" fuer einen vollstaendigen Motorwechsel verwendet.
 
-Status:
-- Erledigt als Hard-Cut-Variante.
-- Laufzeit ist auf Gecko umgestellt.
-- Der alte WebView-Engine-Pfad wurde entfernt.
-- Einzelne UX-Funktionen, die vorher von WebView-HitTest abhaengig waren, sind vorerst reduziert.
+## Migrationsverlauf
 
-## Phase 2
-- GeckoView als zweite Implementierung von `BrowserEngine` integrieren.
-- Session-, URL-, Titel- und Fortschritts-Callbacks auf App-Shell durchreichen.
-- Vollbild-Events und Rotation engine-spezifisch adaptieren.
+### Engine-Vertrag
 
-## Phase 3
-- Engine-nativer Background-Media-Pfad:
-  - MediaSession
-  - Notification-Player
-  - Bluetooth/Headset-Steuerung
-- Fokusverlust-Handover:
-  - Playback-State aufnehmen (URL/Zeit/Status)
-  - Background-Playback fortsetzen
-  - Beim Resume in die aktive Engine-Session zuruecksyncen
+Commit `119cd8f` fuehrte die Trennung zwischen App-Shell und Browser-Laufzeit
+ein:
 
-## Phase 4
-- Gecko-only Runtime aktivieren (kein Mischbetrieb).
-- WebView-Engine nur noch als Fallback-Branch oder komplett entfernen.
+- `BrowserEngine`
+- `EngineTab`
+- `EngineCallbacks`
+- `EnginePlaybackState`
+- `EngineType`
+- `BackgroundAudioCoordinator`
 
-## Abnahme-Checkliste
-- Desktop-YouTube startet stabil.
-- Login bleibt nach App-Neustart erhalten.
-- Mindestens zwei Tabs stabil nutzbar.
-- Externe YouTube-Links landen in der App.
-- Vollbild/Rotation ohne sichtbare Regression.
-- Screen-Off + App-Hintergrund: Audio + Notification-Steuerung stabil.
+Ein kurzfristiger WebView-Adapter machte die Entkopplung der `MainActivity`
+kompilierbar. Er war eine Migrationsstuetze, kein geplanter Hybridbetrieb.
+Der Tag `hotrod-baseline-1` markierte diesen Zwischenstand.
+
+### Hard-Cut
+
+Der auf der Festplatte entstandene Gecko-Hard-Cut wurde mit `5c441fa`
+gesichert:
+
+- GeckoView-Abhaengigkeit und Mozilla-Maven-Repository aufgenommen,
+- `GeckoBrowserEngine` als einzige Runtime eingebunden,
+- Tabs auf `AppTab` und `EngineTab` umgestellt,
+- alte WebView-Factory, Clients, Tabklasse und Engine-Implementierung
+  entfernt,
+- WebView-spezifische JavaScript- und Fullscreen-Annahmen zunaechst
+  deaktiviert.
+
+Damit gab es bewusst keinen Produktstand mit gemischten WebView- und
+Gecko-Tabs.
+
+### Stabilisierung
+
+Die folgende Runde reparierte URL-Quelle, User-Agent-Modus,
+Single-Page-Navigation, Watch-Layout, Landscape, Tab-Vorschauen,
+Hintergrund-Audio und den Gecko-Lebenszyklus. Die heute gueltigen Regeln
+stehen nicht in dieser Chronik, sondern in:
+
+- [`technical-notes/geckoview-runtime-and-navigation.md`](technical-notes/geckoview-runtime-and-navigation.md)
+- [`technical-notes/background-audio-notification.md`](technical-notes/background-audio-notification.md)
+- [`decisions/desktop-watch-mobile-layout.md`](decisions/desktop-watch-mobile-layout.md)
+- [`technical-notes/gecko-black-surface-recovery.md`](technical-notes/gecko-black-surface-recovery.md)
+
+## Verworfen
+
+- WebView und Gecko dauerhaft parallel betreiben,
+- Watch-Seiten als Custom Tabs auslagern,
+- einen YouTube-Stream fuer einen eigenen Audio-Player extrahieren,
+- alte WebView-JavaScript-Aufrufe ueber `javascript:`-Navigation nachbilden.
+
+## Ergebnis
+
+Die App-Shell mit Toolbar, Tabs, Persistenz und Intent-Einstieg blieb erhalten.
+GeckoView uebernahm vollstaendig Rendering, Web-Media und Sitzungen. Die
+Android-Medienbenachrichtigung steuert die Gecko-Wiedergabe, statt einen
+zweiten Player zu betreiben.

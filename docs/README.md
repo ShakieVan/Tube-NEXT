@@ -29,6 +29,8 @@ Bestehende Querschnittsdokumente:
 - [`technical-notes/watch-fullscreen-lifecycle.md`](technical-notes/watch-fullscreen-lifecycle.md):
   heutige Aufgabenteilung und historische Erkenntnisse zu Watch,
   Landscape, Fullscreen und Lade-Overlay.
+- [`technical-notes/watch-readiness-and-retries.md`](technical-notes/watch-readiness-and-retries.md):
+  Grenzen von Lade-/Fertigerkennung und Regeln fuer sichere DOM-Nachlaeufe.
 
 ## Was wird wo dokumentiert?
 

@@ -31,6 +31,8 @@ Bestehende Querschnittsdokumente:
   Landscape, Fullscreen und Lade-Overlay.
 - [`technical-notes/watch-readiness-and-retries.md`](technical-notes/watch-readiness-and-retries.md):
   Grenzen von Lade-/Fertigerkennung und Regeln fuer sichere DOM-Nachlaeufe.
+- [`technical-notes/youtube-responsive-layout-diagnostics.md`](technical-notes/youtube-responsive-layout-diagnostics.md):
+  Live-Diagnose von Layout-, Sichtviewport und YouTube-Breakpoints.
 
 ## Was wird wo dokumentiert?
 

@@ -19,6 +19,13 @@ insbesondere die Auswahl verfuegbarer Audio-Kanaele. Genau die Verbindung aus
 Desktop-Funktionsumfang und mobil brauchbarer Bedienung ist ein wesentlicher
 Produktvorteil von Tube NEXT.
 
+Die historische Laufzeitanalyse zeigte fuer den fehlerhaften globalen
+Desktop-Ansatz einen Layout-Viewport von etwa 980 CSS-Pixeln bei nur etwa 411
+sichtbaren CSS-Pixeln. YouTubes Desktop-Breakpoints reagierten darauf korrekt,
+die Inhalte passten aber nicht auf das Display. Messmethode und technische
+Folgerungen stehen in
+[`../technical-notes/youtube-responsive-layout-diagnostics.md`](../technical-notes/youtube-responsive-layout-diagnostics.md).
+
 ## Grenzen fuer Aenderungen
 
 - Layout-, Viewport-, CSS- und Touch-Anpassungen duerfen den Desktop-Modus

@@ -10,7 +10,7 @@ Inventur: 25.07.2026
 | 25.05.2026 | Pruefe Hintergrundnutzung | `019e5d95-e3a5-7d81-b46a-b246b1011d22` | bestaetigt (25.07.2026) | [`background-resource-management.md`](../technical-notes/background-resource-management.md) |
 | 25.05.2026 | Kommentar-Button ergaenzen | `019e5d66-97ca-78e3-9013-d3b9a1dbd59a` | bestaetigt (25.07.2026) | [`youtube-comment-navigation.md`](../technical-notes/youtube-comment-navigation.md) |
 | 25.05.2026 | Update-Benachrichtigung hinzufuegen | `019e5d01-c4b7-7bf0-924a-3ccae6d63a2f` | bestaetigt (25.07.2026) | [`self-update-flow.md`](../technical-notes/self-update-flow.md) |
-| 22.05.2026 | Player-Benachrichtigung fixen | `019e4df2-9c4d-7272-8100-77f1eeedc839` | ungeprueft | Hintergrund-Audio-/MediaSession-Notiz |
+| 22.05.2026 | Player-Benachrichtigung fixen | `019e4df2-9c4d-7272-8100-77f1eeedc839` | bestaetigt (25.07.2026) | [`background-audio-notification.md`](../technical-notes/background-audio-notification.md) |
 | 21.05.2026 | Watch-Seite-Optionen erweitern | `019e4ab5-8649-7961-a742-ba4bd04450f0` | ungeprueft | Watch-Entscheidung und technische Notizen |
 | 19.05.2026 | Optimierungen | `019e3ea4-3861-7422-b3bf-51de38a8b562` | ungeprueft | nach Sichtung |
 | 19.05.2026 | Neue Chat-Infos speichern | `019e3e9e-b95c-7662-bff3-2ff4ab735fec` | ungeprueft | Dokumentationshistorie |
@@ -25,9 +25,9 @@ Inventur: 25.07.2026
 
 ## Naechste Pruefgruppe
 
-1. `019e4df2-9c4d-7272-8100-77f1eeedc839`: Lebenszyklus von
-   MediaSession, Foreground-Service und pausierter Notification.
-2. `019e4ab5-8649-7961-a742-ba4bd04450f0`: Watch-Optionen und ihre
+1. `019e4ab5-8649-7961-a742-ba4bd04450f0`: Watch-Optionen und ihre
    Abgrenzung zur Desktop-Funktionalitaet.
-3. `019e3ea4-3861-7422-b3bf-51de38a8b562`: unspezifische
+2. `019e3ea4-3861-7422-b3bf-51de38a8b562`: unspezifische
    Optimierungsrunde; zuerst Umfang und heutige Relevanz bestimmen.
+3. `019e3e9e-b95c-7662-bff3-2ff4ab735fec`: damalige
+   Dokumentationssammlung mit der heutigen Struktur abgleichen.

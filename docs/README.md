@@ -22,6 +22,8 @@ Bestehende Querschnittsdokumente:
   Abnahme des fruehen Neuaufbaus.
 - [`hotrod-engine-migration.md`](hotrod-engine-migration.md): Verlauf der
   Umstellung von Android WebView auf GeckoView.
+- [`technical-notes/geckoview-runtime-and-navigation.md`](technical-notes/geckoview-runtime-and-navigation.md):
+  aktueller GeckoView-Laufzeit-, Session- und Navigationsvertrag.
 
 ## Was wird wo dokumentiert?
 

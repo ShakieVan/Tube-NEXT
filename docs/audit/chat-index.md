@@ -21,12 +21,18 @@ Inventur: 25.07.2026
 | 15.03.2026 | Ersetze Watch-Timer durch Check | `019cf138-481a-7601-9076-31bd7f0fb5c5` | bestaetigt (25.07.2026) | [`watch-readiness-and-retries.md`](../technical-notes/watch-readiness-and-retries.md) |
 | 15.03.2026 | Analysiere YouTube Desktop CSS | `019cf03e-705c-7441-bdab-6a42f6e84f47` | bestaetigt (25.07.2026) | [`youtube-responsive-layout-diagnostics.md`](../technical-notes/youtube-responsive-layout-diagnostics.md), [`desktop-watch-mobile-layout.md`](../decisions/desktop-watch-mobile-layout.md) |
 | 13.03.2026 | Setze AGENTS-Anweisungen um | `019ce74d-92d1-78b0-ba1b-94bdb6035bf7` | bestaetigt (25.07.2026) | [`login-consent-and-link-handling.md`](../technical-notes/login-consent-and-link-handling.md), bestehende Watch- und Navigationsnotizen |
-| 13.03.2026 | Ueberpruefe AGENTS.md | `019ce743-346e-7960-a98c-9b89c5ba5858` | ungeprueft | Arbeits- und Dokumentationsregeln |
+| 13.03.2026 | Ueberpruefe AGENTS.md | `019ce743-346e-7960-a98c-9b89c5ba5858` | ersetzt (25.07.2026) | heutige [`AGENTS.md`](../../AGENTS.md) und [`docs/README.md`](../README.md) |
 
-## Naechste Pruefgruppe
+## Abschluss der Erstinventur
 
-1. `019ce74d-92d1-78b0-ba1b-94bdb6035bf7`: fruehe
-   AGENTS-Anweisungen auf noch gueltige Arbeitsregeln pruefen.
-2. `019ce743-346e-7960-a98c-9b89c5ba5858`: zweite fruehe
-   AGENTS-Pruefung gegen den heutigen Projektstand abgleichen.
-3. Danach ist die Inventur der 18 erfassten Projekt-Tasks abgeschlossen.
+Alle 18 am 25.07.2026 inventarisierten Tasks sind geprueft:
+
+- 15 Tasks enthalten bestaetigtes Dauerwissen und verweisen auf kanonische
+  Entscheidungen oder technische Notizen.
+- 2 fruehe Dokumentationsstaende sind durch die heutige Projektanleitung
+  ersetzt.
+- 1 lokales IDE-Lock-Problem enthielt kein zusaetzliches Dauerwissen.
+
+Damit gibt es in dieser Inventur keinen offenen oder nur inventarisierten
+Eintrag mehr. Spaeter gefundene Tasks werden als neue Zeile zunaechst mit
+`ungeprueft` aufgenommen und nach demselben Ablauf einzeln ausgewertet.

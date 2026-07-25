@@ -67,6 +67,11 @@ der exakte Projektname `Tube-NEXT` vorkommt. Sie erfasst damit auch Tasks, die
 in der aktuellen Seitenleiste nicht mehr unter den 50 juengsten Eintraegen
 liegen.
 
+Die 18 dabei gefundenen Tasks wurden am 25.07.2026 vollstaendig ausgewertet.
+Der aktuelle Abschluss- und Herkunftsstand steht in
+[`chat-index.md`](chat-index.md). Neue Fundstellen erweitern diese Inventur,
+oeffnen die bereits geprueften Eintraege aber nicht pauschal erneut.
+
 Nicht automatisch enthalten sind:
 
 - geloeschte oder nicht mehr lokal vorhandene Tasks,

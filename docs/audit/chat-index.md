@@ -7,7 +7,7 @@ Inventur: 25.07.2026
 | 25.07.2026 | Fix Kommentar-Bearbeitung | `019f975e-aaa8-7f53-8847-c42020b765a1` | bestaetigt | [`youtube-comment-menu.md`](../technical-notes/youtube-comment-menu.md), [`desktop-watch-mobile-layout.md`](../decisions/desktop-watch-mobile-layout.md) |
 | 18.07.2026 | Unterdruecke Kontextmenue im Fullscreen | `019f766b-dbb0-70a0-93a8-0c99d9b2612d` | bestaetigt (25.07.2026) | [`fullscreen-context-menu.md`](../technical-notes/fullscreen-context-menu.md) |
 | 27.05.2026 | Schwarze Seite beheben | `019e69b3-d08f-7a41-b2c0-f47c7601dd67` | bestaetigt (25.07.2026) | [`gecko-black-surface-recovery.md`](../technical-notes/gecko-black-surface-recovery.md) |
-| 25.05.2026 | Pruefe Hintergrundnutzung | `019e5d95-e3a5-7d81-b46a-b246b1011d22` | ungeprueft | `technical-notes/background-resource-management.md` |
+| 25.05.2026 | Pruefe Hintergrundnutzung | `019e5d95-e3a5-7d81-b46a-b246b1011d22` | bestaetigt (25.07.2026) | [`background-resource-management.md`](../technical-notes/background-resource-management.md) |
 | 25.05.2026 | Kommentar-Button ergaenzen | `019e5d66-97ca-78e3-9013-d3b9a1dbd59a` | ungeprueft | Watch-/Kommentar-Notiz |
 | 25.05.2026 | Update-Benachrichtigung hinzufuegen | `019e5d01-c4b7-7bf0-924a-3ccae6d63a2f` | ungeprueft | Update-Architektur und Testnotiz |
 | 22.05.2026 | Player-Benachrichtigung fixen | `019e4df2-9c4d-7272-8100-77f1eeedc839` | ungeprueft | Hintergrund-Audio-/MediaSession-Notiz |
@@ -25,9 +25,9 @@ Inventur: 25.07.2026
 
 ## Naechste Pruefgruppe
 
-1. `019e5d95-e3a5-7d81-b46a-b246b1011d22`: Regeln zum Schlafenlegen und
-   Wiederherstellen von Hintergrund-Tabs bei Speicherdruck.
-2. `019e5d66-97ca-78e3-9013-d3b9a1dbd59a`: Ursprung und Grenzen des
+1. `019e5d66-97ca-78e3-9013-d3b9a1dbd59a`: Ursprung und Grenzen des
    Kommentar-Sprungbuttons.
-3. `019e5d01-c4b7-7bf0-924a-3ccae6d63a2f`: Aufbau, Auswahlregeln und Grenzen
+2. `019e5d01-c4b7-7bf0-924a-3ccae6d63a2f`: Aufbau, Auswahlregeln und Grenzen
    der Update-Benachrichtigung.
+3. `019e4df2-9c4d-7272-8100-77f1eeedc839`: Lebenszyklus von
+   MediaSession, Foreground-Service und pausierter Notification.

@@ -12,7 +12,7 @@ Inventur: 25.07.2026
 | 25.05.2026 | Update-Benachrichtigung hinzufuegen | `019e5d01-c4b7-7bf0-924a-3ccae6d63a2f` | bestaetigt (25.07.2026) | [`self-update-flow.md`](../technical-notes/self-update-flow.md) |
 | 22.05.2026 | Player-Benachrichtigung fixen | `019e4df2-9c4d-7272-8100-77f1eeedc839` | bestaetigt (25.07.2026) | [`background-audio-notification.md`](../technical-notes/background-audio-notification.md) |
 | 21.05.2026 | Watch-Seite-Optionen erweitern | `019e4ab5-8649-7961-a742-ba4bd04450f0` | bestaetigt (25.07.2026) | [`watch-page-options-and-taps.md`](../technical-notes/watch-page-options-and-taps.md), [`desktop-watch-mobile-layout.md`](../decisions/desktop-watch-mobile-layout.md) |
-| 19.05.2026 | Optimierungen | `019e3ea4-3861-7422-b3bf-51de38a8b562` | ungeprueft | nach Sichtung |
+| 19.05.2026 | Optimierungen | `019e3ea4-3861-7422-b3bf-51de38a8b562` | bestaetigt (25.07.2026) | [`tab-restoration-and-previews.md`](../technical-notes/tab-restoration-and-previews.md), [`build-variants-and-geckoview-r8.md`](../technical-notes/build-variants-and-geckoview-r8.md), [`youtube-home-feed-filters.md`](../technical-notes/youtube-home-feed-filters.md) |
 | 19.05.2026 | Neue Chat-Infos speichern | `019e3e9e-b95c-7662-bff3-2ff4ab735fec` | ungeprueft | Dokumentationshistorie |
 | 15.05.2026 | Android Studio-Fehler beheben | `019e2b0b-b6b9-77e1-8a63-bc79c782f642` | ungeprueft | Build-/Toolchain-Notiz |
 | 17.03.2026 | Gecko Engine 2 | `019cfcd2-b9c3-7803-92a7-dd6e5480869c` | ungeprueft | GeckoView-Architektur |
@@ -25,9 +25,9 @@ Inventur: 25.07.2026
 
 ## Naechste Pruefgruppe
 
-1. `019e3ea4-3861-7422-b3bf-51de38a8b562`: unspezifische
-   Optimierungsrunde; zuerst Umfang und heutige Relevanz bestimmen.
-2. `019e3e9e-b95c-7662-bff3-2ff4ab735fec`: damalige
+1. `019e3e9e-b95c-7662-bff3-2ff4ab735fec`: damalige
    Dokumentationssammlung mit der heutigen Struktur abgleichen.
-3. `019e2b0b-b6b9-77e1-8a63-bc79c782f642`: damaligen
+2. `019e2b0b-b6b9-77e1-8a63-bc79c782f642`: damaligen
    Android-Studio-/Buildfehler gegen die heutige Toolchain pruefen.
+3. `019cfcd2-b9c3-7803-92a7-dd6e5480869c`: zweite
+   Gecko-Engine-Runde und ihre bleibenden Architekturentscheidungen.

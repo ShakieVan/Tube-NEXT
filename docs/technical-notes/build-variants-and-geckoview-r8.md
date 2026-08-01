@@ -68,16 +68,23 @@ PowerShell-Aufruf steht in der Projekt-`README.md`.
 
 ## ABI-Aufteilung
 
-Die App erzeugt keine Universal-APK, sondern vier ABI-spezifische Varianten:
+Die App erzeugt keine Universal-APK, sondern drei ABI-spezifische Varianten:
 
 - `arm64-v8a`
 - `armeabi-v7a`
 - `x86_64`
-- `x86`
 
 Das reduziert die einzelne Downloadgroesse gegenueber einer APK mit allen
 GeckoView-Nativbibliotheken. ARM-Varianten sind fuer reale Geraete,
-x86-Varianten primaer fuer passende Emulatoren vorgesehen.
+`x86_64` primaer fuer passende Emulatoren und manche Chromebooks vorgesehen.
+
+GeckoView `152.0.20260706120035` enthaelt keine 32-Bit-`x86`-Nativbibliothek
+mehr. Ein trotzdem konfigurierter Android-ABI-Split erzeugt zwar eine kleine
+APK, diese enthaelt jedoch weder `libxul.so` noch anderen Gecko-Nativcode und
+ist nicht lauffaehig. Seit `v1.4.0` wird dieser Schein-Build deshalb weder
+erzeugt noch veroeffentlicht. Die Updateverwaltung darf `x86` weiterhin als
+ABI-Token eindeutig von `x86_64` abgrenzen; ohne passendes Asset meldet sie
+das Geraet korrekt als inkompatibel.
 
 ## R8-Historie
 
@@ -135,6 +142,8 @@ diesem Groessengewinn.
   R8-/Shrink-Versuch.
 - `v1.0.2`, Commit `64ff4c5`: Hotfix mit deaktiviertem Minify und
   Resource-Shrinking nach realem arm64-Startcrash.
+- `v1.4.0`: den nicht lauffaehigen 32-Bit-`x86`-Schein-Split entfernt, weil
+  GeckoView 152 dafuer keinen Nativcode mehr liefert.
 
 ## Release-Regressionstest
 
@@ -146,7 +155,8 @@ diesem Groessengewinn.
 5. Debug, Local Release und Release parallel installieren und getrennte Daten
    bestaetigen.
 6. Release-Signatur gegen die erwartete Produktionssignatur pruefen.
-7. Alle vier ABI-APKs bauen und Paket-/Versionsdaten kontrollieren.
+7. Alle drei unterstuetzten ABI-APKs bauen und Paket-/Versionsdaten sowie
+   enthaltenen Nativcode kontrollieren.
 8. arm64-Release auf realer Hardware installieren und mehrfach kalt starten.
 9. Logcat/Crash-Buffer auf native Gecko-/`libxul.so`-Abstuerze pruefen.
 10. R8 und Resource-Shrinking nicht ohne eine ausdrueckliche neue

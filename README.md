@@ -119,7 +119,10 @@ welches Geraet gedacht ist:
 - `arm64-v8a`: moderne Android-Smartphones und -Tablets
 - `armeabi-v7a`: aeltere 32-Bit-ARM-Geraete
 - `x86_64`: Android-Emulatoren und manche Chromebooks
-- `x86`: aeltere Emulatoren oder Intel-Android-Geraete
+
+Eine 32-Bit-`x86`-APK wird nicht mehr veroeffentlicht, weil die verwendete
+GeckoView-Version dafuer keine Nativbibliothek enthaelt. Ein nur durch den
+Gradle-Split erzeugtes APK ohne Gecko-Nativcode ist nicht lauffaehig.
 
 Tube NEXT kann in der integrierten Updateverwaltung automatisch das passende
 APK auswaehlen, wenn die GitHub-Release-Assets die ABI im Dateinamen tragen,

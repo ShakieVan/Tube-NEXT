@@ -1,6 +1,6 @@
 package de.shakie.tubenext.browser
 
-import android.net.Uri
+import java.net.URI
 
 object YouTubeNavigationPolicy {
     enum class RenderMode {
@@ -18,27 +18,51 @@ object YouTubeNavigationPolicy {
 
     fun isWatchUrl(url: String): Boolean {
         val uri = parseHttpUri(url) ?: return false
-        val host = uri.host?.lowercase().orEmpty()
+        val host = uri.host.lowercase()
         if (!isSupportedYouTubeHost(host)) return false
         return host == "youtu.be" || uri.path.orEmpty().startsWith("/watch")
     }
 
     fun isUserVisibleUrl(url: String): Boolean {
         val uri = parseHttpUri(url) ?: return false
-        val host = uri.host?.lowercase().orEmpty()
-        return isSupportedYouTubeHost(host) && !isTransientInternalUrl(uri)
+        return isSupportedYouTubeHost(uri.host.lowercase())
     }
 
     fun isSupportedYouTubeUrl(url: String): Boolean {
         val uri = parseHttpUri(url) ?: return false
-        return isSupportedYouTubeHost(uri.host?.lowercase().orEmpty())
+        return isSupportedYouTubeHost(uri.host.lowercase())
     }
 
-    private fun parseHttpUri(url: String): Uri? {
+    fun videoIdForUrl(url: String): String? {
+        val uri = parseHttpUri(url) ?: return null
+        val host = uri.host.lowercase()
+        if (!isSupportedYouTubeHost(host)) return null
+        if (host == "youtu.be") {
+            return uri.path.orEmpty()
+                .trim('/')
+                .substringBefore('/')
+                .takeIf(::isValidVideoId)
+        }
+        if (!uri.path.orEmpty().startsWith("/watch")) return null
+        return uri.rawQuery.orEmpty()
+            .split('&')
+            .firstNotNullOfOrNull { part ->
+                val key = part.substringBefore('=', missingDelimiterValue = "")
+                val value = part.substringAfter('=', missingDelimiterValue = "")
+                value.takeIf { key == "v" && isValidVideoId(it) }
+            }
+    }
+
+    fun urlsReferToSameVideo(firstUrl: String, secondUrl: String): Boolean {
+        val firstVideoId = videoIdForUrl(firstUrl) ?: return false
+        return firstVideoId == videoIdForUrl(secondUrl)
+    }
+
+    private fun parseHttpUri(url: String): URI? {
         if (url.isBlank()) return null
-        val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return null
+        val uri = runCatching { URI(url) }.getOrNull() ?: return null
         val scheme = uri.scheme?.lowercase().orEmpty()
-        if (scheme != "http" && scheme != "https") return null
+        if ((scheme != "http" && scheme != "https") || uri.host.isNullOrBlank()) return null
         return uri
     }
 
@@ -49,10 +73,9 @@ object YouTubeNavigationPolicy {
             host == "youtu.be"
     }
 
-    private fun isTransientInternalUrl(uri: Uri): Boolean {
-        val host = uri.host?.lowercase().orEmpty()
-        val path = uri.path.orEmpty()
-        return host == "accounts.youtube.com" &&
-            path.startsWith("/RotateCookiesPage", ignoreCase = true)
+    private fun isValidVideoId(value: String): Boolean {
+        return value.isNotBlank() && value.all { character ->
+            character.isLetterOrDigit() || character == '-' || character == '_'
+        }
     }
 }

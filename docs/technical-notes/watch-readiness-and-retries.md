@@ -115,6 +115,13 @@ Watch-Darstellung von der alten WebView-Geometriemessung abhaengt. Eine
 spaetere Bereinigung dieses Altpfads ist sinnvoll, aber eine eigene
 Codeaenderung mit Regressionstest.
 
+Die erneute Pruefung am 01.08.2026 bestaetigte den No-op-Charakter, stellte
+die Entfernung aber zurueck: Nach den Navigationseingriffen stand kein
+verbundenes Testgeraet fuer die verbindliche Watch-/Landscape-/Loading-
+Regression zur Verfuegung. Die genaue Kandidatenliste und das Geraete-Gate
+stehen in
+[`watch-fullscreen-lifecycle.md`](watch-fullscreen-lifecycle.md).
+
 ## Regeln fuer neue Nachlaeufe
 
 1. Ein Browser-Ladeereignis ist ein Lebenszyklussignal, kein Beweis fuer ein

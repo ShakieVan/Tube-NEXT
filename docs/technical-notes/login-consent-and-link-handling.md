@@ -1,7 +1,7 @@
 # Login-, Consent- und Link-Handling
 
-Stand: am 25.07.2026 gegen den aktuellen GeckoView-Code und den fruehen
-Projekt-Task `Setze AGENTS-Anweisungen um` geprueft
+Stand: am 01.08.2026 gegen den aktuellen GeckoView-Code und den Geraeteablauf
+auf dem Samsung SM-S928B geprueft
 
 ## Zweck
 
@@ -44,14 +44,34 @@ Sicherheitsregeln bleiben jedoch gueltig.
 
 ## Heutiger GeckoView-Vertrag
 
+`NavigationHostPolicy` ist die zentrale Host-Grenze.
 `LinkInterceptor.isInternalFlowUri()` laesst HTTP(S)-Navigation innerhalb der
-App zu, wenn sie:
+App nur zu, wenn sie:
 
 - auf einen unterstuetzten YouTube-Host zeigt oder
-- Teil eines Google-Account-, Consent- oder Cookie-Flows ist.
+- exakt auf `accounts.google.com`, `consent.google.com` oder
+  `gds.google.com` zeigt.
+
+`gds.google.com` ist kein pauschal angenommener Google-Host. Er wurde auf
+einem echten Geraeteablauf nach Passwort und 2FA als Vorschlagsseite fuer
+Google-Kontodaten beobachtet, bevor der Flow zu YouTube zurueckkehrt. Fuer
+weitere Google-Hosts bleibt die Grenze geschlossen; neue Hosts werden erst
+nach einem protokollierten Top-Level-Ablauf einzeln aufgenommen.
+
+YouTube-Unterhosts bleiben ueber die label-begrenzte Domain
+`*.youtube.com` intern; dadurch funktionieren insbesondere
+`accounts.youtube.com/RotateCookiesPage` und `consent.youtube.com`. Aehnlich
+aussehende Namen ausserhalb dieser Domain sowie andere Google-Angebote sind
+keine Login-Freigabe. Zwei-Faktor- und Account-Auswahlseiten laufen unter dem
+zugelassenen Account-Host. Wenn ein Geraeteablauf einen weiteren Top-Level-
+Host benoetigt, wird er einzeln belegt und ergaenzt statt eine Google-Domain
+pauschal freizugeben.
 
 Andere HTTP(S)-Ziele werden von `GeckoBrowserEngine.onLoadRequest()` abgelehnt
 und ueber den App-Callback an eine externe Anwendung gegeben.
+Debug-Builds protokollieren dabei nur Schema und Host des abgelehnten
+Top-Level-Ziels. Pfad, Query, Fragment, Tokens und Nutzerdaten werden nicht
+protokolliert.
 
 `YouTubeNavigationPolicy` entscheidet unabhaengig davon ueber den
 Darstellungsmodus. Nur Watch-Seiten und `youtu.be` erhalten Desktop-UA.
@@ -61,32 +81,59 @@ Die Toolbar uebernimmt nur nutzersichtbare YouTube-URLs. Insbesondere
 `accounts.youtube.com/RotateCookiesPage`, `about:*` und andere transiente
 Zwischenziele ersetzen nicht die letzte sinnvolle YouTube-Adresse.
 
-## Long-Press auf Links
+## Bestaetigter Geraeteablauf
+
+Am 01.08.2026 wurde nach dem Loeschen der Debug-App-Daten folgender realer
+Top-Level-Ablauf beobachtet:
+
+1. YouTube-Login innerhalb der Gecko-Sitzung,
+2. Passwort und Zwei-Faktor-Bestaetigung,
+3. Weiterleitung auf `gds.google.com` zur Festlegung einer privaten Adresse,
+4. Rueckkehr zu YouTube,
+5. Neuladen der Seite in Tube NEXT mit erfolgreicher Anmeldung.
+
+Vor Aufnahme von `gds.google.com` sprang dieser Zwischenschritt in einen
+anderen Browser und liess den Nutzer anschliessend dort auf YouTube landen.
+Die explizite Hostfreigabe haelt den beobachteten Pfad nun in derselben
+Gecko-Sitzung. Sie ist kein Beleg fuer eine allgemeine Freigabe weiterer
+Google-Subdomains.
+
+## Long-Press-Slider fuer Links
 
 GeckoView liefert hier nicht dieselben WebView-Hit-Test-Metadaten wie der
 fruehe Prototyp. Das heutige Verhalten wird deshalb eng in der eingebauten
-WebExtension umgesetzt:
+WebExtension umgesetzt. Ein kurzer Tap wird dabei nicht konsumiert und bleibt
+vollstaendig in YouTubes normalem Ereignispfad.
 
-1. `handleDocumentContextMenu()` reagiert nur auf ein `a[href]`.
-2. Nur HTTP(S)-Links zu YouTube werden akzeptiert.
-3. Das Content-Script verhindert das Seiten-Kontextmenue und sendet
-   `OPEN_NEW_TAB`.
-4. Die native Bridge akzeptiert nur Nachrichten der zugehoerigen Session aus
-   dem Top-Level-Dokument und validiert die URL erneut als YouTube-URL.
-5. `MainActivity` legt danach den neuen Tab an.
+Bei einem einzelnen echten HTTP(S)-YouTube-Link gilt:
 
-Das ist bewusst **kein vollstaendiges Browser-Kontextmenue**. Der aktuelle
-Stand bietet auf diesem Pfad direkt "YouTube-Link in neuem Tab", aber nicht:
+1. `touchstart` beziehungsweise ein primaerer Pointer startet nur einen
+   450-ms-Hold-Timer; noch wird kein Seitenereignis verhindert.
+2. Eine Bewegung ueber der Toleranz vor Ablauf des Timers bricht die Erkennung
+   ab, damit vertikales Scrollen normal bleibt.
+3. Nach Ablauf erscheint ein isoliertes, nicht klickbares WebExtension-
+   Overlay mit zwei runden Zielen und pulsierenden Richtungspfeilen.
+4. Nach links ziehen und loslassen sendet `SHOW_LINK_MENU`; nach rechts ziehen
+   und loslassen sendet `OPEN_NEW_TAB`.
+5. Loslassen in der Mitte, `touchcancel` oder Pointer-Abbruch bleibt ohne
+   Aktion. Folge-`tap`-/`click`-Ereignisse derselben Hold-Geste werden
+   unterdrueckt.
 
-- im aktuellen Tab oeffnen,
-- Link kopieren oder teilen,
-- extern oeffnen,
-- Bild speichern oder andere Bildaktionen.
+Das linke Ziel oeffnet ein natives Auswahlmenue fuer aktuellen Tab, neuen Tab,
+externes Oeffnen, Kopieren und Teilen. Das rechte Ziel bleibt der schnelle
+Neuer-Tab-Pfad. Beide Ziele laufen vor der Navigation durch
+`YouTubeNavigationPolicy`.
 
-Falls diese Funktionen spaeter ergaenzt werden, muss die WebExtension nur
-minimal Link-/Bildmetadaten liefern. Auswahl, Darstellung und Android-Aktion
-gehoeren in die App-Shell. Jede native Nachricht bleibt nach Session,
-Top-Level-Sender, Typ, Schema und Ziel-URL zu validieren.
+`contextmenu` bleibt als Gecko-Rueckfall erhalten. Wenn die laufende
+Touch-Geste bekannt ist, aktiviert es nur den Slider. Meldet ein Geraet dagegen
+ausschliesslich `contextmenu`, bleibt der bewaehrte direkte Neuer-Tab-Pfad
+verfuegbar.
+
+Die WebExtension liefert nur Nachrichtentyp und Ziel-URL. Die native Bridge
+akzeptiert Nachrichten ausschliesslich von der zugehoerigen Session und aus
+dem Top-Level-Dokument. `LinkInteractionPolicy` validiert Typ, HTTP(S)-Schema,
+Standardport, fehlende Userinfo und den exakten YouTube-Host erneut, bevor
+`MainActivity` eine Aktion ausfuehrt.
 
 ## Abgrenzung zu Player-Kontextmenues
 
@@ -114,11 +161,16 @@ Bei Aenderungen an `contextmenu`-Listenern ist die Reihenfolge wichtig:
    `RotateCookiesPage`- oder `about:*`-URL dauerhaft anzeigt.
 4. Einen beliebigen externen Nicht-YouTube-Link oeffnen: Er geht an eine
    externe Anwendung.
-5. Long-Press auf einen YouTube-Link: genau ein neuer App-Tab mit dem Ziel
-   entsteht.
-6. Long-Press auf normalen Text, Bild ohne YouTube-Link und Player-Control:
-   kein neuer App-Tab.
-7. Im Landscape-Player Pinch-to-Zoom und normales Einstellungsmenue pruefen;
+5. Kurzer Tap auf Home-, Shorts-, Abo-, Feed- und Watch-Link: normales
+   YouTube-Verhalten, kein Tube-NEXT-Aktionsmenue.
+6. Long-Press und links ziehen: Aktionsmenue erscheint; Abbrechen navigiert
+   nicht. Alle fuenf Aktionen jeweils einmal pruefen.
+7. Long-Press und rechts ziehen: genau ein neuer App-Tab mit dem Ziel entsteht.
+8. Long-Press und mittig loslassen sowie vertikal scrollen: keine Linkaktion.
+9. Long-Press auf normalen Text, Bild ohne YouTube-Link und Player-Control:
+   keine Linkaktion.
+10. Account-, Burger-, Kommentar- und Player-Menues normal bedienen.
+11. Im Landscape-Player Pinch-to-Zoom und normales Einstellungsmenue pruefen;
    das technische Player-Kontextmenue bleibt verborgen.
 
 ## Historische Einordnung

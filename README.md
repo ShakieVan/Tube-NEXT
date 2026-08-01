@@ -20,8 +20,12 @@ Tube NEXT ist der Versuch, genau diese Browser-Erfahrung in eine alltagstauglich
 
 - **Mobile Oberflaeche fuer normale YouTube-Seiten:** Start, Suche, Kanal- und Uebersichtsseiten bleiben touchfreundlich.
 - **Desktop-Watch fuer Video-Seiten:** Watch-Seiten koennen Desktop-Funktionen nutzen, werden aber per CSS/Viewport-Anpassung mobil passend gemacht.
-- **Tabs wie im Browser:** Mehrere YouTube-Seiten parallel offen halten, wechseln, schliessen und per Vorschau wiederfinden.
-- **Schnelles Oeffnen in neuen Tabs:** Long-Tap auf einen YouTube-Link oeffnet ihn direkt in einem neuen Tab.
+- **Tabs wie im Browser:** Mehrere YouTube-Seiten parallel offen halten,
+  wechseln, schliessen und per live aktualisierter Vorschau wiederfinden. Sehr
+  schnell verlassene Watch-Tabs erhalten mindestens das offizielle
+  Video-Artwork.
+- **Zurück und vorwärts pro Tab:** Gut erreichbare Toolbar-Tasten folgen der sichtbaren History des jeweils aktiven Tabs.
+- **Linkaktionen per Long-Tap:** Gedrueckt halten und nach links zum Aktionsmenue oder nach rechts zum neuen Tab ziehen; normale kurze Taps bleiben bei YouTube.
 - **Hintergrund-Audio:** Audio kann weiterlaufen, wenn die App im Hintergrund ist. Android zeigt dazu eine Medienbenachrichtigung mit Steuerung.
 - **Fullscreen bei Querformat:** Dreht man das Telefon, wird die Watch-Ansicht immersiv und zoombar.
 - **Pinch-to-Zoom im Video:** Besonders praktisch fuer Tutorials, Tanzvideos oder Detailanalyse.
@@ -82,6 +86,31 @@ folgendem Befehl erzeugt:
 .\gradlew.bat :app:assembleRelease --console=plain
 ```
 
+Dieser Task schlaegt ohne vollstaendige Produktionssignierung aus der nicht
+versionierten `key.properties` absichtlich fehl. Fuer einen bewusst
+debug-signierten, releaseaehnlichen lokalen Build gibt es stattdessen die
+getrennte App-ID `de.shakie.tubenext.local`:
+
+```powershell
+.\gradlew.bat :app:assembleLocalRelease --console=plain
+```
+
+Vor einer Veroeffentlichung muss der Zertifikat-Fingerprint jeder erzeugten
+APK mit dem ausserhalb des Repositorys hinterlegten erwarteten SHA-256-Wert
+verglichen werden. Mit dem Android-SDK geht das beispielsweise so:
+
+```powershell
+$buildTools = Get-ChildItem "$env:ANDROID_SDK_ROOT\build-tools" -Directory |
+    Sort-Object Name -Descending |
+    Select-Object -First 1
+& "$($buildTools.FullName)\apksigner.bat" verify --print-certs `
+    "app\build\outputs\apk\release\app-arm64-v8a-release.apk"
+```
+
+Massgeblich ist `Signer #1 certificate SHA-256 digest`. Kennwoerter,
+Keystore-Inhalte und `key.properties` duerfen dabei weder ausgegeben noch
+committed werden.
+
 ## Release-Checkliste
 
 GitHub-Release-Notes muessen bei jedem Release kurz erklaeren, welche APK fuer
@@ -90,7 +119,10 @@ welches Geraet gedacht ist:
 - `arm64-v8a`: moderne Android-Smartphones und -Tablets
 - `armeabi-v7a`: aeltere 32-Bit-ARM-Geraete
 - `x86_64`: Android-Emulatoren und manche Chromebooks
-- `x86`: aeltere Emulatoren oder Intel-Android-Geraete
+
+Eine 32-Bit-`x86`-APK wird nicht mehr veroeffentlicht, weil die verwendete
+GeckoView-Version dafuer keine Nativbibliothek enthaelt. Ein nur durch den
+Gradle-Split erzeugtes APK ohne Gecko-Nativcode ist nicht lauffaehig.
 
 Tube NEXT kann in der integrierten Updateverwaltung automatisch das passende
 APK auswaehlen, wenn die GitHub-Release-Assets die ABI im Dateinamen tragen,

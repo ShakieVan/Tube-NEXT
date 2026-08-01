@@ -51,6 +51,9 @@ import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
 import de.shakie.tubenext.audio.AndroidBackgroundAudioCoordinator
 import de.shakie.tubenext.browser.LinkInterceptor
+import de.shakie.tubenext.browser.LinkInteractionPolicy
+import de.shakie.tubenext.browser.LinkMenuAction
+import de.shakie.tubenext.browser.LinkMenuActionCallbacks
 import de.shakie.tubenext.browser.YouTubeNavigationPolicy
 import de.shakie.tubenext.engine.BrowserEngine
 import de.shakie.tubenext.engine.EngineCallbacks
@@ -59,10 +62,12 @@ import de.shakie.tubenext.engine.EngineTab
 import de.shakie.tubenext.engine.EngineType
 import de.shakie.tubenext.engine.gecko.GeckoBrowserEngine
 import de.shakie.tubenext.tabs.AppTab
+import de.shakie.tubenext.tabs.CanonicalTabHistory
 import de.shakie.tubenext.tabs.TabManager
 import de.shakie.tubenext.tabs.TabPersistence
 import de.shakie.tubenext.tabs.TabPreviewStore
 import de.shakie.tubenext.tabs.TabSession
+import de.shakie.tubenext.tabs.YouTubePreviewArtworkLoader
 import de.shakie.tubenext.update.GitHubReleaseClient
 import de.shakie.tubenext.update.UpdateAsset
 import de.shakie.tubenext.update.UpdateCheckResult
@@ -77,11 +82,14 @@ import de.shakie.tubenext.ui.TabOverviewAdapter
 import de.shakie.tubenext.ui.TabOverviewItem
 import org.mozilla.geckoview.GeckoView
 import java.io.File
+import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
     private lateinit var toolbar: MaterialToolbar
     private lateinit var tabLayout: TabLayout
     private lateinit var urlTextView: TextView
+    private lateinit var backButton: ImageButton
+    private lateinit var forwardButton: ImageButton
     private lateinit var reloadButton: ImageButton
     private lateinit var tabSwitcherButton: FrameLayout
     private lateinit var homeFeedMenuButton: ImageButton
@@ -97,6 +105,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var backgroundAudioCoordinator: AndroidBackgroundAudioCoordinator
     private lateinit var preferences: SharedPreferences
     private lateinit var updatePreferences: UpdatePreferences
+    private val tabPreviewArtworkLoader = YouTubePreviewArtworkLoader()
+    private val tabPreviewArtworkExecutor = Executors.newFixedThreadPool(2)
 
     private val browserTabs = linkedMapOf<String, AppTab>()
     private var selectedTabId: String? = null
@@ -105,6 +115,8 @@ class MainActivity : AppCompatActivity() {
     private var latestUpdateResult: UpdateCheckResult? = null
     private var updateDownloadHandle: UpdateDownloader.DownloadHandle? = null
     private var settingsDialog: androidx.appcompat.app.AlertDialog? = null
+    private var linkMenuDialog: androidx.appcompat.app.AlertDialog? = null
+    private var activeTabOverviewAdapter: TabOverviewAdapter? = null
     private var batteryOptimizationDialogVisible = false
     private var pendingUpdateNotificationRelease: UpdateRelease? = null
     private var updatePermissionDialogVisible = false
@@ -123,6 +135,8 @@ class MainActivity : AppCompatActivity() {
         toolbar = findViewById(R.id.toolbar)
         tabLayout = findViewById(R.id.tabLayout)
         urlTextView = findViewById(R.id.urlText)
+        backButton = findViewById(R.id.backButton)
+        forwardButton = findViewById(R.id.forwardButton)
         reloadButton = findViewById(R.id.reloadButton)
         tabSwitcherButton = findViewById(R.id.tabSwitcherButton)
         homeFeedMenuButton = findViewById(R.id.homeFeedMenuButton)
@@ -242,6 +256,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        activeTabOverviewAdapter = null
         updateDownloadHandle?.cancel()
         val keepBrowserSessions = isChangingConfigurations
         browserTabs.values.forEach { tab ->
@@ -260,11 +275,18 @@ class MainActivity : AppCompatActivity() {
         if (!keepBrowserSessions) {
             browserEngine.shutdown()
         }
+        tabPreviewArtworkExecutor.shutdownNow()
     }
 
     private fun setupToolbar() {
         toolbar.title = null
         toolbar.subtitle = null
+        backButton.setOnClickListener {
+            currentTab()?.let(::navigateBackForTab)
+        }
+        forwardButton.setOnClickListener {
+            currentTab()?.let(::navigateForwardForTab)
+        }
         reloadButton.setOnClickListener {
             currentTab()?.engineTab?.reload()
         }
@@ -339,12 +361,7 @@ class MainActivity : AppCompatActivity() {
                     disableLandscapeVideoMode()
                     return
                 }
-                if (current != null && navigateBackInTabHistory(current)) {
-                    return
-                }
-                if (current?.engineTab?.canGoBack() == true) {
-                    current.engineTab.goBack()
-                } else {
+                if (current == null || !navigateBackForTab(current)) {
                     finish()
                 }
             }
@@ -428,25 +445,43 @@ class MainActivity : AppCompatActivity() {
     private fun createEngineCallbacks(): EngineCallbacks {
         return EngineCallbacks(
             onOpenExternalUrl = ::openExternalUrl,
-            shouldOpenInApp = ::shouldOpenInApp,
-            onMainNavigationStarted = { tabId, _ ->
+            onMainNavigationStarted = { tabId, url ->
+                browserTabs[tabId]?.let { tab ->
+                    tab.engineLocationUrl = url
+                    tab.navigationHistory.recordNavigationStart(url)
+                }
                 onTabMainNavigationStarted(tabId)
+                requestWatchArtworkPreview(tabId, url)
+                if (selectedTabId == tabId) updateToolbarState()
             },
             onMainUrlUpdated = { tabId, url ->
+                browserTabs[tabId]?.let { tab ->
+                    tab.engineLocationUrl = url
+                    tab.rawHistoryNavigationPending = false
+                }
                 updateTabState(tabId, newUrl = url)
+                requestWatchArtworkPreview(tabId, url)
             },
             onMainTitleUpdated = { tabId, title ->
                 updateTabState(tabId, newTitle = title)
             },
             onMainPageFinished = { tabId, url ->
+                browserTabs[tabId]?.navigationHistory?.cancelPendingNavigation()
+                browserTabs[tabId]?.rawHistoryNavigationPending = false
+                if (selectedTabId == tabId) updateToolbarState()
                 scheduleWatchViewportStabilization(tabId, url)
             },
+            onPageReadyForPreview = ::onPageReadyForPreview,
             onProgressChanged = { tabId, progress ->
                 updateToolbarState()
                 onTabProgress(tabId, progress)
             },
             onNewTabRequest = { targetUrl ->
                 createAndSelectTab(targetUrl)
+            },
+            onLinkMenuRequest = ::showLinkMenu,
+            onHistoryAvailabilityChanged = { tabId, _, _ ->
+                if (selectedTabId == tabId) updateToolbarState()
             },
             onFullscreenChanged = { _, isFullscreen ->
                 if (isFullscreen) {
@@ -456,6 +491,8 @@ class MainActivity : AppCompatActivity() {
                 updateBrowserChromeVisibility()
             },
             onLoadError = { tabId ->
+                browserTabs[tabId]?.navigationHistory?.cancelPendingNavigation()
+                browserTabs[tabId]?.rawHistoryNavigationPending = false
                 completeTabLoading(tabId, browserTabs[tabId]?.pageLoadGeneration)
                 Snackbar.make(webViewContainer, R.string.page_load_error, Snackbar.LENGTH_SHORT).show()
             },
@@ -465,6 +502,7 @@ class MainActivity : AppCompatActivity() {
             onMediaControlsChanged = { tabId, controls ->
                 backgroundAudioCoordinator.onMediaControlsChanged(tabId, controls)
             },
+            onMediaArtworkChanged = ::onMediaArtworkChanged,
             onEngineProcessGone = { tabId, reason ->
                 recoverEngineTabAfterProcessExit(tabId, reason)
             }
@@ -609,7 +647,7 @@ class MainActivity : AppCompatActivity() {
         val updatedTitle = normalizeTabTitle(newTitle ?: tab.title)
         if (updatedUrl == tab.url && updatedTitle == tab.title) return
 
-        recordTabHistory(tab, updatedUrl)
+        tab.navigationHistory.record(updatedUrl)
         tab.url = updatedUrl
         tab.title = updatedTitle
         tabManager.update(tabId, updatedUrl, updatedTitle)
@@ -646,6 +684,7 @@ class MainActivity : AppCompatActivity() {
                 tab.hasLoadedInitialUrl = true
                 tab.engineTab.loadUrl(tab.url.ifBlank { DEFAULT_URL })
             }
+            schedulePendingPreviewCapture(tab)
         }
         updateToolbarState()
         if (persistSelection) {
@@ -688,8 +727,7 @@ class MainActivity : AppCompatActivity() {
             val wasSelected = selectedTabId == tabId
             val url = oldTab.url.ifBlank { DEFAULT_URL }
             val title = oldTab.title
-            val history = oldTab.navigationHistory.toList()
-            val historyIndex = oldTab.historyIndex
+            val history = oldTab.navigationHistory.snapshot()
             Log.w("TUBENEXT_RENDER", "recreate Gecko tab tab=$tabId reason=$reason selected=$wasSelected url=$url")
 
             geckoRenderHealthGeneration += 1
@@ -710,9 +748,7 @@ class MainActivity : AppCompatActivity() {
                 TabSession(id = tabId, url = url, title = title),
                 loadInitialUrl = wasSelected
             )
-            replacement.navigationHistory.clear()
-            replacement.navigationHistory.addAll(history)
-            replacement.historyIndex = historyIndex
+            replacement.navigationHistory.restore(history)
             replacement.title = title
             replacement.url = url
             tabManager.update(tabId, url, title)
@@ -1112,75 +1148,66 @@ class MainActivity : AppCompatActivity() {
         return selectedTabId?.let { browserTabs[it] }
     }
 
-    private fun navigateBackInTabHistory(tab: AppTab): Boolean {
+    private fun navigateBackForTab(tab: AppTab): Boolean {
         val activeTab = ensureTabAwake(tab.id, "history-back") ?: return false
-        if (activeTab.historyIndex <= 0) return false
-        val currentCanonicalUrl = canonicalHistoryUrl(activeTab.url)
-        do {
-            activeTab.historyIndex -= 1
-        } while (
-            activeTab.historyIndex > 0 &&
-            activeTab.navigationHistory.getOrNull(activeTab.historyIndex) == currentCanonicalUrl
-        )
-        activeTab.pendingHistoryNavigation = true
-        activeTab.engineTab.loadUrl(activeTab.navigationHistory[activeTab.historyIndex])
-        return true
+        if (activeTab.navigationHistory.isNavigationPending || activeTab.rawHistoryNavigationPending) {
+            return true
+        }
+        if (CanonicalTabHistory.shouldUseEngineHistory(activeTab.engineLocationUrl)) {
+            if (!activeTab.engineTab.canGoBack()) return false
+            activeTab.rawHistoryNavigationPending = true
+            updateToolbarState()
+            activeTab.engineTab.goBack()
+            return true
+        }
+        val target = activeTab.navigationHistory.backTarget(activeTab.url)
+        if (target != null) {
+            updateToolbarState()
+            activeTab.engineTab.loadUrl(target)
+            return true
+        }
+        return false
     }
 
-    private fun recordTabHistory(tab: AppTab, url: String) {
-        val canonicalUrl = canonicalHistoryUrl(url)
-        if (canonicalUrl.isBlank()) return
-
-        if (tab.pendingHistoryNavigation) {
-            tab.pendingHistoryNavigation = false
-            if (tab.historyIndex !in tab.navigationHistory.indices) {
-                tab.navigationHistory.clear()
-                tab.navigationHistory.add(canonicalUrl)
-                tab.historyIndex = 0
-                return
-            }
-            tab.navigationHistory[tab.historyIndex] = canonicalUrl
-            return
+    private fun navigateForwardForTab(tab: AppTab): Boolean {
+        val activeTab = ensureTabAwake(tab.id, "history-forward") ?: return false
+        if (activeTab.navigationHistory.isNavigationPending || activeTab.rawHistoryNavigationPending) {
+            return true
         }
-
-        val currentUrl = tab.navigationHistory.getOrNull(tab.historyIndex)
-        if (currentUrl == canonicalUrl) return
-
-        if (tab.historyIndex < tab.navigationHistory.lastIndex) {
-            tab.navigationHistory.subList(tab.historyIndex + 1, tab.navigationHistory.size).clear()
+        if (CanonicalTabHistory.shouldUseEngineHistory(activeTab.engineLocationUrl)) {
+            if (!activeTab.engineTab.canGoForward()) return false
+            activeTab.rawHistoryNavigationPending = true
+            updateToolbarState()
+            activeTab.engineTab.goForward()
+            return true
         }
-        tab.navigationHistory.add(canonicalUrl)
-        tab.historyIndex = tab.navigationHistory.lastIndex
-    }
-
-    private fun canonicalHistoryUrl(url: String): String {
-        if (!YouTubeNavigationPolicy.isUserVisibleUrl(url)) return ""
-        val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return url
-        if (!YouTubeNavigationPolicy.isWatchUrl(url)) {
-            return uri.buildUpon()
-                .fragment(null)
-                .build()
-                .toString()
+        val target = activeTab.navigationHistory.forwardTarget(activeTab.url)
+        if (target != null) {
+            updateToolbarState()
+            activeTab.engineTab.loadUrl(target)
+            return true
         }
-
-        val videoId = if (uri.host?.lowercase() == "youtu.be") {
-            uri.pathSegments.firstOrNull()
-        } else {
-            uri.getQueryParameter("v")
-        }
-        if (videoId.isNullOrBlank()) return url
-        return Uri.Builder()
-            .scheme("https")
-            .authority("www.youtube.com")
-            .path("watch")
-            .appendQueryParameter("v", videoId)
-            .build()
-            .toString()
+        return false
     }
 
     private fun updateToolbarState() {
         val current = currentTab()
         urlTextView.text = current?.url?.takeIf { it.isNotBlank() }?.let(::formatToolbarUrl).orEmpty()
+        val navigationPending = current?.let { tab ->
+            tab.navigationHistory.isNavigationPending || tab.rawHistoryNavigationPending
+        } == true
+        backButton.isEnabled = !navigationPending && current?.let { tab ->
+            tab.navigationHistory.canGoBack(tab.url) ||
+                (CanonicalTabHistory.shouldUseEngineHistory(tab.engineLocationUrl) &&
+                    tab.engineTab.canGoBack())
+        } == true
+        forwardButton.isEnabled = !navigationPending && current?.let { tab ->
+            tab.navigationHistory.canGoForward(tab.url) ||
+                (CanonicalTabHistory.shouldUseEngineHistory(tab.engineLocationUrl) &&
+                    tab.engineTab.canGoForward())
+        } == true
+        backButton.alpha = if (backButton.isEnabled) 1f else 0.38f
+        forwardButton.alpha = if (forwardButton.isEnabled) 1f else 0.38f
     }
 
     private fun closeTabById(tabId: String, showMessage: Boolean = true) {
@@ -1235,6 +1262,7 @@ class MainActivity : AppCompatActivity() {
         )
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
+        activeTabOverviewAdapter = adapter
         attachTabOverviewDrag(recyclerView, adapter)
 
         closeButton.setOnClickListener { dialog.dismiss() }
@@ -1256,8 +1284,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         dialog.setContentView(content)
-        currentTab()?.let(::captureAndStoreTabPreview)
         refreshTabOverview(adapter, title)
+        currentTab()?.let(::captureAndStoreTabPreview)
+        dialog.setOnDismissListener {
+            if (activeTabOverviewAdapter === adapter) {
+                activeTabOverviewAdapter = null
+            }
+        }
         dialog.show()
         dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             ?.setBackgroundColor(Color.TRANSPARENT)
@@ -1315,7 +1348,11 @@ class MainActivity : AppCompatActivity() {
                     ?: getString(R.string.default_tab_title)
             }.let(::normalizeTabTitle)
             val previewBitmap = tabPreviewStore.load(session.id)
-                ?: tab?.takeIf { it.engineTab.view.visibility == View.VISIBLE }
+                ?: tab?.takeIf {
+                    !it.loadingOverlayVisible &&
+                        it.engineTab.view !is GeckoView &&
+                        it.engineTab.view.visibility == View.VISIBLE
+                }
                     ?.let(::captureTabPreviewFallback)
             TabOverviewItem(
                 id = session.id,
@@ -1327,35 +1364,132 @@ class MainActivity : AppCompatActivity() {
         adapter.submitList(items)
     }
 
-    private fun captureAndStoreTabPreview(tab: AppTab, onPreview: ((Bitmap) -> Unit)? = null) {
-        runCatching {
+    private fun captureAndStoreTabPreview(
+        tab: AppTab,
+        onPreview: ((Bitmap) -> Unit)? = null
+    ): Boolean {
+        return runCatching {
             val contentView = tab.engineTab.view
-            if (contentView.width <= 0 || contentView.height <= 0) return
+            if (tab.loadingOverlayVisible) {
+                tab.previewCapturePending = true
+                return@runCatching false
+            }
+            if (contentView.width <= 0 || contentView.height <= 0) return@runCatching false
             if (contentView is GeckoView) {
-                if (contentView.visibility != View.VISIBLE) return
+                if (contentView.visibility != View.VISIBLE || contentView.parent != webViewContainer) {
+                    return@runCatching false
+                }
+                val captureGeneration = tab.pageLoadGeneration
                 contentView.capturePixels().accept(
                     { captured ->
                         if (captured == null) return@accept
                         val preview = createTabPreviewBitmap(captured)
                         if (isEffectivelyBlankPreview(preview)) return@accept
+                        if (browserTabs[tab.id] !== tab ||
+                            tab.pageLoadGeneration != captureGeneration
+                        ) return@accept
+                        tab.pagePreviewCapturedGeneration = captureGeneration
                         tabPreviewStore.save(tab.id, preview)
-                        runOnUiThread {
-                            onPreview?.invoke(preview)
-                        }
+                        publishTabPreview(tab.id, preview, onPreview)
                     },
                     { error ->
                         Log.w("TUBENEXT_STATE", "tab preview capture failed tab=${tab.id}", error)
                     }
                 )
-                return
+                return@runCatching true
             }
-            captureTabPreviewFallback(tab)?.let { preview ->
-                if (isEffectivelyBlankPreview(preview)) return
-                onPreview?.invoke(preview)
-            }
+            val preview = captureTabPreviewFallback(tab) ?: return@runCatching false
+            publishTabPreview(tab.id, preview, onPreview)
+            true
         }.onFailure { error ->
             Log.w("TUBENEXT_STATE", "tab preview capture skipped tab=${tab.id}", error)
+        }.getOrDefault(false)
+    }
+
+    private fun publishTabPreview(
+        tabId: String,
+        bitmap: Bitmap,
+        onPreview: ((Bitmap) -> Unit)?
+    ) {
+        runOnUiThread {
+            activeTabOverviewAdapter?.updatePreview(tabId, bitmap)
+            onPreview?.invoke(bitmap)
         }
+    }
+
+    private fun onPageReadyForPreview(tabId: String) {
+        webViewContainer.post {
+            val tab = browserTabs[tabId] ?: return@post
+            tab.previewCapturePending = true
+            capturePendingPreviewIfVisible(tab)
+        }
+    }
+
+    private fun onMediaArtworkChanged(tabId: String, sourceUrl: String, artwork: Bitmap) {
+        webViewContainer.post {
+            val tab = browserTabs[tabId] ?: return@post
+            if (!YouTubeNavigationPolicy.urlsReferToSameVideo(sourceUrl, tab.url) &&
+                !YouTubeNavigationPolicy.urlsReferToSameVideo(sourceUrl, tab.engineLocationUrl)
+            ) return@post
+            if (tab.pagePreviewCapturedGeneration == tab.pageLoadGeneration) return@post
+
+            val preview = createTabPreviewBitmap(artwork)
+            if (isEffectivelyBlankPreview(preview)) return@post
+            tabPreviewStore.save(tab.id, preview)
+            publishTabPreview(tab.id, preview, null)
+            if (selectedTabId == tab.id && ::backgroundAudioCoordinator.isInitialized) {
+                backgroundAudioCoordinator.setArtwork(preview)
+            }
+        }
+    }
+
+    private fun requestWatchArtworkPreview(tabId: String, sourceUrl: String) {
+        val tab = browserTabs[tabId] ?: return
+        val videoId = YouTubeNavigationPolicy.videoIdForUrl(sourceUrl)
+        if (videoId == null) {
+            tab.previewArtworkVideoId = ""
+            return
+        }
+        if (tab.previewArtworkVideoId == videoId) return
+        tab.previewArtworkVideoId = videoId
+
+        val artworkTask = Runnable {
+            val artwork = tabPreviewArtworkLoader.load(videoId) ?: return@Runnable
+            webViewContainer.post {
+                val currentTab = browserTabs[tabId] ?: return@post
+                if (currentTab.previewArtworkVideoId != videoId) return@post
+                val currentVideoId = YouTubeNavigationPolicy.videoIdForUrl(currentTab.url)
+                    ?: YouTubeNavigationPolicy.videoIdForUrl(currentTab.engineLocationUrl)
+                if (currentVideoId != videoId) return@post
+                if (currentTab.pagePreviewCapturedGeneration == currentTab.pageLoadGeneration) {
+                    return@post
+                }
+
+                val preview = createTabPreviewBitmap(artwork)
+                if (isEffectivelyBlankPreview(preview)) return@post
+                tabPreviewStore.save(currentTab.id, preview)
+                publishTabPreview(currentTab.id, preview, null)
+            }
+        }
+        runCatching {
+            tabPreviewArtworkExecutor.execute(artworkTask)
+        }.onFailure { error ->
+            Log.w("TUBENEXT_STATE", "watch artwork request skipped tab=$tabId", error)
+        }
+    }
+
+    private fun capturePendingPreviewIfVisible(tab: AppTab) {
+        if (!tab.previewCapturePending || selectedTabId != tab.id) return
+        if (captureAndStoreTabPreview(tab)) {
+            tab.previewCapturePending = false
+        }
+    }
+
+    private fun schedulePendingPreviewCapture(tab: AppTab) {
+        if (!tab.previewCapturePending) return
+        tab.engineTab.view.postDelayed({
+            capturePendingPreviewIfVisible(tab)
+        }, TAB_PREVIEW_REATTACH_DELAY_MS)
     }
 
     private fun prepareBackgroundAudioArtwork() {
@@ -1497,6 +1631,53 @@ class MainActivity : AppCompatActivity() {
         // Link long-press is handled inside the Gecko WebExtension because GeckoView
         // does not expose WebView-like hit test metadata.
         tab.engineTab.view.setOnLongClickListener { false }
+    }
+
+    private fun showLinkMenu(tabId: String, url: String) {
+        if (selectedTabId != tabId || !LinkInteractionPolicy.isYouTubeHttpUrl(url)) return
+        if (linkMenuDialog?.isShowing == true) return
+
+        val actions = LinkMenuAction.entries
+        val labels = arrayOf(
+            getString(R.string.link_open_current),
+            getString(R.string.link_open_new),
+            getString(R.string.link_open_external),
+            getString(R.string.link_copy),
+            getString(R.string.link_share)
+        )
+        linkMenuDialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.link_open_title)
+            .setItems(labels) { _, index ->
+                actions.getOrNull(index)?.let { action ->
+                    dispatchLinkMenuAction(tabId, url, action)
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+            .also { dialog ->
+                dialog.setOnDismissListener {
+                    if (linkMenuDialog === dialog) {
+                        linkMenuDialog = null
+                    }
+                }
+                dialog.show()
+            }
+    }
+
+    private fun dispatchLinkMenuAction(tabId: String, url: String, action: LinkMenuAction) {
+        LinkInteractionPolicy.dispatch(
+            action = action,
+            url = url,
+            callbacks = LinkMenuActionCallbacks(
+                openCurrent = { target ->
+                    if (selectedTabId == tabId) loadInCurrentTab(target)
+                },
+                openNew = ::createAndSelectTab,
+                openExternal = ::openYouTubeLinkExternally,
+                copy = ::copyToClipboard,
+                share = ::shareLink
+            )
+        )
     }
 
     private fun enterLandscapeVideoModeIfNeeded() {
@@ -2178,19 +2359,24 @@ class MainActivity : AppCompatActivity() {
         Snackbar.make(webViewContainer, R.string.url_copied, Snackbar.LENGTH_SHORT).show()
     }
 
+    private fun openYouTubeLinkExternally(url: String) {
+        val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        val chooser = Intent.createChooser(viewIntent, null).apply {
+            putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, arrayOf(componentName))
+        }
+        try {
+            startActivity(chooser)
+        } catch (_: ActivityNotFoundException) {
+            Snackbar.make(webViewContainer, url, Snackbar.LENGTH_SHORT).show()
+        }
+    }
+
     private fun openExternalUrl(uri: Uri) {
         try {
             startActivity(Intent(Intent.ACTION_VIEW, uri))
         } catch (_: ActivityNotFoundException) {
             Snackbar.make(webViewContainer, uri.toString(), Snackbar.LENGTH_SHORT).show()
         }
-    }
-
-    private fun shouldOpenInApp(uri: Uri): Boolean {
-        val host = uri.host?.lowercase().orEmpty()
-        val path = uri.path.orEmpty()
-        return host == "github.com" &&
-            path.startsWith("/ShakieVan/Tube-NEXT/releases", ignoreCase = true)
     }
 
     private fun showUpdateManager(initialResult: UpdateCheckResult? = latestUpdateResult) {
@@ -2364,7 +2550,7 @@ class MainActivity : AppCompatActivity() {
         releaseNotesButton.setOnClickListener {
             activeRelease?.htmlUrl?.takeIf { it.isNotBlank() }?.let { url ->
                 settingsDialog?.dismiss()
-                createAndSelectTab(url)
+                openExternalUrl(Uri.parse(url))
                 dialog.dismiss()
             }
         }
@@ -2653,6 +2839,10 @@ class MainActivity : AppCompatActivity() {
 
         override fun goBack() = Unit
 
+        override fun canGoForward(): Boolean = false
+
+        override fun goForward() = Unit
+
         override fun stopLoading() = Unit
 
         override fun detach() = Unit
@@ -2693,6 +2883,7 @@ class MainActivity : AppCompatActivity() {
         private const val TARGET_LIVE_GECKO_TABS_AFTER_TRIM = 2
         private const val UPDATE_CHECK_INTERVAL_MS = 24L * 60L * 60L * 1000L
         private const val TAB_PREVIEW_TOP_OFFSET_RATIO = 0.12f
+        private const val TAB_PREVIEW_REATTACH_DELAY_MS = 300L
         private const val PREFERENCES_NAME = "tube_next_preferences"
         private const val KEY_SHOW_SHORTS = "home_feed_show_shorts"
         private const val KEY_SHOW_COMMUNITY_POSTS = "home_feed_show_community_posts"

@@ -501,6 +501,7 @@ class GeckoBrowserEngine(
                         override fun onPortMessage(message: Any, port: WebExtension.Port) {
                             when (parseMessageType(message)) {
                                 HOME_FEED_READY_TYPE -> postHomeFeedSettings(bridge)
+                                PAGE_PREVIEW_READY_TYPE -> bridge.callbacks.onPageReadyForPreview(bridge.tabId)
                             }
                         }
 
@@ -596,6 +597,7 @@ class GeckoBrowserEngine(
         private const val SHOW_LINK_MENU_TYPE = LinkInteractionPolicy.SHOW_LINK_MENU_MESSAGE
         private const val HOME_FEED_READY_TYPE = "HOME_FEED_READY"
         private const val HOME_FEED_SETTINGS_TYPE = "HOME_FEED_SETTINGS"
+        private const val PAGE_PREVIEW_READY_TYPE = "PAGE_PREVIEW_READY"
         fun debugLog(tag: String, message: String) {
             if (BuildConfig.DEBUG) {
                 Log.i(tag, message)

@@ -112,6 +112,7 @@ class MainActivity : AppCompatActivity() {
     private var updateDownloadHandle: UpdateDownloader.DownloadHandle? = null
     private var settingsDialog: androidx.appcompat.app.AlertDialog? = null
     private var linkMenuDialog: androidx.appcompat.app.AlertDialog? = null
+    private var activeTabOverviewAdapter: TabOverviewAdapter? = null
     private var batteryOptimizationDialogVisible = false
     private var pendingUpdateNotificationRelease: UpdateRelease? = null
     private var updatePermissionDialogVisible = false
@@ -251,6 +252,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        activeTabOverviewAdapter = null
         updateDownloadHandle?.cancel()
         val keepBrowserSessions = isChangingConfigurations
         browserTabs.values.forEach { tab ->
@@ -462,6 +464,7 @@ class MainActivity : AppCompatActivity() {
                 if (selectedTabId == tabId) updateToolbarState()
                 scheduleWatchViewportStabilization(tabId, url)
             },
+            onPageReadyForPreview = ::onPageReadyForPreview,
             onProgressChanged = { tabId, progress ->
                 updateToolbarState()
                 onTabProgress(tabId, progress)
@@ -673,6 +676,7 @@ class MainActivity : AppCompatActivity() {
                 tab.hasLoadedInitialUrl = true
                 tab.engineTab.loadUrl(tab.url.ifBlank { DEFAULT_URL })
             }
+            schedulePendingPreviewCapture(tab)
         }
         updateToolbarState()
         if (persistSelection) {
@@ -1250,6 +1254,7 @@ class MainActivity : AppCompatActivity() {
         )
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
+        activeTabOverviewAdapter = adapter
         attachTabOverviewDrag(recyclerView, adapter)
 
         closeButton.setOnClickListener { dialog.dismiss() }
@@ -1271,8 +1276,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         dialog.setContentView(content)
-        currentTab()?.let(::captureAndStoreTabPreview)
         refreshTabOverview(adapter, title)
+        currentTab()?.let(::captureAndStoreTabPreview)
+        dialog.setOnDismissListener {
+            if (activeTabOverviewAdapter === adapter) {
+                activeTabOverviewAdapter = null
+            }
+        }
         dialog.show()
         dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             ?.setBackgroundColor(Color.TRANSPARENT)
@@ -1342,35 +1352,71 @@ class MainActivity : AppCompatActivity() {
         adapter.submitList(items)
     }
 
-    private fun captureAndStoreTabPreview(tab: AppTab, onPreview: ((Bitmap) -> Unit)? = null) {
-        runCatching {
+    private fun captureAndStoreTabPreview(
+        tab: AppTab,
+        onPreview: ((Bitmap) -> Unit)? = null
+    ): Boolean {
+        return runCatching {
             val contentView = tab.engineTab.view
-            if (contentView.width <= 0 || contentView.height <= 0) return
+            if (contentView.width <= 0 || contentView.height <= 0) return@runCatching false
             if (contentView is GeckoView) {
-                if (contentView.visibility != View.VISIBLE) return
+                if (contentView.visibility != View.VISIBLE || contentView.parent != webViewContainer) {
+                    return@runCatching false
+                }
                 contentView.capturePixels().accept(
                     { captured ->
                         if (captured == null) return@accept
                         val preview = createTabPreviewBitmap(captured)
                         if (isEffectivelyBlankPreview(preview)) return@accept
+                        if (browserTabs[tab.id] !== tab) return@accept
                         tabPreviewStore.save(tab.id, preview)
-                        runOnUiThread {
-                            onPreview?.invoke(preview)
-                        }
+                        publishTabPreview(tab.id, preview, onPreview)
                     },
                     { error ->
                         Log.w("TUBENEXT_STATE", "tab preview capture failed tab=${tab.id}", error)
                     }
                 )
-                return
+                return@runCatching true
             }
-            captureTabPreviewFallback(tab)?.let { preview ->
-                if (isEffectivelyBlankPreview(preview)) return
-                onPreview?.invoke(preview)
-            }
+            val preview = captureTabPreviewFallback(tab) ?: return@runCatching false
+            publishTabPreview(tab.id, preview, onPreview)
+            true
         }.onFailure { error ->
             Log.w("TUBENEXT_STATE", "tab preview capture skipped tab=${tab.id}", error)
+        }.getOrDefault(false)
+    }
+
+    private fun publishTabPreview(
+        tabId: String,
+        bitmap: Bitmap,
+        onPreview: ((Bitmap) -> Unit)?
+    ) {
+        runOnUiThread {
+            activeTabOverviewAdapter?.updatePreview(tabId, bitmap)
+            onPreview?.invoke(bitmap)
         }
+    }
+
+    private fun onPageReadyForPreview(tabId: String) {
+        webViewContainer.post {
+            val tab = browserTabs[tabId] ?: return@post
+            tab.previewCapturePending = true
+            capturePendingPreviewIfVisible(tab)
+        }
+    }
+
+    private fun capturePendingPreviewIfVisible(tab: AppTab) {
+        if (!tab.previewCapturePending || selectedTabId != tab.id) return
+        if (captureAndStoreTabPreview(tab)) {
+            tab.previewCapturePending = false
+        }
+    }
+
+    private fun schedulePendingPreviewCapture(tab: AppTab) {
+        if (!tab.previewCapturePending) return
+        tab.engineTab.view.postDelayed({
+            capturePendingPreviewIfVisible(tab)
+        }, TAB_PREVIEW_REATTACH_DELAY_MS)
     }
 
     private fun prepareBackgroundAudioArtwork() {
@@ -2764,6 +2810,7 @@ class MainActivity : AppCompatActivity() {
         private const val TARGET_LIVE_GECKO_TABS_AFTER_TRIM = 2
         private const val UPDATE_CHECK_INTERVAL_MS = 24L * 60L * 60L * 1000L
         private const val TAB_PREVIEW_TOP_OFFSET_RATIO = 0.12f
+        private const val TAB_PREVIEW_REATTACH_DELAY_MS = 300L
         private const val PREFERENCES_NAME = "tube_next_preferences"
         private const val KEY_SHOW_SHORTS = "home_feed_show_shorts"
         private const val KEY_SHOW_COMMUNITY_POSTS = "home_feed_show_community_posts"

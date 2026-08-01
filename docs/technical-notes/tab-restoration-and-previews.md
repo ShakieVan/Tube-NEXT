@@ -1,6 +1,7 @@
 # Tab-Wiederherstellung und Vorschaubilder
 
-Stand: am 25.07.2026 gegen `master`, `v1.0.1` und `v1.0.2` geprueft
+Stand: am 01.08.2026 gegen `master` und die Debug-App auf dem Samsung
+SM-S928B geprueft
 
 ## Persistierter Zustand
 
@@ -68,7 +69,23 @@ Tab-IDs entfernt.
 Fuer eine sichtbare GeckoView wird `capturePixels()` verwendet. Fuer andere
 View-Typen existiert ein Canvas-Fallback. Beim Oeffnen des Tab-Managers wird
 der sichtbare Tab aufgenommen; gespeicherte Bilder der anderen Tabs bleiben
-erhalten.
+erhalten. Trifft das asynchrone Ergebnis bei geoeffnetem Tab-Manager ein,
+aktualisiert die Activity den betroffenen Listeneintrag sofort. Ein erneutes
+Oeffnen ist dafuer nicht mehr erforderlich.
+
+Die WebExtension sendet ausserdem `PAGE_PREVIEW_READY`, nachdem ihre
+zeitlich begrenzte Layout-Stabilisierungsfolge beendet ist. Auf Watch-Seiten
+liegt dieser Trigger damit hinter dem letzten Lauf, der
+`tubenext-watch-fit` beziehungsweise den Landscape-Umbau anwendet. Die
+Activity startet die Aufnahme nur, wenn der zugehoerige Tab zu diesem
+Zeitpunkt noch die sichtbare, angehaengte GeckoView besitzt. Das Ergebnis
+darf asynchron eintreffen und wird auch dann gespeichert, wenn inzwischen
+ein anderer Tab ausgewaehlt wurde.
+
+Kommt der Ready-Trigger erst nach dem Tabwechsel an, wird die Aufnahme als
+ausstehend markiert und beim naechsten sichtbaren Aktivieren dieses Tabs
+nachgeholt. Die App haengt dafuer keine zweite GeckoView im Hintergrund an
+und erzeugt keinen Reload.
 
 Geckos Pixel-Capture ist asynchron. Das historische weisse Vorschaubild
 entstand, weil das Ergebnis erst eintraf, nachdem der Tab bereits inaktiv
@@ -93,9 +110,9 @@ Vorschau die konservativere Wahl.
 
 - Eine Vorschau ist ein zuletzt brauchbarer Snapshot, keine garantiert
   aktuelle Live-Ansicht.
-- Der Tab-Manager aktualisiert ein gerade sichtbares Listenelement derzeit
-  nicht mit dem asynchronen Ergebnis; das Bild steht spaetestens beim
-  naechsten Oeffnen bereit.
+- Eine abghaengte GeckoView besitzt keine verlaesslich aufnehmbare Surface.
+  Ein noch nicht gestarteter Snapshot kann deshalb nicht unsichtbar in einem
+  anderen Tab erzwungen werden; er wird beim naechsten Aktivieren nachgeholt.
 - Bei noch nie geladenen Hintergrund-Tabs kann kein Seitenbild existieren.
 - Die Wiederherstellung behaelt URL und Titel, nicht Scrollposition,
   Formulardaten oder einen exakten Gecko-History-Stack ueber einen
@@ -119,3 +136,8 @@ Previews und das Schliessen des Tab-Managers nach normalem Tap ein.
 6. App neu starten und persistierte JPEG-Vorschauen pruefen.
 7. Tab schliessen; zugehoerige Vorschau muss entfernt werden.
 8. Hintergrund-Audio darf beim Wechsel zu einem anderen Tab weiterlaufen.
+9. Tab-Manager geoeffnet lassen: Das Bild des aktiven Tabs muss nach Abschluss
+   von `capturePixels()` ohne Schliessen und erneutes Oeffnen erscheinen.
+10. Eine Watch-Seite laden und nach dem Layout-Ready-Trigger den Tab wechseln:
+    Die fertige Aufnahme muss erhalten bleiben; ein spaeter Trigger eines
+    bereits abgehaengten Tabs muss beim naechsten Aktivieren nachgeholt werden.

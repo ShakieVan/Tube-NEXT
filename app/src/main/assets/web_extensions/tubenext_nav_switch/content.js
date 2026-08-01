@@ -16,6 +16,7 @@
   var LANDSCAPE_STYLE_ID = "tubenext_landscape_watch_style";
   var HOME_FEED_READY = "HOME_FEED_READY";
   var HOME_FEED_SETTINGS = "HOME_FEED_SETTINGS";
+  var PAGE_PREVIEW_READY = "PAGE_PREVIEW_READY";
   var TAP_CONFIRM_DELAY_MS = 320;
   var LONG_PRESS_TRIGGER_MS = 520;
   var LONG_TAP_SUPPRESS_MS = 650;
@@ -39,6 +40,7 @@
   var homeFeedFilterTimer = null;
   var homeFeedObserver = null;
   var watchPageTimer = null;
+  var previewReadyGeneration = 0;
   var nativePort = null;
   var activeLinkHold = null;
   var linkSlider = null;
@@ -913,6 +915,8 @@
   }
 
   function scheduleLandscapeWatchMode() {
+    previewReadyGeneration += 1;
+    var generation = previewReadyGeneration;
     window.setTimeout(applyLandscapeWatchMode, 0);
     window.setTimeout(updateScrollTopButton, 0);
     window.setTimeout(applyLandscapeWatchMode, 150);
@@ -920,7 +924,12 @@
     window.setTimeout(applyLandscapeWatchMode, 700);
     window.setTimeout(updateScrollTopButton, 700);
     window.setTimeout(applyLandscapeWatchMode, 1500);
-    window.setTimeout(applyLandscapeWatchMode, 2600);
+    window.setTimeout(function () {
+      applyLandscapeWatchMode();
+      if (generation === previewReadyGeneration && nativePort) {
+        nativePort.postMessage({ type: PAGE_PREVIEW_READY });
+      }
+    }, 2600);
   }
 
   function stopGenericOverlayEvent(event, preventDefault) {

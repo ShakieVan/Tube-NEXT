@@ -44,14 +44,27 @@ Sicherheitsregeln bleiben jedoch gueltig.
 
 ## Heutiger GeckoView-Vertrag
 
+`NavigationHostPolicy` ist die zentrale Host-Grenze.
 `LinkInterceptor.isInternalFlowUri()` laesst HTTP(S)-Navigation innerhalb der
-App zu, wenn sie:
+App nur zu, wenn sie:
 
 - auf einen unterstuetzten YouTube-Host zeigt oder
-- Teil eines Google-Account-, Consent- oder Cookie-Flows ist.
+- exakt auf `accounts.google.com` oder `consent.google.com` zeigt.
+
+YouTube-Unterhosts bleiben ueber die label-begrenzte Domain
+`*.youtube.com` intern; dadurch funktionieren insbesondere
+`accounts.youtube.com/RotateCookiesPage` und `consent.youtube.com`. Aehnlich
+aussehende Namen ausserhalb dieser Domain sowie andere Google-Angebote sind
+keine Login-Freigabe. Zwei-Faktor- und Account-Auswahlseiten laufen unter dem
+zugelassenen Account-Host. Wenn ein Geraeteablauf einen weiteren Top-Level-
+Host benoetigt, wird er einzeln belegt und ergaenzt statt eine Google-Domain
+pauschal freizugeben.
 
 Andere HTTP(S)-Ziele werden von `GeckoBrowserEngine.onLoadRequest()` abgelehnt
 und ueber den App-Callback an eine externe Anwendung gegeben.
+Debug-Builds protokollieren dabei nur Schema und Host des abgelehnten
+Top-Level-Ziels. Pfad, Query, Fragment, Tokens und Nutzerdaten werden nicht
+protokolliert.
 
 `YouTubeNavigationPolicy` entscheidet unabhaengig davon ueber den
 Darstellungsmodus. Nur Watch-Seiten und `youtu.be` erhalten Desktop-UA.

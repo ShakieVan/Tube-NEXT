@@ -4,7 +4,6 @@ import android.net.Uri
 
 data class EngineCallbacks(
     val onOpenExternalUrl: (Uri) -> Unit,
-    val shouldOpenInApp: (Uri) -> Boolean = { false },
     val onMainNavigationStarted: (tabId: String, url: String) -> Unit,
     val onMainUrlUpdated: (tabId: String, url: String) -> Unit,
     val onMainTitleUpdated: (tabId: String, title: String) -> Unit,

@@ -428,7 +428,6 @@ class MainActivity : AppCompatActivity() {
     private fun createEngineCallbacks(): EngineCallbacks {
         return EngineCallbacks(
             onOpenExternalUrl = ::openExternalUrl,
-            shouldOpenInApp = ::shouldOpenInApp,
             onMainNavigationStarted = { tabId, _ ->
                 onTabMainNavigationStarted(tabId)
             },
@@ -2186,13 +2185,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun shouldOpenInApp(uri: Uri): Boolean {
-        val host = uri.host?.lowercase().orEmpty()
-        val path = uri.path.orEmpty()
-        return host == "github.com" &&
-            path.startsWith("/ShakieVan/Tube-NEXT/releases", ignoreCase = true)
-    }
-
     private fun showUpdateManager(initialResult: UpdateCheckResult? = latestUpdateResult) {
         var activeResult = initialResult
         var activeRelease = activeResult?.release ?: latestUpdateResult?.release
@@ -2364,7 +2356,7 @@ class MainActivity : AppCompatActivity() {
         releaseNotesButton.setOnClickListener {
             activeRelease?.htmlUrl?.takeIf { it.isNotBlank() }?.let { url ->
                 settingsDialog?.dismiss()
-                createAndSelectTab(url)
+                openExternalUrl(Uri.parse(url))
                 dialog.dismiss()
             }
         }

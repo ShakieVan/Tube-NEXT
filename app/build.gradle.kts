@@ -96,4 +96,5 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.2.1")
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("org.mozilla.geckoview:geckoview:152.0.20260706120035")
+    testImplementation("junit:junit:4.13.2")
 }

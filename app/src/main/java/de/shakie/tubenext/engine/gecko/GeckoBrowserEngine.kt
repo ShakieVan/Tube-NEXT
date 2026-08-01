@@ -175,10 +175,11 @@ class GeckoBrowserEngine(
                     callbacks.onMainNavigationStarted(tabId, request.uri)
                     return GeckoResult.fromValue(AllowOrDeny.ALLOW)
                 }
-                if (callbacks.shouldOpenInApp(targetUri)) {
-                    callbacks.onMainNavigationStarted(tabId, request.uri)
-                    return GeckoResult.fromValue(AllowOrDeny.ALLOW)
-                }
+                debugLog(
+                    "TUBENEXT_NAV",
+                    "tab=$tabId rejected-top-level-host scheme=$scheme " +
+                        "host=${targetUri.host?.lowercase().orEmpty()}"
+                )
                 callbacks.onOpenExternalUrl(targetUri)
                 return GeckoResult.fromValue(AllowOrDeny.DENY)
             }

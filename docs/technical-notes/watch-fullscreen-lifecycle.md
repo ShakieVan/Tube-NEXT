@@ -70,6 +70,30 @@ WebView-Altbestand. Da die verbindliche Engine GeckoView ist, laufen diese
 Injections nicht. Neue Fullscreen-Arbeit darf diesen Altpfad nicht
 reaktivieren.
 
+### Bereinigungspruefung vom 01.08.2026
+
+Die Aufrufstellen und die Historie ab dem Gecko-Hard-Cut `5c441fa` wurden
+erneut geprueft. Als reine Altbestandskandidaten sind bestaetigt:
+
+- `EngineType.WEBVIEW` und `supportsLegacyWatchTweaks()`,
+- die dadurch geschuetzten Landscape- und Portrait-JavaScript-Injections,
+- `EngineTab.evaluateJavascript()` samt Gecko-/Hibernated-No-op,
+- Feld, Initialisierung und Layoutknoten `fullscreenContainer`,
+- `scheduleWatchViewportStabilization()`, der zugehoerige Delay-Wert und die
+  unter Gecko unerreichbare DOM-Stabilisierung.
+
+Die Entfernung wurde bewusst **nicht** ausgefuehrt. Nach den gleichzeitig
+umgesetzten Login-, Link-Menue- und History-Aenderungen war kein Testgeraet
+verbunden; damit fehlten die vorgeschriebenen Regressionen fuer Landscape,
+Pinch-to-Zoom, Cue-Long-Press, Player-/Kommentar-Menues sowie den Loading-
+Zustand. Der Aufraeumblock bleibt bis zu dieser Geraeteabnahme gesperrt.
+
+Bei der spaeteren Entfernung muessen die aktiven Teile derselben Funktionen
+erhalten bleiben: native immersive System-UI, Zoom/Translation und deren
+Reset, `updateBrowserChromeVisibility()`, generationengebundenes
+Lade-Overlay sowie die WebExtension-Landscape-Klassen. Die Kandidaten duerfen
+nicht als pauschaler Funktionsblock geloescht werden.
+
 ### WebExtension-Ebene
 
 Die WebExtension erkennt eine Watch-Seite im Landscape-Viewport und setzt

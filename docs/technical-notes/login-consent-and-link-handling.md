@@ -74,11 +74,34 @@ Die Toolbar uebernimmt nur nutzersichtbare YouTube-URLs. Insbesondere
 `accounts.youtube.com/RotateCookiesPage`, `about:*` und andere transiente
 Zwischenziele ersetzen nicht die letzte sinnvolle YouTube-Adresse.
 
-## Long-Press auf Links
+## Kurz-Tap und Long-Press auf Links
 
 GeckoView liefert hier nicht dieselben WebView-Hit-Test-Metadaten wie der
 fruehe Prototyp. Das heutige Verhalten wird deshalb eng in der eingebauten
-WebExtension umgesetzt:
+WebExtension umgesetzt. Ein normaler kurzer Tap auf einen geeigneten
+HTTP(S)-YouTube-Link wird vor der Navigation angehalten und als
+`SHOW_LINK_MENU` an die App-Shell gemeldet. Das native Menue bietet:
+
+- im aktuellen Tab oeffnen,
+- in genau einem neuen Tab oeffnen,
+- ueber eine andere App oeffnen,
+- kopieren,
+- teilen,
+- oder Schliessen ohne Aktion.
+
+Aktueller und neuer Tab navigieren ueber die normale Engine-API; dadurch wird
+`YouTubeNavigationPolicy` vor dem Laden angewendet. Die externe Aktion
+schliesst Tube NEXT aus dem Android-Auswahldialog aus und kann daher nicht als
+neuer Intent in dieselbe App zuruecklaufen.
+
+Das Kurz-Tap-Handling ignoriert modifizierte und synthetische Klicks,
+Download- und JavaScript-Links sowie Ziele ausserhalb der unterstuetzten
+YouTube-Hosts. Es greift ebenfalls nicht in Player, Controls, Popup-Menues,
+Dialoge, Account-Menues, Buttons, Tube-NEXT-Overlays oder explizite
+Login-/Consent-/Redirect-Pfade ein. Damit bleiben YouTubes Kommentar-,
+Einstellungs- und Account-Interaktionen in ihrem bestehenden Ereignispfad.
+
+Der Long-Press bleibt der direkte Schnellpfad ohne zusaetzliches Menue:
 
 1. `handleDocumentContextMenu()` reagiert nur auf ein `a[href]`.
 2. Nur HTTP(S)-Links zu YouTube werden akzeptiert.
@@ -88,18 +111,12 @@ WebExtension umgesetzt:
    dem Top-Level-Dokument und validiert die URL erneut als YouTube-URL.
 5. `MainActivity` legt danach den neuen Tab an.
 
-Das ist bewusst **kein vollstaendiges Browser-Kontextmenue**. Der aktuelle
-Stand bietet auf diesem Pfad direkt "YouTube-Link in neuem Tab", aber nicht:
-
-- im aktuellen Tab oeffnen,
-- Link kopieren oder teilen,
-- extern oeffnen,
-- Bild speichern oder andere Bildaktionen.
-
-Falls diese Funktionen spaeter ergaenzt werden, muss die WebExtension nur
-minimal Link-/Bildmetadaten liefern. Auswahl, Darstellung und Android-Aktion
-gehoeren in die App-Shell. Jede native Nachricht bleibt nach Session,
-Top-Level-Sender, Typ, Schema und Ziel-URL zu validieren.
+Ein kurzer Unterdrueckungsmarker konsumiert den gegebenenfalls nach einem
+Long-Press folgenden Click. Dadurch entstehen weder ein zweiter Tab noch das
+Kurz-Tap-Menue. Die WebExtension liefert nur Nachrichtentyp und Ziel-URL;
+Auswahl, Darstellung und Android-Aktion bleiben in der App-Shell. Jede native
+Nachricht wird nach Session, Top-Level-Sender, Typ, Schema und Ziel-URL
+validiert.
 
 ## Abgrenzung zu Player-Kontextmenues
 
@@ -127,11 +144,17 @@ Bei Aenderungen an `contextmenu`-Listenern ist die Reihenfolge wichtig:
    `RotateCookiesPage`- oder `about:*`-URL dauerhaft anzeigt.
 4. Einen beliebigen externen Nicht-YouTube-Link oeffnen: Er geht an eine
    externe Anwendung.
-5. Long-Press auf einen YouTube-Link: genau ein neuer App-Tab mit dem Ziel
-   entsteht.
-6. Long-Press auf normalen Text, Bild ohne YouTube-Link und Player-Control:
+5. Kurzer Tap auf Home-, Kanal-, Such-, Feed- und Watch-Link: Menue erscheint,
+   Abbrechen navigiert nicht.
+6. Alle fuenf Menueaktionen pruefen; aktueller Tab navigiert einmal, neuer Tab
+   entsteht genau einmal und extern oeffnen kehrt nicht in Tube NEXT zurueck.
+7. Long-Press auf einen YouTube-Link: ohne Menue entsteht genau ein neuer
+   App-Tab mit dem Ziel.
+8. Long-Press auf normalen Text, Bild ohne YouTube-Link und Player-Control:
    kein neuer App-Tab.
-7. Im Landscape-Player Pinch-to-Zoom und normales Einstellungsmenue pruefen;
+9. Player-Einstellungen, Account-Menue, Kommentar-Menue sowie Bearbeiten und
+   Loeschen eines eigenen Kommentars pruefen.
+10. Im Landscape-Player Pinch-to-Zoom und normales Einstellungsmenue pruefen;
    das technische Player-Kontextmenue bleibt verborgen.
 
 ## Historische Einordnung

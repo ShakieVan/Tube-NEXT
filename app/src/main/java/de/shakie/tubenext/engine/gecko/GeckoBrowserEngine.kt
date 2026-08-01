@@ -6,6 +6,7 @@ import android.net.Uri
 import android.util.Log
 import android.view.ViewGroup
 import de.shakie.tubenext.browser.LinkInterceptor
+import de.shakie.tubenext.browser.LinkInteractionPolicy
 import de.shakie.tubenext.BuildConfig
 import de.shakie.tubenext.engine.BrowserEngine
 import de.shakie.tubenext.engine.EngineCallbacks
@@ -442,21 +443,29 @@ class GeckoBrowserEngine(
                         return GeckoResult.fromValue(null)
                     }
                     val intent = parseNavigationIntent(message)
-                    if (intent == null || intent.type != MODE_NAV_TYPE) {
-                        if (intent?.type == OPEN_NEW_TAB_TYPE) {
-                            val targetUri = runCatching { Uri.parse(intent.url) }.getOrNull()
-                            if (targetUri == null || !LinkInterceptor.isYouTubeUri(targetUri)) {
-                                Log.w("TUBENEXT_NAV", "Ignored invalid OPEN_NEW_TAB url=${intent.url}")
-                                return GeckoResult.fromValue(null)
-                            }
-                            debugLog("TUBENEXT_NAV", "tab=${bridge.tabId} open-new-tab url=${intent.url}")
-                            bridge.callbacks.onNewTabRequest(intent.url)
+                    if (intent == null) {
+                        return GeckoResult.fromValue(null)
+                    }
+                    if (intent.type == OPEN_NEW_TAB_TYPE || intent.type == SHOW_LINK_MENU_TYPE) {
+                        if (!LinkInteractionPolicy.isSupportedLinkMessage(intent.type, intent.url)) {
+                            Log.w("TUBENEXT_NAV", "Ignored invalid link message type=${intent.type}")
+                            return GeckoResult.fromValue(null)
                         }
+                        if (intent.type == OPEN_NEW_TAB_TYPE) {
+                            debugLog("TUBENEXT_NAV", "tab=${bridge.tabId} open-new-tab")
+                            bridge.callbacks.onNewTabRequest(intent.url)
+                        } else {
+                            debugLog("TUBENEXT_NAV", "tab=${bridge.tabId} show-link-menu")
+                            bridge.callbacks.onLinkMenuRequest(bridge.tabId, intent.url)
+                        }
+                        return GeckoResult.fromValue(null)
+                    }
+                    if (intent.type != MODE_NAV_TYPE) {
                         return GeckoResult.fromValue(null)
                     }
                     val targetUri = runCatching { Uri.parse(intent.url) }.getOrNull()
                     if (targetUri == null || !LinkInterceptor.isInternalFlowUri(targetUri)) {
-                        Log.w("TUBENEXT_UA", "Ignored invalid MODE_NAV url=${intent.url}")
+                        Log.w("TUBENEXT_UA", "Ignored invalid MODE_NAV target")
                         return GeckoResult.fromValue(null)
                     }
                     bridge.applyUserAgentForUrl(intent.url, "extension")
@@ -567,7 +576,8 @@ class GeckoBrowserEngine(
         private const val NAV_EXTENSION_ID = "tubenext-nav-switch@shakie.de"
         private const val NAV_NATIVE_APP_ID = "tubenext_nav_switch"
         private const val MODE_NAV_TYPE = "MODE_NAV"
-        private const val OPEN_NEW_TAB_TYPE = "OPEN_NEW_TAB"
+        private const val OPEN_NEW_TAB_TYPE = LinkInteractionPolicy.OPEN_NEW_TAB_MESSAGE
+        private const val SHOW_LINK_MENU_TYPE = LinkInteractionPolicy.SHOW_LINK_MENU_MESSAGE
         private const val HOME_FEED_READY_TYPE = "HOME_FEED_READY"
         private const val HOME_FEED_SETTINGS_TYPE = "HOME_FEED_SETTINGS"
         fun debugLog(tag: String, message: String) {

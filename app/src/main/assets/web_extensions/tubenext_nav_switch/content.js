@@ -2,8 +2,8 @@
   "use strict";
 
   var NATIVE_APP = "tubenext_nav_switch";
+  var MODE_NAV = "MODE_NAV";
   var OPEN_NEW_TAB = "OPEN_NEW_TAB";
-  var SHOW_LINK_MENU = "SHOW_LINK_MENU";
   var DARK_MODE_STYLE_ID = "tubenext_dark_mode_style";
   var WATCH_FIT_STYLE_ID = "tubenext_watch_fit_style";
   var HOME_FEED_FILTER_STYLE_ID = "tubenext_home_feed_filter_style";
@@ -16,7 +16,6 @@
   var TAP_CONFIRM_DELAY_MS = 320;
   var LONG_PRESS_TRIGGER_MS = 520;
   var LONG_TAP_SUPPRESS_MS = 650;
-  var LINK_CLICK_SUPPRESS_MS = 5000;
   var SEEK_STEP_SECONDS = 10;
   var pendingSingleTapTimer = null;
   var activePlayerTouch = null;
@@ -33,8 +32,6 @@
   var homeFeedObserver = null;
   var watchPageTimer = null;
   var nativePort = null;
-  var suppressLinkClickUntil = 0;
-  var suppressedLinkUrl = "";
   var homeFeedSettings = {
     showShorts: true,
     showCommunityPosts: true,
@@ -1542,8 +1539,6 @@
 
   function shouldIgnoreClick(event) {
     return event.defaultPrevented ||
-      !event.isTrusted ||
-      event.detail <= 0 ||
       event.button !== 0 ||
       event.metaKey ||
       event.ctrlKey ||
@@ -1551,143 +1546,93 @@
       event.altKey;
   }
 
-  function isExcludedLinkInteraction(event, anchor) {
-    var target = event.target;
-    if (!target || typeof target.closest !== "function") {
-      return true;
+  function handleDocumentClick(event) {
+    if (shouldIgnoreClick(event)) {
+      return;
     }
-    if (anchor.matches([
-      "[role='button']",
-      "[aria-haspopup]",
-      "[contenteditable='true']"
-    ].join(","))) {
-      return true;
-    }
-    if (target.closest([
-      "button",
-      "input",
-      "select",
-      "textarea",
-      "summary",
-      "[role='button']",
-      "[contenteditable='true']",
-      "yt-icon-button",
-      "ytd-button-renderer",
-      "ytm-button-renderer"
-    ].join(","))) {
-      return true;
-    }
-    return !!anchor.closest([
-      "[role='menu']",
-      "[role='dialog']",
-      "ytd-popup-container",
-      "ytd-menu-popup-renderer",
-      "ytd-multi-page-menu-renderer",
-      "yt-multi-page-menu-section-renderer",
-      "tp-yt-iron-dropdown",
-      "tp-yt-paper-listbox",
-      ".html5-video-player",
-      ".ytp-popup",
-      ".ytp-settings-menu",
-      ".ytp-chrome-controls",
-      "#" + SCROLL_TOP_BUTTON_ID,
-      "#" + COMMENTS_BUTTON_ID,
-      ".tubenext-cue-overlay"
-    ].join(","));
-  }
 
-  function isLoginConsentOrRedirectTarget(targetUrl) {
-    var path = (targetUrl.pathname || "").toLowerCase();
-    return path === "/signin" ||
-      path.startsWith("/signin/") ||
-      path === "/logout" ||
-      path.startsWith("/logout/") ||
-      path === "/account" ||
-      path.startsWith("/account/") ||
-      path === "/redirect" ||
-      path === "/attribution_link";
-  }
-
-  function eligibleYouTubeLink(event) {
     var anchor = extractAnchor(event.target);
-    if (!anchor || anchor.hasAttribute("download") || isExcludedLinkInteraction(event, anchor)) {
-      return null;
+    if (!anchor) {
+      return;
+    }
+    if (anchor.target && anchor.target !== "_self") {
+      return;
+    }
+    if (anchor.hasAttribute("download")) {
+      return;
     }
 
-    var href = (anchor.getAttribute("href") || "").trim();
-    if (!href || href.charAt(0) === "#" || href.toLowerCase().startsWith("javascript:")) {
-      return null;
+    var href = anchor.getAttribute("href");
+    if (!href || href.startsWith("javascript:")) {
+      return;
     }
 
     var targetUrl;
     try {
       targetUrl = new URL(anchor.href, window.location.href);
     } catch (_) {
-      return null;
+      return;
     }
-    if ((targetUrl.protocol !== "http:" && targetUrl.protocol !== "https:") ||
-        !isYouTubeHost(targetUrl.hostname) ||
-        isLoginConsentOrRedirectTarget(targetUrl)) {
-      return null;
-    }
-    return targetUrl.toString();
-  }
 
-  function consumeLinkEvent(event) {
+    if (targetUrl.protocol !== "http:" && targetUrl.protocol !== "https:") {
+      return;
+    }
+    if (!isYouTubeHost(targetUrl.hostname)) {
+      return;
+    }
+
+    var currentDesktop = shouldUseDesktop(window.location.href);
+    var targetDesktop = shouldUseDesktop(targetUrl.toString());
+    if (currentDesktop === targetDesktop) {
+      return;
+    }
+
     event.preventDefault();
-    event.stopImmediatePropagation();
-  }
-
-  function clearLinkClickSuppressionOnNewPress() {
-    suppressLinkClickUntil = 0;
-    suppressedLinkUrl = "";
-  }
-
-  function handleDocumentClick(event) {
-    if (shouldIgnoreClick(event)) {
-      return;
-    }
-    var targetUrl = eligibleYouTubeLink(event);
-    if (!targetUrl) {
-      return;
-    }
-    if (Date.now() < suppressLinkClickUntil && targetUrl === suppressedLinkUrl) {
-      suppressLinkClickUntil = 0;
-      suppressedLinkUrl = "";
-      consumeLinkEvent(event);
-      return;
-    }
-    consumeLinkEvent(event);
+    event.stopPropagation();
 
     browser.runtime.sendNativeMessage(NATIVE_APP, {
-      type: SHOW_LINK_MENU,
-      url: targetUrl
-    }).catch(function () {});
+      type: MODE_NAV,
+      url: targetUrl.toString()
+    }).catch(function () {
+      window.location.href = targetUrl.toString();
+    });
   }
 
   function handleDocumentContextMenu(event) {
-    if (event.defaultPrevented || !event.isTrusted) {
+    var anchor = extractAnchor(event.target);
+    if (!anchor) {
       return;
     }
-    var targetUrl = eligibleYouTubeLink(event);
-    if (!targetUrl) {
+
+    var href = anchor.getAttribute("href");
+    if (!href || href.startsWith("javascript:")) {
       return;
     }
-    consumeLinkEvent(event);
-    // A later click from this same held gesture is consumed. A genuinely new
-    // press clears the marker before its click, even inside this safety window.
-    suppressLinkClickUntil = Date.now() + LINK_CLICK_SUPPRESS_MS;
-    suppressedLinkUrl = targetUrl;
+
+    var targetUrl;
+    try {
+      targetUrl = new URL(anchor.href, window.location.href);
+    } catch (_) {
+      return;
+    }
+
+    if (targetUrl.protocol !== "http:" && targetUrl.protocol !== "https:") {
+      return;
+    }
+    if (!isYouTubeHost(targetUrl.hostname)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
 
     browser.runtime.sendNativeMessage(NATIVE_APP, {
       type: OPEN_NEW_TAB,
-      url: targetUrl
+      url: targetUrl.toString()
     }).catch(function () {});
   }
 
   document.addEventListener("touchstart", handleLandscapePlayerTouchStart, true);
-  document.addEventListener("touchstart", clearLinkClickSuppressionOnNewPress, true);
-  document.addEventListener("pointerdown", clearLinkClickSuppressionOnNewPress, true);
   document.addEventListener("touchmove", handleLandscapePlayerTouchMove, true);
   document.addEventListener("touchend", handleLandscapePlayerTouchEnd, true);
   document.addEventListener("touchcancel", handleLandscapePlayerTouchCancel, true);

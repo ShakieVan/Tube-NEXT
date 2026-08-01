@@ -51,9 +51,6 @@ import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
 import de.shakie.tubenext.audio.AndroidBackgroundAudioCoordinator
 import de.shakie.tubenext.browser.LinkInterceptor
-import de.shakie.tubenext.browser.LinkInteractionPolicy
-import de.shakie.tubenext.browser.LinkMenuAction
-import de.shakie.tubenext.browser.LinkMenuActionCallbacks
 import de.shakie.tubenext.browser.YouTubeNavigationPolicy
 import de.shakie.tubenext.engine.BrowserEngine
 import de.shakie.tubenext.engine.EngineCallbacks
@@ -111,7 +108,6 @@ class MainActivity : AppCompatActivity() {
     private var latestUpdateResult: UpdateCheckResult? = null
     private var updateDownloadHandle: UpdateDownloader.DownloadHandle? = null
     private var settingsDialog: androidx.appcompat.app.AlertDialog? = null
-    private var linkMenuDialog: androidx.appcompat.app.AlertDialog? = null
     private var batteryOptimizationDialogVisible = false
     private var pendingUpdateNotificationRelease: UpdateRelease? = null
     private var updatePermissionDialogVisible = false
@@ -469,7 +465,6 @@ class MainActivity : AppCompatActivity() {
             onNewTabRequest = { targetUrl ->
                 createAndSelectTab(targetUrl)
             },
-            onLinkMenuRequest = ::showLinkMenu,
             onHistoryAvailabilityChanged = { tabId, _, _ ->
                 if (selectedTabId == tabId) updateToolbarState()
             },
@@ -1514,53 +1509,6 @@ class MainActivity : AppCompatActivity() {
         tab.engineTab.view.setOnLongClickListener { false }
     }
 
-    private fun showLinkMenu(tabId: String, url: String) {
-        if (selectedTabId != tabId || !LinkInteractionPolicy.isYouTubeHttpUrl(url)) return
-        if (linkMenuDialog?.isShowing == true) return
-
-        val actions = LinkMenuAction.entries
-        val labels = arrayOf(
-            getString(R.string.link_open_current),
-            getString(R.string.link_open_new),
-            getString(R.string.link_open_external),
-            getString(R.string.link_copy),
-            getString(R.string.link_share)
-        )
-        linkMenuDialog = MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.link_open_title)
-            .setItems(labels) { _, index ->
-                actions.getOrNull(index)?.let { action ->
-                    dispatchLinkMenuAction(tabId, url, action)
-                }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .create()
-            .also { dialog ->
-                dialog.setOnDismissListener {
-                    if (linkMenuDialog === dialog) {
-                        linkMenuDialog = null
-                    }
-                }
-                dialog.show()
-            }
-    }
-
-    private fun dispatchLinkMenuAction(tabId: String, url: String, action: LinkMenuAction) {
-        LinkInteractionPolicy.dispatch(
-            action = action,
-            url = url,
-            callbacks = LinkMenuActionCallbacks(
-                openCurrent = { target ->
-                    if (selectedTabId == tabId) loadInCurrentTab(target)
-                },
-                openNew = ::createAndSelectTab,
-                openExternal = ::openYouTubeLinkExternally,
-                copy = ::copyToClipboard,
-                share = ::shareLink
-            )
-        )
-    }
-
     private fun enterLandscapeVideoModeIfNeeded() {
         val tab = currentTab() ?: return
         if (!isCurrentTabWatchPage()) return
@@ -2245,18 +2193,6 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(Intent.ACTION_VIEW, uri))
         } catch (_: ActivityNotFoundException) {
             Snackbar.make(webViewContainer, uri.toString(), Snackbar.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun openYouTubeLinkExternally(url: String) {
-        val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-        val chooser = Intent.createChooser(viewIntent, null).apply {
-            putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, arrayOf(componentName))
-        }
-        try {
-            startActivity(chooser)
-        } catch (_: ActivityNotFoundException) {
-            Snackbar.make(webViewContainer, url, Snackbar.LENGTH_SHORT).show()
         }
     }
 

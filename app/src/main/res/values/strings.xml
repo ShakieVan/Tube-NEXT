@@ -5,6 +5,8 @@
     <string name="menu_duplicate_tab">Tab duplizieren</string>
     <string name="menu_close_tab">Tab schließen</string>
     <string name="menu_reload">Neu laden</string>
+    <string name="navigation_back">Zurück</string>
+    <string name="navigation_forward">Vorwärts</string>
     <string name="menu_updates">Updates</string>
     <string name="default_tab_title">Neuer Tab</string>
     <string name="link_open_title">YouTube-Link öffnen</string>

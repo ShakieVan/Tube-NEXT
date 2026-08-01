@@ -117,6 +117,12 @@ Die Adresszeile folgt der Top-Level-Location aus `onLocationChange()`.
 Tab-History und Titel, sind aber keine verlaessliche Quelle fuer jede sichtbare
 URL-Aktualisierung.
 
+Die nutzersichtbare Zurueck-/Vorwaerts-Navigation wird deshalb zusaetzlich als
+tabbezogene kanonische YouTube-History gefuehrt. Geckos rohe Back-/Forward-
+Availability bleibt nur Fallback fuer interne Zwischenziele. Details und
+Regressionen stehen in
+[`canonical-back-forward-navigation.md`](canonical-back-forward-navigation.md).
+
 `MainActivity` filtert die gemeldete Location nochmals mit
 `YouTubeNavigationPolicy.isUserVisibleUrl()`. Kurzlebige
 `accounts.youtube.com/RotateCookiesPage`-, `about:blank`- oder andere interne

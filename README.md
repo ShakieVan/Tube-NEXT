@@ -21,6 +21,7 @@ Tube NEXT ist der Versuch, genau diese Browser-Erfahrung in eine alltagstauglich
 - **Mobile Oberflaeche fuer normale YouTube-Seiten:** Start, Suche, Kanal- und Uebersichtsseiten bleiben touchfreundlich.
 - **Desktop-Watch fuer Video-Seiten:** Watch-Seiten koennen Desktop-Funktionen nutzen, werden aber per CSS/Viewport-Anpassung mobil passend gemacht.
 - **Tabs wie im Browser:** Mehrere YouTube-Seiten parallel offen halten, wechseln, schliessen und per Vorschau wiederfinden.
+- **Zurück und vorwärts pro Tab:** Gut erreichbare Toolbar-Tasten folgen der sichtbaren History des jeweils aktiven Tabs.
 - **Link-Auswahl bei kurzem Tap:** YouTube-Links lassen sich im aktuellen oder neuen Tab, extern, per Kopieren oder Teilen behandeln; Abbrechen navigiert nicht.
 - **Schnelles Oeffnen in neuen Tabs:** Long-Tap auf einen YouTube-Link oeffnet ihn weiterhin direkt und ohne Menue in einem neuen Tab.
 - **Hintergrund-Audio:** Audio kann weiterlaufen, wenn die App im Hintergrund ist. Android zeigt dazu eine Medienbenachrichtigung mit Steuerung.

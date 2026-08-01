@@ -12,6 +12,8 @@ interface EngineTab {
     fun reload()
     fun canGoBack(): Boolean
     fun goBack()
+    fun canGoForward(): Boolean
+    fun goForward()
     fun stopLoading()
     fun detach()
     fun destroy()

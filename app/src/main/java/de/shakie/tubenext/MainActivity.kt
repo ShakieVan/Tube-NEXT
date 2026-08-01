@@ -85,6 +85,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var toolbar: MaterialToolbar
     private lateinit var tabLayout: TabLayout
     private lateinit var urlTextView: TextView
+    private lateinit var backButton: ImageButton
+    private lateinit var forwardButton: ImageButton
     private lateinit var reloadButton: ImageButton
     private lateinit var tabSwitcherButton: FrameLayout
     private lateinit var homeFeedMenuButton: ImageButton
@@ -127,6 +129,8 @@ class MainActivity : AppCompatActivity() {
         toolbar = findViewById(R.id.toolbar)
         tabLayout = findViewById(R.id.tabLayout)
         urlTextView = findViewById(R.id.urlText)
+        backButton = findViewById(R.id.backButton)
+        forwardButton = findViewById(R.id.forwardButton)
         reloadButton = findViewById(R.id.reloadButton)
         tabSwitcherButton = findViewById(R.id.tabSwitcherButton)
         homeFeedMenuButton = findViewById(R.id.homeFeedMenuButton)
@@ -269,6 +273,12 @@ class MainActivity : AppCompatActivity() {
     private fun setupToolbar() {
         toolbar.title = null
         toolbar.subtitle = null
+        backButton.setOnClickListener {
+            currentTab()?.let(::navigateBackForTab)
+        }
+        forwardButton.setOnClickListener {
+            currentTab()?.let(::navigateForwardForTab)
+        }
         reloadButton.setOnClickListener {
             currentTab()?.engineTab?.reload()
         }
@@ -343,12 +353,7 @@ class MainActivity : AppCompatActivity() {
                     disableLandscapeVideoMode()
                     return
                 }
-                if (current != null && navigateBackInTabHistory(current)) {
-                    return
-                }
-                if (current?.engineTab?.canGoBack() == true) {
-                    current.engineTab.goBack()
-                } else {
+                if (current == null || !navigateBackForTab(current)) {
                     finish()
                 }
             }
@@ -432,16 +437,22 @@ class MainActivity : AppCompatActivity() {
     private fun createEngineCallbacks(): EngineCallbacks {
         return EngineCallbacks(
             onOpenExternalUrl = ::openExternalUrl,
-            onMainNavigationStarted = { tabId, _ ->
+            onMainNavigationStarted = { tabId, url ->
+                browserTabs[tabId]?.navigationHistory?.recordNavigationStart(url)
                 onTabMainNavigationStarted(tabId)
+                if (selectedTabId == tabId) updateToolbarState()
             },
             onMainUrlUpdated = { tabId, url ->
+                browserTabs[tabId]?.rawHistoryNavigationPending = false
                 updateTabState(tabId, newUrl = url)
             },
             onMainTitleUpdated = { tabId, title ->
                 updateTabState(tabId, newTitle = title)
             },
             onMainPageFinished = { tabId, url ->
+                browserTabs[tabId]?.navigationHistory?.cancelPendingNavigation()
+                browserTabs[tabId]?.rawHistoryNavigationPending = false
+                if (selectedTabId == tabId) updateToolbarState()
                 scheduleWatchViewportStabilization(tabId, url)
             },
             onProgressChanged = { tabId, progress ->
@@ -452,6 +463,9 @@ class MainActivity : AppCompatActivity() {
                 createAndSelectTab(targetUrl)
             },
             onLinkMenuRequest = ::showLinkMenu,
+            onHistoryAvailabilityChanged = { tabId, _, _ ->
+                if (selectedTabId == tabId) updateToolbarState()
+            },
             onFullscreenChanged = { _, isFullscreen ->
                 if (isFullscreen) {
                     disableLandscapeVideoMode()
@@ -460,6 +474,8 @@ class MainActivity : AppCompatActivity() {
                 updateBrowserChromeVisibility()
             },
             onLoadError = { tabId ->
+                browserTabs[tabId]?.navigationHistory?.cancelPendingNavigation()
+                browserTabs[tabId]?.rawHistoryNavigationPending = false
                 completeTabLoading(tabId, browserTabs[tabId]?.pageLoadGeneration)
                 Snackbar.make(webViewContainer, R.string.page_load_error, Snackbar.LENGTH_SHORT).show()
             },
@@ -613,7 +629,7 @@ class MainActivity : AppCompatActivity() {
         val updatedTitle = normalizeTabTitle(newTitle ?: tab.title)
         if (updatedUrl == tab.url && updatedTitle == tab.title) return
 
-        recordTabHistory(tab, updatedUrl)
+        tab.navigationHistory.record(updatedUrl)
         tab.url = updatedUrl
         tab.title = updatedTitle
         tabManager.update(tabId, updatedUrl, updatedTitle)
@@ -692,8 +708,7 @@ class MainActivity : AppCompatActivity() {
             val wasSelected = selectedTabId == tabId
             val url = oldTab.url.ifBlank { DEFAULT_URL }
             val title = oldTab.title
-            val history = oldTab.navigationHistory.toList()
-            val historyIndex = oldTab.historyIndex
+            val history = oldTab.navigationHistory.snapshot()
             Log.w("TUBENEXT_RENDER", "recreate Gecko tab tab=$tabId reason=$reason selected=$wasSelected url=$url")
 
             geckoRenderHealthGeneration += 1
@@ -714,9 +729,7 @@ class MainActivity : AppCompatActivity() {
                 TabSession(id = tabId, url = url, title = title),
                 loadInitialUrl = wasSelected
             )
-            replacement.navigationHistory.clear()
-            replacement.navigationHistory.addAll(history)
-            replacement.historyIndex = historyIndex
+            replacement.navigationHistory.restore(history)
             replacement.title = title
             replacement.url = url
             tabManager.update(tabId, url, title)
@@ -1116,75 +1129,56 @@ class MainActivity : AppCompatActivity() {
         return selectedTabId?.let { browserTabs[it] }
     }
 
-    private fun navigateBackInTabHistory(tab: AppTab): Boolean {
+    private fun navigateBackForTab(tab: AppTab): Boolean {
         val activeTab = ensureTabAwake(tab.id, "history-back") ?: return false
-        if (activeTab.historyIndex <= 0) return false
-        val currentCanonicalUrl = canonicalHistoryUrl(activeTab.url)
-        do {
-            activeTab.historyIndex -= 1
-        } while (
-            activeTab.historyIndex > 0 &&
-            activeTab.navigationHistory.getOrNull(activeTab.historyIndex) == currentCanonicalUrl
-        )
-        activeTab.pendingHistoryNavigation = true
-        activeTab.engineTab.loadUrl(activeTab.navigationHistory[activeTab.historyIndex])
+        if (activeTab.navigationHistory.isNavigationPending || activeTab.rawHistoryNavigationPending) {
+            return true
+        }
+        val target = activeTab.navigationHistory.backTarget(activeTab.url)
+        if (target != null) {
+            updateToolbarState()
+            activeTab.engineTab.loadUrl(target)
+            return true
+        }
+        if (!activeTab.engineTab.canGoBack()) return false
+        activeTab.rawHistoryNavigationPending = true
+        updateToolbarState()
+        activeTab.engineTab.goBack()
         return true
     }
 
-    private fun recordTabHistory(tab: AppTab, url: String) {
-        val canonicalUrl = canonicalHistoryUrl(url)
-        if (canonicalUrl.isBlank()) return
-
-        if (tab.pendingHistoryNavigation) {
-            tab.pendingHistoryNavigation = false
-            if (tab.historyIndex !in tab.navigationHistory.indices) {
-                tab.navigationHistory.clear()
-                tab.navigationHistory.add(canonicalUrl)
-                tab.historyIndex = 0
-                return
-            }
-            tab.navigationHistory[tab.historyIndex] = canonicalUrl
-            return
+    private fun navigateForwardForTab(tab: AppTab): Boolean {
+        val activeTab = ensureTabAwake(tab.id, "history-forward") ?: return false
+        if (activeTab.navigationHistory.isNavigationPending || activeTab.rawHistoryNavigationPending) {
+            return true
         }
-
-        val currentUrl = tab.navigationHistory.getOrNull(tab.historyIndex)
-        if (currentUrl == canonicalUrl) return
-
-        if (tab.historyIndex < tab.navigationHistory.lastIndex) {
-            tab.navigationHistory.subList(tab.historyIndex + 1, tab.navigationHistory.size).clear()
+        val target = activeTab.navigationHistory.forwardTarget(activeTab.url)
+        if (target != null) {
+            updateToolbarState()
+            activeTab.engineTab.loadUrl(target)
+            return true
         }
-        tab.navigationHistory.add(canonicalUrl)
-        tab.historyIndex = tab.navigationHistory.lastIndex
-    }
-
-    private fun canonicalHistoryUrl(url: String): String {
-        if (!YouTubeNavigationPolicy.isUserVisibleUrl(url)) return ""
-        val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return url
-        if (!YouTubeNavigationPolicy.isWatchUrl(url)) {
-            return uri.buildUpon()
-                .fragment(null)
-                .build()
-                .toString()
-        }
-
-        val videoId = if (uri.host?.lowercase() == "youtu.be") {
-            uri.pathSegments.firstOrNull()
-        } else {
-            uri.getQueryParameter("v")
-        }
-        if (videoId.isNullOrBlank()) return url
-        return Uri.Builder()
-            .scheme("https")
-            .authority("www.youtube.com")
-            .path("watch")
-            .appendQueryParameter("v", videoId)
-            .build()
-            .toString()
+        if (!activeTab.engineTab.canGoForward()) return false
+        activeTab.rawHistoryNavigationPending = true
+        updateToolbarState()
+        activeTab.engineTab.goForward()
+        return true
     }
 
     private fun updateToolbarState() {
         val current = currentTab()
         urlTextView.text = current?.url?.takeIf { it.isNotBlank() }?.let(::formatToolbarUrl).orEmpty()
+        val navigationPending = current?.let { tab ->
+            tab.navigationHistory.isNavigationPending || tab.rawHistoryNavigationPending
+        } == true
+        backButton.isEnabled = !navigationPending && current?.let { tab ->
+            tab.navigationHistory.canGoBack(tab.url) || tab.engineTab.canGoBack()
+        } == true
+        forwardButton.isEnabled = !navigationPending && current?.let { tab ->
+            tab.navigationHistory.canGoForward(tab.url) || tab.engineTab.canGoForward()
+        } == true
+        backButton.alpha = if (backButton.isEnabled) 1f else 0.38f
+        forwardButton.alpha = if (forwardButton.isEnabled) 1f else 0.38f
     }
 
     private fun closeTabById(tabId: String, showMessage: Boolean = true) {
@@ -2708,6 +2702,10 @@ class MainActivity : AppCompatActivity() {
         override fun canGoBack(): Boolean = false
 
         override fun goBack() = Unit
+
+        override fun canGoForward(): Boolean = false
+
+        override fun goForward() = Unit
 
         override fun stopLoading() = Unit
 

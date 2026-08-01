@@ -148,6 +148,20 @@ class GeckoBrowserEngine(
         session.navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onCanGoBack(session: GeckoSession, value: Boolean) {
                 retainedTab.canGoBack = value
+                callbacks.onHistoryAvailabilityChanged(
+                    tabId,
+                    retainedTab.canGoBack,
+                    retainedTab.canGoForward
+                )
+            }
+
+            override fun onCanGoForward(session: GeckoSession, value: Boolean) {
+                retainedTab.canGoForward = value
+                callbacks.onHistoryAvailabilityChanged(
+                    tabId,
+                    retainedTab.canGoBack,
+                    retainedTab.canGoForward
+                )
             }
 
             override fun onLocationChange(
@@ -349,6 +363,7 @@ class GeckoBrowserEngine(
             title = title,
             url = retainedTab.currentUrl.ifBlank { initialUrl },
             canGoBackProvider = { retainedTab.canGoBack },
+            canGoForwardProvider = { retainedTab.canGoForward },
             shouldUseDesktopMode = shouldUseDesktopMode,
             onDetach = {
                 removeNavigationBridge(session)
@@ -558,7 +573,8 @@ class GeckoBrowserEngine(
         var currentUrl: String,
         var title: String,
         var desktopMode: Boolean,
-        var canGoBack: Boolean = false
+        var canGoBack: Boolean = false,
+        var canGoForward: Boolean = false
     )
 
     private data class NavigationIntent(
@@ -602,6 +618,7 @@ private data class GeckoEngineTab(
     override var title: String,
     override var url: String,
     val canGoBackProvider: () -> Boolean,
+    val canGoForwardProvider: () -> Boolean,
     val shouldUseDesktopMode: (String) -> Boolean,
     val onDetach: () -> Unit,
     val onDestroy: () -> Unit,
@@ -624,6 +641,12 @@ private data class GeckoEngineTab(
 
     override fun goBack() {
         session.goBack()
+    }
+
+    override fun canGoForward(): Boolean = canGoForwardProvider()
+
+    override fun goForward() {
+        session.goForward()
     }
 
     override fun stopLoading() {

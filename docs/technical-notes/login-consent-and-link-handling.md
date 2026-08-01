@@ -1,7 +1,7 @@
 # Login-, Consent- und Link-Handling
 
-Stand: am 25.07.2026 gegen den aktuellen GeckoView-Code und den fruehen
-Projekt-Task `Setze AGENTS-Anweisungen um` geprueft
+Stand: am 01.08.2026 gegen den aktuellen GeckoView-Code und den Geraeteablauf
+auf dem Samsung SM-S928B geprueft
 
 ## Zweck
 
@@ -80,6 +80,23 @@ Account- und Consent-Zwischenziele sind kein Desktop-Watch-Signal.
 Die Toolbar uebernimmt nur nutzersichtbare YouTube-URLs. Insbesondere
 `accounts.youtube.com/RotateCookiesPage`, `about:*` und andere transiente
 Zwischenziele ersetzen nicht die letzte sinnvolle YouTube-Adresse.
+
+## Bestaetigter Geraeteablauf
+
+Am 01.08.2026 wurde nach dem Loeschen der Debug-App-Daten folgender realer
+Top-Level-Ablauf beobachtet:
+
+1. YouTube-Login innerhalb der Gecko-Sitzung,
+2. Passwort und Zwei-Faktor-Bestaetigung,
+3. Weiterleitung auf `gds.google.com` zur Festlegung einer privaten Adresse,
+4. Rueckkehr zu YouTube,
+5. Neuladen der Seite in Tube NEXT mit erfolgreicher Anmeldung.
+
+Vor Aufnahme von `gds.google.com` sprang dieser Zwischenschritt in einen
+anderen Browser und liess den Nutzer anschliessend dort auf YouTube landen.
+Die explizite Hostfreigabe haelt den beobachteten Pfad nun in derselben
+Gecko-Sitzung. Sie ist kein Beleg fuer eine allgemeine Freigabe weiterer
+Google-Subdomains.
 
 ## Long-Press-Slider fuer Links
 

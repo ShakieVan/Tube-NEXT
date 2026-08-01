@@ -30,6 +30,12 @@ Bestehende Querschnittsdokumente:
   interne Login-/Consent-Flows, externe Ziele sowie Long-Press-Slider fuer Linkaktionen.
 - [`technical-notes/canonical-back-forward-navigation.md`](technical-notes/canonical-back-forward-navigation.md):
   tabbezogene kanonische Zurueck-/Vorwaerts-History und Gecko-Fallback.
+- [`technical-notes/tab-restoration-and-previews.md`](technical-notes/tab-restoration-and-previews.md):
+  Lazy Restore, Gecko-Snapshot-Grenzen und Watch-Artwork fuer schnelle
+  Hintergrund-Tabwechsel.
+- [`technical-notes/build-variants-and-geckoview-r8.md`](technical-notes/build-variants-and-geckoview-r8.md):
+  getrennte App-IDs, verpflichtende Produktionssignierung und der weiterhin
+  unminifizierte GeckoView-Release-Build.
 - [`technical-notes/watch-fullscreen-lifecycle.md`](technical-notes/watch-fullscreen-lifecycle.md):
   heutige Aufgabenteilung und historische Erkenntnisse zu Watch,
   Landscape, Fullscreen und Lade-Overlay.

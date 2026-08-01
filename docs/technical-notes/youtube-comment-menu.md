@@ -1,6 +1,6 @@
 # Bearbeiten und Loeschen eigener YouTube-Kommentare
 
-Stand: Tube NEXT 1.3.8
+Stand: am 01.08.2026 gegen den `v1.4.0`-Release-Kandidaten geprueft
 
 ## Beobachtung
 
@@ -74,6 +74,9 @@ Manuell auf einem Samsung SM-S928B mit der parallel installierten Debug-App:
 6. Im Watch-Aktionsmenue `Speichern` ueber einem Link in der Beschreibung
    waehlen: Der Speichern-Dialog muss reagieren, der Link darunter darf nicht
    geoeffnet werden.
+
+Der sechste Ablauf wurde am 01.08.2026 auf dem Samsung SM-S928B manuell
+bestaetigt.
 
 ## Regressionsrisiko
 

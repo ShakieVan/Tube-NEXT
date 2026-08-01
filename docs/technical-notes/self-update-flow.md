@@ -1,6 +1,7 @@
 # GitHub-/Sideload-Updateverwaltung
 
-Stand: am 25.07.2026 gegen `master` und die Git-Historie geprueft
+Stand: am 01.08.2026 gegen den `v1.4.0`-Release-Kandidaten und die
+Git-Historie geprueft
 
 ## Distributionsmodell
 
@@ -179,6 +180,9 @@ bei einer spaeteren Haertung bewusst priorisiert und getestet werden.
 - `v1.3.2`: sichtbarer Fallback fuer fehlende Notification-Berechtigung und
   damalige Pruefung bei jedem Start.
 - `v1.3.3`: energiesparende 24-Stunden-Zeitstempelpruefung in `onStart()`.
+- `v1.4.0`: ABI-Namen werden als vollstaendige Tokens abgegrenzt, damit
+  insbesondere `x86` nicht mit `x86_64` verwechselt wird; die Auswahl ist
+  durch Offline-Unit-Tests abgesichert.
 
 ## Regressionstest
 

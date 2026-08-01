@@ -1,6 +1,7 @@
 # Buildvarianten, Signierung und GeckoView/R8
 
-Stand: am 25.07.2026 gegen `master`, `v1.0.1` und `v1.0.2` geprueft
+Stand: am 01.08.2026 gegen den `v1.4.0`-Release-Kandidaten sowie die
+historischen Builds `v1.0.1` und `v1.0.2` geprueft
 
 ## Getrennte App-Identitaeten
 

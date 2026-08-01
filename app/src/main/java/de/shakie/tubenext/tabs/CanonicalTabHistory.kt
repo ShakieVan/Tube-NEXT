@@ -99,7 +99,9 @@ class CanonicalTabHistory(initialUrl: String = "") {
             val path = uri.path.orEmpty()
             val isWatch = host == "youtu.be" || path.startsWith("/watch")
             if (!isWatch) {
-                return url.substringBefore('#')
+                val normalizedPath = uri.rawPath.orEmpty().ifBlank { "/" }
+                val normalizedQuery = uri.rawQuery?.let { "?$it" }.orEmpty()
+                return "https://www.youtube.com$normalizedPath$normalizedQuery"
             }
 
             val videoId = if (host == "youtu.be") {
@@ -115,6 +117,10 @@ class CanonicalTabHistory(initialUrl: String = "") {
             }
             if (!videoId.matches(Regex("[A-Za-z0-9_-]+"))) return url.substringBefore('#')
             return "https://www.youtube.com/watch?v=$videoId"
+        }
+
+        fun shouldUseEngineHistory(engineLocationUrl: String): Boolean {
+            return engineLocationUrl.isNotBlank() && canonicalize(engineLocationUrl).isBlank()
         }
     }
 }

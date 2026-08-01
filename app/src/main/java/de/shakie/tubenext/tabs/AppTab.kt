@@ -8,6 +8,7 @@ data class AppTab(
     var isDesktopMode: Boolean = false,
     var title: String = "",
     var url: String = "",
+    var engineLocationUrl: String = url,
     val navigationHistory: CanonicalTabHistory = CanonicalTabHistory(url),
     var rawHistoryNavigationPending: Boolean = false,
     var watchStabilizationGeneration: Long = 0L,

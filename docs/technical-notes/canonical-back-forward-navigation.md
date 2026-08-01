@@ -17,6 +17,8 @@ ausgefuehrt werden.
 ## Kanonisierung
 
 - Nur die unterstuetzten HTTP(S)-YouTube-Hosts werden aufgenommen.
+- `youtube.com`, `www.youtube.com` und `m.youtube.com` werden fuer die
+  History-Identitaet auf `www.youtube.com` normalisiert.
 - Fragmente normaler Seiten werden entfernt.
 - Watch- und `youtu.be`-Ziele werden auf
   `https://www.youtube.com/watch?v=<video-id>` reduziert.
@@ -38,10 +40,13 @@ Location-Aenderungen laufen durch denselben Record-Pfad. Moduswechsel werden
 weiterhin vor dem Laden von `YouTubeNavigationPolicy` behandelt.
 
 Geckos `canGoBack`/`canGoForward` bleibt als begrenzter Fallback erhalten,
-wenn die kanonische History kein Ziel hat. Das ist insbesondere fuer interne
-Login-/Consent-Zwischenschritte notwendig. Die Schaltflaechen lesen beide
-Zustaende immer vom aktuell ausgewaehlten Tab und werden beim Tabwechsel sowie
-bei Gecko-Availability-Callbacks sofort aktualisiert.
+solange die tatsaechliche Engine-Location ein interner, nicht kanonischer
+Login-/Consent-Zwischenschritt ist. Auf einer YouTube-Seite bestimmt nur die
+kanonische History den Buttonzustand. Reine `www`-/`m`-, UA- und
+Mobile-/Desktop-Redirects aktivieren Zurueck deshalb nicht direkt nach dem
+Erstellen eines Tabs. Die Schaltflaechen lesen beide Zustaende immer vom
+aktuell ausgewaehlten Tab und werden beim Tabwechsel sowie bei Gecko-
+Availability-Callbacks sofort aktualisiert.
 
 ## Oberflaeche
 
@@ -59,6 +64,8 @@ und optisch abgeblendet.
 - genau einen pending History-Schritt,
 - Verwerfen der Forward-History bei einem neuen Ziel,
 - Watch-/`youtu.be`-Kanonisierung,
+- Gleichheit von `www.youtube.com` und `m.youtube.com`,
+- Gecko-History-Fallback nur auf transienten Engine-Locations,
 - Ausschluss von Login- und Fremdzielen,
 - Wiederherstellung ohne haengenden pending-Zustand.
 

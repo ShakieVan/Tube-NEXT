@@ -62,6 +62,7 @@ import de.shakie.tubenext.engine.EngineTab
 import de.shakie.tubenext.engine.EngineType
 import de.shakie.tubenext.engine.gecko.GeckoBrowserEngine
 import de.shakie.tubenext.tabs.AppTab
+import de.shakie.tubenext.tabs.CanonicalTabHistory
 import de.shakie.tubenext.tabs.TabManager
 import de.shakie.tubenext.tabs.TabPersistence
 import de.shakie.tubenext.tabs.TabPreviewStore
@@ -438,12 +439,18 @@ class MainActivity : AppCompatActivity() {
         return EngineCallbacks(
             onOpenExternalUrl = ::openExternalUrl,
             onMainNavigationStarted = { tabId, url ->
-                browserTabs[tabId]?.navigationHistory?.recordNavigationStart(url)
+                browserTabs[tabId]?.let { tab ->
+                    tab.engineLocationUrl = url
+                    tab.navigationHistory.recordNavigationStart(url)
+                }
                 onTabMainNavigationStarted(tabId)
                 if (selectedTabId == tabId) updateToolbarState()
             },
             onMainUrlUpdated = { tabId, url ->
-                browserTabs[tabId]?.rawHistoryNavigationPending = false
+                browserTabs[tabId]?.let { tab ->
+                    tab.engineLocationUrl = url
+                    tab.rawHistoryNavigationPending = false
+                }
                 updateTabState(tabId, newUrl = url)
             },
             onMainTitleUpdated = { tabId, title ->
@@ -1134,22 +1141,32 @@ class MainActivity : AppCompatActivity() {
         if (activeTab.navigationHistory.isNavigationPending || activeTab.rawHistoryNavigationPending) {
             return true
         }
+        if (CanonicalTabHistory.shouldUseEngineHistory(activeTab.engineLocationUrl)) {
+            if (!activeTab.engineTab.canGoBack()) return false
+            activeTab.rawHistoryNavigationPending = true
+            updateToolbarState()
+            activeTab.engineTab.goBack()
+            return true
+        }
         val target = activeTab.navigationHistory.backTarget(activeTab.url)
         if (target != null) {
             updateToolbarState()
             activeTab.engineTab.loadUrl(target)
             return true
         }
-        if (!activeTab.engineTab.canGoBack()) return false
-        activeTab.rawHistoryNavigationPending = true
-        updateToolbarState()
-        activeTab.engineTab.goBack()
-        return true
+        return false
     }
 
     private fun navigateForwardForTab(tab: AppTab): Boolean {
         val activeTab = ensureTabAwake(tab.id, "history-forward") ?: return false
         if (activeTab.navigationHistory.isNavigationPending || activeTab.rawHistoryNavigationPending) {
+            return true
+        }
+        if (CanonicalTabHistory.shouldUseEngineHistory(activeTab.engineLocationUrl)) {
+            if (!activeTab.engineTab.canGoForward()) return false
+            activeTab.rawHistoryNavigationPending = true
+            updateToolbarState()
+            activeTab.engineTab.goForward()
             return true
         }
         val target = activeTab.navigationHistory.forwardTarget(activeTab.url)
@@ -1158,11 +1175,7 @@ class MainActivity : AppCompatActivity() {
             activeTab.engineTab.loadUrl(target)
             return true
         }
-        if (!activeTab.engineTab.canGoForward()) return false
-        activeTab.rawHistoryNavigationPending = true
-        updateToolbarState()
-        activeTab.engineTab.goForward()
-        return true
+        return false
     }
 
     private fun updateToolbarState() {
@@ -1172,10 +1185,14 @@ class MainActivity : AppCompatActivity() {
             tab.navigationHistory.isNavigationPending || tab.rawHistoryNavigationPending
         } == true
         backButton.isEnabled = !navigationPending && current?.let { tab ->
-            tab.navigationHistory.canGoBack(tab.url) || tab.engineTab.canGoBack()
+            tab.navigationHistory.canGoBack(tab.url) ||
+                (CanonicalTabHistory.shouldUseEngineHistory(tab.engineLocationUrl) &&
+                    tab.engineTab.canGoBack())
         } == true
         forwardButton.isEnabled = !navigationPending && current?.let { tab ->
-            tab.navigationHistory.canGoForward(tab.url) || tab.engineTab.canGoForward()
+            tab.navigationHistory.canGoForward(tab.url) ||
+                (CanonicalTabHistory.shouldUseEngineHistory(tab.engineLocationUrl) &&
+                    tab.engineTab.canGoForward())
         } == true
         backButton.alpha = if (backButton.isEnabled) 1f else 0.38f
         forwardButton.alpha = if (forwardButton.isEnabled) 1f else 0.38f

@@ -64,6 +64,12 @@ class CanonicalTabHistoryTest {
                 "https://www.youtube.com/feed/subscriptions?flow=2#menu"
             )
         )
+        assertEquals(
+            "https://www.youtube.com/feed/subscriptions?flow=2",
+            CanonicalTabHistory.canonicalize(
+                "https://m.youtube.com/feed/subscriptions?flow=2#menu"
+            )
+        )
         assertEquals("", CanonicalTabHistory.canonicalize("https://accounts.google.com/ServiceLogin"))
         assertEquals("", CanonicalTabHistory.canonicalize("https://example.com/"))
 
@@ -73,6 +79,29 @@ class CanonicalTabHistoryTest {
         assertEquals(
             "https://www.youtube.com/",
             history.backTarget("https://www.youtube.com/watch?v=abc&t=20")
+        )
+    }
+
+    @Test
+    fun `host-only mobile redirects do not create a back entry`() {
+        val history = CanonicalTabHistory("https://www.youtube.com/")
+
+        history.record("https://m.youtube.com/#bottom-sheet")
+
+        assertFalse(history.canGoBack("https://m.youtube.com/"))
+    }
+
+    @Test
+    fun `raw engine history is reserved for transient non YouTube locations`() {
+        assertFalse(CanonicalTabHistory.shouldUseEngineHistory("https://m.youtube.com/"))
+        assertFalse(
+            CanonicalTabHistory.shouldUseEngineHistory("https://www.youtube.com/watch?v=abc")
+        )
+        assertTrue(
+            CanonicalTabHistory.shouldUseEngineHistory("https://accounts.google.com/ServiceLogin")
+        )
+        assertTrue(
+            CanonicalTabHistory.shouldUseEngineHistory("https://gds.google.com/web/landing")
         )
     }
 

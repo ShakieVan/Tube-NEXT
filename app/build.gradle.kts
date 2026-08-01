@@ -5,13 +5,42 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val releaseSigningPropertiesFile = providers
+    .gradleProperty("tubenext.releaseSigningPropertiesFile")
+    .orNull
+    ?.let(rootProject::file)
+    ?: rootProject.file("key.properties")
 val keyProperties = Properties().apply {
-    val keyFile = rootProject.file("key.properties")
+    val keyFile = releaseSigningPropertiesFile
     if (keyFile.exists()) {
         keyFile.inputStream().use { load(it) }
     }
 }
-val hasCustomReleaseSigning = keyProperties.getProperty("storeFile")?.isNotBlank() == true
+val releaseSigningPropertyNames = listOf(
+    "storeFile",
+    "storePassword",
+    "keyAlias",
+    "keyPassword"
+)
+val hasCompleteReleaseSigningProperties = releaseSigningPropertyNames.all { name ->
+    keyProperties.getProperty(name)?.isNotBlank() == true
+}
+val hasProductionReleaseSigning = hasCompleteReleaseSigningProperties &&
+    file(keyProperties.getProperty("storeFile").orEmpty()).isFile
+
+val verifyProductionReleaseSigning = tasks.register("verifyProductionReleaseSigning") {
+    group = "verification"
+    description = "Fails unless complete production release signing is configured."
+    doLast {
+        if (!hasProductionReleaseSigning) {
+            throw GradleException(
+                "Production release signing is unavailable. Configure all required " +
+                    "key.properties values and a readable keystore, or build localRelease " +
+                    "for an explicitly debug-signed release-like APK."
+            )
+        }
+    }
+}
 
 android {
     namespace = "de.shakie.tubenext"
@@ -42,7 +71,7 @@ android {
     }
 
     signingConfigs {
-        if (hasCustomReleaseSigning) {
+        if (hasProductionReleaseSigning) {
             create("release") {
                 storeFile = file(keyProperties.getProperty("storeFile"))
                 storePassword = keyProperties.getProperty("storePassword")
@@ -65,16 +94,23 @@ android {
             // we can validate a Gecko/R8 rule set on hardware.
             isMinifyEnabled = false
             isShrinkResources = false
-            signingConfig = if (hasCustomReleaseSigning) {
+            signingConfig = if (hasProductionReleaseSigning) {
                 signingConfigs.getByName("release")
             } else {
-                // Fallback keeps local release builds possible before a private key exists.
-                signingConfigs.getByName("debug")
+                null
             }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+
+        create("localRelease") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".local"
+            versionNameSuffix = "-local"
+            manifestPlaceholders["appLabel"] = "Tube NEXT Local Release"
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -97,4 +133,10 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("org.mozilla.geckoview:geckoview:152.0.20260706120035")
     testImplementation("junit:junit:4.13.2")
+}
+
+tasks.configureEach {
+    if (name == "preReleaseBuild") {
+        dependsOn(verifyProductionReleaseSigning)
+    }
 }

@@ -4,12 +4,13 @@ Stand: am 25.07.2026 gegen `master`, `v1.0.1` und `v1.0.2` geprueft
 
 ## Getrennte App-Identitaeten
 
-Gradle erzeugt zwei absichtlich getrennte Installationen:
+Gradle erzeugt drei absichtlich getrennte Installationen:
 
 | Variante | Application-ID | sichtbarer Name |
 |---|---|---|
 | Debug | `de.shakie.tubenext.debug` | `Tube NEXT Debug` |
 | Release | `de.shakie.tubenext` | `Tube NEXT` |
+| Local Release | `de.shakie.tubenext.local` | `Tube NEXT Local Release` |
 
 Der Debug-Suffix und Namensplatzhalter stehen ausschliesslich im
 `debug`-Build-Type. Ein Release kann dadurch nicht versehentlich die
@@ -33,16 +34,36 @@ einmal entfernt werden.
 Private Werte kommen lokal aus der nicht versionierten Datei
 `key.properties`; sie ist in `.gitignore` ausgeschlossen. Die referenzierte
 JKS und Kennwoerter gehoeren nicht ins Repository oder in Projekt-Chats.
+In CI kann der Pfad ueber die Gradle-Property
+`tubenext.releaseSigningPropertiesFile` auf eine ebenso geschuetzte Datei
+gelegt werden; der Standard bleibt `key.properties` im Projektstamm.
 
-Ist eine eigene Release-Konfiguration vorhanden, verwendet Gradle sie. Ohne
-lokale Release-Konfiguration kann zu Entwicklungszwecken weiterhin ein
-Release-Build mit Debug-Key entstehen. Daher gilt fuer eine
-Veroeffentlichung:
+`assembleRelease` haengt von `verifyProductionReleaseSigning` ab. Fehlt die
+Datei, fehlt einer der vier notwendigen Werte oder verweist `storeFile` nicht
+auf eine lesbare Datei, schlaegt der Produktions-Build vor dem Paketieren mit
+einer eindeutigen Fehlermeldung fehl. Gueltigkeit von Alias und Kennwoertern
+wird anschliessend vom Android-Signing-Task geprueft. Es gibt keinen
+Debug-Key-Fallback fuer die Release-ID.
+
+Fuer releaseaehnliche lokale Tests existiert stattdessen der ausdruecklich
+benannte Build-Type `localRelease`. Er erbt die Release-Schalter, verwendet
+aber den Debug-Key und die getrennte Application-ID
+`de.shakie.tubenext.local`; dadurch kann sein APK weder die Produktions-App
+aktualisieren noch mit einem veroeffentlichbaren Release-Artefakt verwechselt
+werden.
+
+Fuer eine Veroeffentlichung gilt:
 
 1. eigene Release-Signierung muss vorhanden sein,
 2. APK-Signatur muss vor Upload geprueft werden,
 3. ein nur erfolgreich gebautes `release`-Artefakt ist noch kein Beleg fuer
    die richtige Produktionssignatur.
+
+Der Fingerprint wird am fertigen APK geprueft, nicht durch Ausgabe privater
+Gradle-Werte. `apksigner verify --print-certs <apk>` zeigt den Eintrag
+`Signer #1 certificate SHA-256 digest`; er muss bytegenau dem ausserhalb des
+Repositorys verwahrten erwarteten Wert entsprechen. Der konkrete
+PowerShell-Aufruf steht in der Projekt-`README.md`.
 
 ## ABI-Aufteilung
 
@@ -117,11 +138,15 @@ diesem Groessengewinn.
 ## Release-Regressionstest
 
 1. Debug bauen: Paket-ID und App-Name muessen den Debug-Suffix tragen.
-2. Release bauen: Paket-ID muss exakt `de.shakie.tubenext` sein.
-3. Debug und Release parallel installieren und getrennte Daten bestaetigen.
-4. Release-Signatur gegen die erwartete Produktionssignatur pruefen.
-5. Alle vier ABI-APKs bauen und Paket-/Versionsdaten kontrollieren.
-6. arm64-Release auf realer Hardware installieren und mehrfach kalt starten.
-7. Logcat/Crash-Buffer auf native Gecko-/`libxul.so`-Abstuerze pruefen.
-8. R8 und Resource-Shrinking nicht ohne eine ausdrueckliche neue
+2. Ohne Produktionssignierung muss `assembleRelease` eindeutig fehlschlagen.
+3. `localRelease` bauen: Paket-ID, App-Name und Debug-Zertifikat muessen klar
+   vom Produktions-Release getrennt sein.
+4. Release bauen: Paket-ID muss exakt `de.shakie.tubenext` sein.
+5. Debug, Local Release und Release parallel installieren und getrennte Daten
+   bestaetigen.
+6. Release-Signatur gegen die erwartete Produktionssignatur pruefen.
+7. Alle vier ABI-APKs bauen und Paket-/Versionsdaten kontrollieren.
+8. arm64-Release auf realer Hardware installieren und mehrfach kalt starten.
+9. Logcat/Crash-Buffer auf native Gecko-/`libxul.so`-Abstuerze pruefen.
+10. R8 und Resource-Shrinking nicht ohne eine ausdrueckliche neue
    Hardware-Validierung aktivieren.

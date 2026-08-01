@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
   "name": "Tube NEXT Nav Switch",
-  "version": "1.13",
-  "description": "Intercepts YouTube mode-boundary clicks before SPA navigation.",
+  "version": "1.14",
+  "description": "Handles YouTube mode changes and long-press link actions for Tube NEXT.",
   "applications": {
     "gecko": {
       "id": "tubenext-nav-switch@shakie.de"

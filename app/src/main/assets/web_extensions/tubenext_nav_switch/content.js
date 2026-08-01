@@ -4,6 +4,9 @@
   var NATIVE_APP = "tubenext_nav_switch";
   var MODE_NAV = "MODE_NAV";
   var OPEN_NEW_TAB = "OPEN_NEW_TAB";
+  var SHOW_LINK_MENU = "SHOW_LINK_MENU";
+  var LINK_SLIDER_STYLE_ID = "tubenext_link_slider_style";
+  var LINK_SLIDER_ID = "tubenext_link_slider";
   var DARK_MODE_STYLE_ID = "tubenext_dark_mode_style";
   var WATCH_FIT_STYLE_ID = "tubenext_watch_fit_style";
   var HOME_FEED_FILTER_STYLE_ID = "tubenext_home_feed_filter_style";
@@ -16,6 +19,10 @@
   var TAP_CONFIRM_DELAY_MS = 320;
   var LONG_PRESS_TRIGGER_MS = 520;
   var LONG_TAP_SUPPRESS_MS = 650;
+  var LINK_HOLD_TRIGGER_MS = 450;
+  var LINK_HOLD_MOVE_TOLERANCE_PX = 24;
+  var LINK_SLIDER_SELECTION_PX = 56;
+  var LINK_ACTIVATION_SUPPRESS_MS = 1200;
   var SEEK_STEP_SECONDS = 10;
   var pendingSingleTapTimer = null;
   var activePlayerTouch = null;
@@ -32,6 +39,10 @@
   var homeFeedObserver = null;
   var watchPageTimer = null;
   var nativePort = null;
+  var activeLinkHold = null;
+  var linkSlider = null;
+  var suppressLinkActivationUntil = 0;
+  var suppressedLinkActivationUrl = "";
   var homeFeedSettings = {
     showShorts: true,
     showCommunityPosts: true,
@@ -1598,41 +1609,366 @@
     });
   }
 
-  function handleDocumentContextMenu(event) {
+  function youtubeLinkUrlForEvent(event) {
     var anchor = extractAnchor(event.target);
-    if (!anchor) {
-      return;
+    if (!anchor || anchor.hasAttribute("download")) {
+      return null;
     }
-
-    var href = anchor.getAttribute("href");
-    if (!href || href.startsWith("javascript:")) {
-      return;
+    var href = (anchor.getAttribute("href") || "").trim();
+    if (!href || href.charAt(0) === "#" || href.toLowerCase().startsWith("javascript:")) {
+      return null;
     }
 
     var targetUrl;
     try {
       targetUrl = new URL(anchor.href, window.location.href);
     } catch (_) {
-      return;
+      return null;
     }
+    if ((targetUrl.protocol !== "http:" && targetUrl.protocol !== "https:") ||
+        !isYouTubeHost(targetUrl.hostname)) {
+      return null;
+    }
+    return targetUrl.toString();
+  }
 
-    if (targetUrl.protocol !== "http:" && targetUrl.protocol !== "https:") {
+  function ensureLinkSliderStyle() {
+    if (document.getElementById(LINK_SLIDER_STYLE_ID)) {
       return;
     }
-    if (!isYouTubeHost(targetUrl.hostname)) {
+    var style = document.createElement("style");
+    style.id = LINK_SLIDER_STYLE_ID;
+    style.textContent = [
+      "#" + LINK_SLIDER_ID + " {",
+      "  position: fixed;",
+      "  width: min(292px, calc(100vw - 32px));",
+      "  height: 78px;",
+      "  z-index: 2147483647;",
+      "  transform: translate(-50%, -50%) scale(.92);",
+      "  opacity: 0;",
+      "  pointer-events: none;",
+      "  transition: opacity 120ms ease, transform 180ms cubic-bezier(.2,.9,.2,1);",
+      "  filter: drop-shadow(0 10px 24px rgba(0,0,0,.55));",
+      "}",
+      "#" + LINK_SLIDER_ID + ".tubenext-visible { opacity: 1; transform: translate(-50%, -50%) scale(1); }",
+      "#" + LINK_SLIDER_ID + " .tubenext-slider-track {",
+      "  position: absolute; inset: 9px 0; border-radius: 34px;",
+      "  background: linear-gradient(100deg, rgba(24,24,28,.96), rgba(45,31,31,.97));",
+      "  border: 1px solid rgba(255,151,91,.5);",
+      "  box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);",
+      "}",
+      "#" + LINK_SLIDER_ID + " .tubenext-slider-end {",
+      "  position: absolute; top: 0; width: 78px; height: 78px; border-radius: 50%;",
+      "  display: grid; place-items: center; color: #ffe8da;",
+      "  background: radial-gradient(circle at 35% 25%, #ff9f63, #d94b36 62%, #76251f);",
+      "  border: 2px solid rgba(255,221,198,.72);",
+      "  box-shadow: 0 7px 18px rgba(0,0,0,.5), inset 0 1px 5px rgba(255,255,255,.3);",
+      "  transition: transform 110ms ease, filter 110ms ease;",
+      "}",
+      "#" + LINK_SLIDER_ID + " .tubenext-slider-left { left: 0; }",
+      "#" + LINK_SLIDER_ID + " .tubenext-slider-right { right: 0; }",
+      "#" + LINK_SLIDER_ID + ".tubenext-select-left .tubenext-slider-left,",
+      "#" + LINK_SLIDER_ID + ".tubenext-select-right .tubenext-slider-right {",
+      "  transform: scale(1.12); filter: brightness(1.25);",
+      "}",
+      "#" + LINK_SLIDER_ID + " .tubenext-slider-knob {",
+      "  position: absolute; left: 50%; top: 50%; width: 44px; height: 44px;",
+      "  margin: -22px 0 0 -22px; border-radius: 50%;",
+      "  background: linear-gradient(145deg, #fff1e6, #ff8a50 58%, #d13a31);",
+      "  border: 2px solid rgba(255,255,255,.82);",
+      "  box-shadow: 0 4px 13px rgba(0,0,0,.5);",
+      "  transition: transform 55ms linear;",
+      "}",
+      "#" + LINK_SLIDER_ID + " .tubenext-slider-chevrons {",
+      "  position: absolute; top: 22px; color: #ffb081; font: 700 27px/1 sans-serif;",
+      "  letter-spacing: -6px; opacity: .8;",
+      "}",
+      "#" + LINK_SLIDER_ID + " .tubenext-chevrons-left { left: 81px; animation: tubenext-pulse-left 950ms ease-in-out infinite; }",
+      "#" + LINK_SLIDER_ID + " .tubenext-chevrons-right { right: 87px; animation: tubenext-pulse-right 950ms ease-in-out infinite; }",
+      "#" + LINK_SLIDER_ID + " .tubenext-menu-icon { width: 29px; display: grid; gap: 5px; }",
+      "#" + LINK_SLIDER_ID + " .tubenext-menu-icon i { height: 3px; border-radius: 2px; background: currentColor; }",
+      "#" + LINK_SLIDER_ID + " .tubenext-tab-icon { position: relative; width: 29px; height: 25px; border: 3px solid currentColor; border-radius: 4px; }",
+      "#" + LINK_SLIDER_ID + " .tubenext-tab-icon::before { content: ''; position: absolute; left: -8px; top: -8px; width: 23px; height: 19px; border: 2px solid currentColor; border-radius: 3px; opacity: .72; }",
+      "#" + LINK_SLIDER_ID + " .tubenext-tab-icon::after { content: '+'; position: absolute; right: -7px; bottom: -12px; font: 800 25px/1 sans-serif; text-shadow: 0 1px 3px #7a211d; }",
+      "@keyframes tubenext-pulse-left { 0%,100% { transform: translateX(4px); opacity:.35; } 50% { transform: translateX(-5px); opacity:1; } }",
+      "@keyframes tubenext-pulse-right { 0%,100% { transform: translateX(-4px); opacity:.35; } 50% { transform: translateX(5px); opacity:1; } }"
+    ].join("\n");
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function ensureLinkSlider() {
+    if (linkSlider && linkSlider.isConnected) {
+      return linkSlider;
+    }
+    ensureLinkSliderStyle();
+    linkSlider = document.createElement("div");
+    linkSlider.id = LINK_SLIDER_ID;
+    linkSlider.setAttribute("aria-hidden", "true");
+    linkSlider.innerHTML = [
+      "<div class='tubenext-slider-track'></div>",
+      "<div class='tubenext-slider-end tubenext-slider-left'><span class='tubenext-menu-icon'><i></i><i></i><i></i></span></div>",
+      "<div class='tubenext-slider-chevrons tubenext-chevrons-left'>&lsaquo;&lsaquo;</div>",
+      "<div class='tubenext-slider-knob'></div>",
+      "<div class='tubenext-slider-chevrons tubenext-chevrons-right'>&rsaquo;&rsaquo;</div>",
+      "<div class='tubenext-slider-end tubenext-slider-right'><span class='tubenext-tab-icon'></span></div>"
+    ].join("");
+    (document.body || document.documentElement).appendChild(linkSlider);
+    return linkSlider;
+  }
+
+  function hideLinkSlider() {
+    if (!linkSlider) {
       return;
     }
+    linkSlider.classList.remove("tubenext-visible", "tubenext-select-left", "tubenext-select-right");
+    var knob = linkSlider.querySelector(".tubenext-slider-knob");
+    if (knob) {
+      knob.style.transform = "translateX(0)";
+    }
+  }
+
+  function clearActiveLinkHold() {
+    if (activeLinkHold && activeLinkHold.timer) {
+      window.clearTimeout(activeLinkHold.timer);
+    }
+    activeLinkHold = null;
+    hideLinkSlider();
+  }
+
+  function suppressFollowUpLinkActivation(targetUrl) {
+    suppressLinkActivationUntil = Date.now() + LINK_ACTIVATION_SUPPRESS_MS;
+    suppressedLinkActivationUrl = targetUrl;
+  }
+
+  function activateLinkHold(hold) {
+    if (activeLinkHold !== hold || hold.cancelled || hold.activated) {
+      return;
+    }
+    hold.activated = true;
+    hold.timer = null;
+    suppressFollowUpLinkActivation(hold.targetUrl);
+    var slider = ensureLinkSlider();
+    var halfWidth = Math.min(146, Math.max(100, (window.innerWidth - 32) / 2));
+    var centerX = Math.max(halfWidth + 8, Math.min(window.innerWidth - halfWidth - 8, hold.x));
+    var centerY = Math.max(70, Math.min(window.innerHeight - 70, hold.y - 96));
+    slider.style.left = centerX + "px";
+    slider.style.top = centerY + "px";
+    slider.classList.add("tubenext-visible");
+    updateLinkHoldSelection(hold.lastX);
+  }
+
+  function updateLinkHoldSelection(currentX) {
+    var hold = activeLinkHold;
+    if (!hold || !hold.activated) {
+      return;
+    }
+    hold.lastX = currentX;
+    var deltaX = currentX - hold.x;
+    hold.selection = deltaX <= -LINK_SLIDER_SELECTION_PX ? "left" :
+      (deltaX >= LINK_SLIDER_SELECTION_PX ? "right" : null);
+    var slider = ensureLinkSlider();
+    slider.classList.toggle("tubenext-select-left", hold.selection === "left");
+    slider.classList.toggle("tubenext-select-right", hold.selection === "right");
+    var knob = slider.querySelector(".tubenext-slider-knob");
+    if (knob) {
+      var knobOffset = Math.max(-92, Math.min(92, deltaX));
+      knob.style.transform = "translateX(" + knobOffset + "px)";
+    }
+  }
+
+  function beginLinkHold(event, inputType, identifier, x, y) {
+    clearActiveLinkHold();
+    suppressLinkActivationUntil = 0;
+    suppressedLinkActivationUrl = "";
+    var targetUrl = youtubeLinkUrlForEvent(event);
+    if (!targetUrl) {
+      return;
+    }
+    var hold = {
+      inputType: inputType,
+      identifier: identifier,
+      x: x,
+      y: y,
+      lastX: x,
+      lastY: y,
+      targetUrl: targetUrl,
+      activated: false,
+      cancelled: false,
+      selection: null,
+      timer: null
+    };
+    hold.timer = window.setTimeout(function () {
+      activateLinkHold(hold);
+    }, LINK_HOLD_TRIGGER_MS);
+    activeLinkHold = hold;
+  }
+
+  function moveLinkHold(event, inputType, identifier, x, y) {
+    var hold = activeLinkHold;
+    if (!hold || hold.inputType !== inputType || hold.identifier !== identifier) {
+      return;
+    }
+    hold.lastX = x;
+    hold.lastY = y;
+    if (!hold.activated) {
+      if (Math.abs(x - hold.x) > LINK_HOLD_MOVE_TOLERANCE_PX ||
+          Math.abs(y - hold.y) > LINK_HOLD_MOVE_TOLERANCE_PX) {
+        hold.cancelled = true;
+        clearActiveLinkHold();
+      }
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    updateLinkHoldSelection(x);
+  }
+
+  function finishLinkHold(event, inputType, identifier) {
+    var hold = activeLinkHold;
+    if (!hold || hold.inputType !== inputType || hold.identifier !== identifier) {
+      return;
+    }
+    if (!hold.activated) {
+      clearActiveLinkHold();
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    var selection = hold.selection;
+    var targetUrl = hold.targetUrl;
+    suppressFollowUpLinkActivation(targetUrl);
+    clearActiveLinkHold();
+    if (selection === "left") {
+      browser.runtime.sendNativeMessage(NATIVE_APP, {
+        type: SHOW_LINK_MENU,
+        url: targetUrl
+      }).catch(function () {});
+    } else if (selection === "right") {
+      browser.runtime.sendNativeMessage(NATIVE_APP, {
+        type: OPEN_NEW_TAB,
+        url: targetUrl
+      }).catch(function () {});
+    }
+  }
+
+  function touchByIdentifier(touchList, identifier) {
+    if (!touchList) {
+      return null;
+    }
+    for (var i = 0; i < touchList.length; i += 1) {
+      if (touchList[i].identifier === identifier) {
+        return touchList[i];
+      }
+    }
+    return null;
+  }
+
+  function handleLinkTouchStart(event) {
+    if (!event.touches || event.touches.length !== 1) {
+      clearActiveLinkHold();
+      return;
+    }
+    var touch = event.touches[0];
+    beginLinkHold(event, "touch", touch.identifier, touch.clientX, touch.clientY);
+  }
+
+  function handleLinkTouchMove(event) {
+    var hold = activeLinkHold;
+    if (!hold || hold.inputType !== "touch") {
+      return;
+    }
+    var touch = touchByIdentifier(event.touches, hold.identifier);
+    if (!touch) {
+      clearActiveLinkHold();
+      return;
+    }
+    moveLinkHold(event, "touch", hold.identifier, touch.clientX, touch.clientY);
+  }
+
+  function handleLinkTouchEnd(event) {
+    var hold = activeLinkHold;
+    if (!hold || hold.inputType !== "touch") {
+      return;
+    }
+    if (touchByIdentifier(event.changedTouches, hold.identifier)) {
+      finishLinkHold(event, "touch", hold.identifier);
+    }
+  }
+
+  function handleLinkPointerDown(event) {
+    if (event.pointerType === "touch" || event.button !== 0 || event.isPrimary === false) {
+      return;
+    }
+    beginLinkHold(event, "pointer", event.pointerId, event.clientX, event.clientY);
+  }
+
+  function handleLinkPointerMove(event) {
+    if (event.pointerType !== "touch") {
+      moveLinkHold(event, "pointer", event.pointerId, event.clientX, event.clientY);
+    }
+  }
+
+  function handleLinkPointerUp(event) {
+    if (event.pointerType !== "touch") {
+      finishLinkHold(event, "pointer", event.pointerId);
+    }
+  }
+
+  function handleLinkPointerCancel(event) {
+    if (event.pointerType !== "touch" && activeLinkHold &&
+        activeLinkHold.inputType === "pointer" &&
+        activeLinkHold.identifier === event.pointerId) {
+      clearActiveLinkHold();
+    }
+  }
+
+  function handleSuppressedLinkActivation(event) {
+    if (Date.now() >= suppressLinkActivationUntil) {
+      return;
+    }
+    var targetUrl = youtubeLinkUrlForEvent(event);
+    if (targetUrl !== suppressedLinkActivationUrl) {
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+
+  function handleDocumentContextMenu(event) {
+    if (event.defaultPrevented) {
+      return;
+    }
+    var targetUrl = youtubeLinkUrlForEvent(event);
+    if (!targetUrl) return;
 
     event.preventDefault();
-    event.stopPropagation();
+    event.stopImmediatePropagation();
 
+    if (activeLinkHold && activeLinkHold.targetUrl === targetUrl) {
+      activateLinkHold(activeLinkHold);
+      return;
+    }
+
+    // Gecko normally delivered touchstart first. Keep the proven direct path
+    // as a fallback for devices that expose only contextmenu for a long press.
+    suppressFollowUpLinkActivation(targetUrl);
     browser.runtime.sendNativeMessage(NATIVE_APP, {
       type: OPEN_NEW_TAB,
-      url: targetUrl.toString()
+      url: targetUrl
     }).catch(function () {});
   }
 
   document.addEventListener("touchstart", handleLandscapePlayerTouchStart, true);
+  document.addEventListener("touchstart", handleLinkTouchStart, { capture: true, passive: true });
+  document.addEventListener("touchmove", handleLinkTouchMove, { capture: true, passive: false });
+  document.addEventListener("touchend", handleLinkTouchEnd, { capture: true, passive: false });
+  document.addEventListener("touchcancel", clearActiveLinkHold, true);
+  document.addEventListener("pointerdown", handleLinkPointerDown, true);
+  document.addEventListener("pointermove", handleLinkPointerMove, true);
+  document.addEventListener("pointerup", handleLinkPointerUp, true);
+  document.addEventListener("pointercancel", handleLinkPointerCancel, true);
+  document.addEventListener("tap", handleSuppressedLinkActivation, true);
+  document.addEventListener("click", handleSuppressedLinkActivation, true);
   document.addEventListener("touchmove", handleLandscapePlayerTouchMove, true);
   document.addEventListener("touchend", handleLandscapePlayerTouchEnd, true);
   document.addEventListener("touchcancel", handleLandscapePlayerTouchCancel, true);

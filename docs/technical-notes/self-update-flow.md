@@ -61,7 +61,8 @@ aktuellen Stand.
 
 1. betrachtet nur Dateien mit Endung `.apk`,
 2. geht `Build.SUPPORTED_ABIS` in Geraetereihenfolge durch,
-3. nimmt das erste Asset, dessen Dateiname die ABI enthaelt,
+3. nimmt das erste Asset, dessen Dateiname die ABI als vollstaendiges Token
+   enthaelt,
 4. verwendet nur als Fallback ein Asset mit `universal` im Namen.
 
 Der Release-Vertrag verlangt daher eindeutige ABI-Namen:
@@ -73,6 +74,8 @@ Der Release-Vertrag verlangt daher eindeutige ABI-Namen:
 
 Wenn kein passendes Asset existiert, zeigt die Updateverwaltung
 `NO_COMPATIBLE_ASSET` und bietet keinen falschen Download an.
+Die Token-Grenze behandelt `_` als Teil eines ABI-Namens; dadurch kann ein
+`x86`-Geraet nicht versehentlich das zuerst gelistete `x86_64`-Asset erhalten.
 
 ## Notification und Berechtigung
 
@@ -134,10 +137,10 @@ dauerhaft ausgeblendet und in der Updateverwaltung wieder aktiviert werden.
 
 ## Release Notes in Tube NEXT
 
-Der Link eines GitHub-Releases wird in einem neuen Tube-NEXT-Tab geoeffnet.
-Der interne Browser erlaubt dafuer gezielt die Release-Seiten des eigenen
-GitHub-Repositories, obwohl fremde Nicht-YouTube-Links normalerweise an den
-Systembrowser gehen.
+Der Link eines GitHub-Releases wird wie andere fremde HTTP(S)-Ziele an eine
+externe Anwendung gegeben. Dadurch kann keine GitHub-Seite im Gecko-Tab
+angezeigt werden, waehrend die Toolbar weiterhin eine alte YouTube-Adresse
+zeigt.
 
 ## Sicherheits- und Robustheitsgrenzen
 
@@ -159,8 +162,11 @@ Weitere Grenzen:
 - kein persistenter Android-Hintergrundjob,
 - Versionsvergleich basiert auf Release-Tag/`versionName`, nicht
   `versionCode`,
-- automatisierte Tests fuer Versions- und ABI-Auswahl sind im Projekt derzeit
-  nicht vorhanden.
+- Digest- und Signaturpruefung des Downloads sind noch nicht automatisiert.
+
+Versionsnormalisierung, Versionsvergleich und ABI-Auswahl werden inzwischen
+offline durch JVM-Tests abgedeckt. Dazu gehoeren Geraeteprioritaet,
+`universal`-Fallback und die Abgrenzung `x86` zu `x86_64`.
 
 Diese Punkte sind keine stillschweigend zugesicherten Funktionen. Sie muessen
 bei einer spaeteren Haertung bewusst priorisiert und getestet werden.

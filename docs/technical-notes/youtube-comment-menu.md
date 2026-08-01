@@ -44,6 +44,21 @@ Desktop-UI-Pfad in GeckoView erreicht wird.
   Landscape-Modus
 - Cue-Long-Press und sonstige Player-Gesten
 
+## Touch-Durchgriff bei allgemeinen Watch-Menues
+
+Auch andere Drei-Punkte-Menues auf der Desktop-Watch-Seite koennen in
+GeckoView nach der eigentlichen Menueaktion noch ein synthetisches `tap`- oder
+`click`-Ereignis erzeugen. Wenn das Popup dabei bereits geschlossen wurde,
+kann dieses Folgeereignis einen YouTube-Link in der Videobeschreibung hinter
+dem ehemaligen Menue treffen.
+
+Die WebExtension merkt sich deshalb fuer eine Sekunde einen Touch, der im
+Ereignispfad eines echten YouTube-Menues begonnen oder geendet hat. In diesem
+engen Zeitfenster wird nur ein nachfolgendes Link-Ereignis ausserhalb des
+Menues unterdrueckt. Der Menueeintrag selbst, normale Links und alle Ereignisse
+ausserhalb einer Watch-Seite bleiben unberuehrt. Insbesondere werden
+allgemeine Menue-Endpunkte weiterhin nicht nativ nachgebaut.
+
 ## Validierung
 
 Manuell auf einem Samsung SM-S928B mit der parallel installierten Debug-App:
@@ -56,6 +71,9 @@ Manuell auf einem Samsung SM-S928B mit der parallel installierten Debug-App:
    geloescht.
 5. Geprueft, dass das Drei-Punkte-Dropdown nicht hinter Editor oder Dialog
    offen bleibt.
+6. Im Watch-Aktionsmenue `Speichern` ueber einem Link in der Beschreibung
+   waehlen: Der Speichern-Dialog muss reagieren, der Link darunter darf nicht
+   geoeffnet werden.
 
 ## Regressionsrisiko
 

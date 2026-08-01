@@ -23,6 +23,7 @@
   var LINK_HOLD_MOVE_TOLERANCE_PX = 24;
   var LINK_SLIDER_SELECTION_PX = 56;
   var LINK_ACTIVATION_SUPPRESS_MS = 1200;
+  var MENU_TOUCH_THROUGH_GUARD_MS = 1000;
   var SEEK_STEP_SECONDS = 10;
   var pendingSingleTapTimer = null;
   var activePlayerTouch = null;
@@ -43,6 +44,7 @@
   var linkSlider = null;
   var suppressLinkActivationUntil = 0;
   var suppressedLinkActivationUrl = "";
+  var menuTouchThroughGuardUntil = 0;
   var homeFeedSettings = {
     showShorts: true,
     showCommunityPosts: true,
@@ -1609,6 +1611,45 @@
     });
   }
 
+  function eventPathHasYouTubeMenu(event) {
+    if (typeof event.composedPath !== "function") {
+      return false;
+    }
+    return event.composedPath().some(function (node) {
+      if (!node || node.nodeType !== 1) {
+        return false;
+      }
+      var tagName = node.tagName || "";
+      var role = typeof node.getAttribute === "function"
+        ? (node.getAttribute("role") || "").toLowerCase()
+        : "";
+      return role === "menu" || role === "menuitem" ||
+        tagName === "TP-YT-IRON-DROPDOWN" ||
+        tagName === "TP-YT-PAPER-LISTBOX" ||
+        tagName === "YTD-MENU-POPUP-RENDERER" ||
+        tagName === "YTD-MENU-SERVICE-ITEM-RENDERER" ||
+        tagName === "YTD-MENU-NAVIGATION-ITEM-RENDERER";
+    });
+  }
+
+  function armMenuTouchThroughGuard(event) {
+    if (!isWatchPage() || !eventPathHasYouTubeMenu(event)) {
+      return;
+    }
+    menuTouchThroughGuardUntil = Date.now() + MENU_TOUCH_THROUGH_GUARD_MS;
+  }
+
+  function handleMenuTouchThroughActivation(event) {
+    if (Date.now() >= menuTouchThroughGuardUntil ||
+        eventPathHasYouTubeMenu(event) ||
+        !youtubeLinkUrlForEvent(event)) {
+      return;
+    }
+    menuTouchThroughGuardUntil = 0;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+
   function youtubeLinkUrlForEvent(event) {
     var anchor = extractAnchor(event.target);
     if (!anchor || anchor.hasAttribute("download")) {
@@ -1958,6 +1999,15 @@
     }).catch(function () {});
   }
 
+  document.addEventListener("touchstart", armMenuTouchThroughGuard, true);
+  document.addEventListener("touchend", armMenuTouchThroughGuard, true);
+  document.addEventListener("pointerdown", function (event) {
+    if (event.pointerType === "touch") {
+      armMenuTouchThroughGuard(event);
+    }
+  }, true);
+  document.addEventListener("tap", handleMenuTouchThroughActivation, true);
+  document.addEventListener("click", handleMenuTouchThroughActivation, true);
   document.addEventListener("touchstart", handleLandscapePlayerTouchStart, true);
   document.addEventListener("touchstart", handleLinkTouchStart, { capture: true, passive: true });
   document.addEventListener("touchmove", handleLinkTouchMove, { capture: true, passive: false });

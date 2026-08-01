@@ -87,6 +87,28 @@ ausstehend markiert und beim naechsten sichtbaren Aktivieren dieses Tabs
 nachgeholt. Die App haengt dafuer keine zweite GeckoView im Hintergrund an
 und erzeugt keinen Reload.
 
+### Watch-Artwork fuer sehr schnelle Tabwechsel
+
+Wird ein neuer Watch-Tab innerhalb der ersten Lade-Sekunde wieder verlassen,
+existiert beim Ready-Trigger keine renderbare Gecko-Surface mehr. In diesem
+Fall kann selbst ein spaeteres `capturePixels()` kein Bild erzeugen. Zwei
+eng begrenzte Quellen liefern deshalb bereits im Hintergrund ein
+Zwischenbild:
+
+- Geckos offizielle `MediaSession.Metadata.artwork`, sobald YouTube sie setzt,
+- ansonsten das kleine offizielle YouTube-Vorschaubild
+  `https://i.ytimg.com/vi/<video-id>/mqdefault.jpg`.
+
+Die Video-ID wird ausschliesslich aus einer validierten YouTube-Watch- oder
+`youtu.be`-URL uebernommen. Der Loader akzeptiert nur einfache
+YouTube-ID-Zeichen, baut einen festen `i.ytimg.com`-Pfad, folgt keinen
+Redirects und begrenzt Antwortgroesse sowie Zeitlimits. Er greift weder auf
+Video-/Audiostreams noch auf eine inoffizielle Resolver-API zu.
+
+Artwork ist nur ein Fallback. Ein nach dem Layout-Ready-Trigger erfolgreich
+erzeugter Seitenscreenshot derselben Ladegeneration hat Vorrang und darf von
+spaeter eintreffendem Artwork nicht wieder ueberschrieben werden.
+
 Geckos Pixel-Capture ist asynchron. Das historische weisse Vorschaubild
 entstand, weil das Ergebnis erst eintraf, nachdem der Tab bereits inaktiv
 beziehungsweise kurz leer war. Deshalb wird beim Auswaehlen aus dem
@@ -113,7 +135,9 @@ Vorschau die konservativere Wahl.
 - Eine abghaengte GeckoView besitzt keine verlaesslich aufnehmbare Surface.
   Ein noch nicht gestarteter Snapshot kann deshalb nicht unsichtbar in einem
   anderen Tab erzwungen werden; er wird beim naechsten Aktivieren nachgeholt.
-- Bei noch nie geladenen Hintergrund-Tabs kann kein Seitenbild existieren.
+- Der Artwork-Fallback gilt nur fuer Watch-URLs mit eindeutig extrahierbarer
+  YouTube-Video-ID. Fuer sehr schnell verlassene andere Seitentypen kann ohne
+  vorherigen Snapshot weiterhin kein aktuelles Seitenbild existieren.
 - Die Wiederherstellung behaelt URL und Titel, nicht Scrollposition,
   Formulardaten oder einen exakten Gecko-History-Stack ueber einen
   vollstaendigen App-Neustart.
@@ -141,3 +165,11 @@ Previews und das Schliessen des Tab-Managers nach normalem Tap ein.
 10. Eine Watch-Seite laden und nach dem Layout-Ready-Trigger den Tab wechseln:
     Die fertige Aufnahme muss erhalten bleiben; ein spaeter Trigger eines
     bereits abgehaengten Tabs muss beim naechsten Aktivieren nachgeholt werden.
+11. Aus einer Videoliste per Long-Tap-Rechts-Slide einen neuen Watch-Tab
+    oeffnen, innerhalb etwa einer Sekunde ueber den Tab-Manager zur Liste
+    zurueckwechseln und nach einigen Sekunden erneut oeffnen: Der neue Tab
+    muss mindestens das Video-Artwork statt einer schwarzen Vorschau zeigen.
+
+Der letzte Ablauf wurde am 01.08.2026 auf dem Samsung SM-S928B zunaechst per
+Screenrecording als Fehler belegt und anschliessend mit demselben schnellen
+Rueckwechsel gegen den Artwork-Fallback erfolgreich wiederholt.

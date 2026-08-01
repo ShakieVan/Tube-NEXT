@@ -67,6 +67,7 @@ import de.shakie.tubenext.tabs.TabManager
 import de.shakie.tubenext.tabs.TabPersistence
 import de.shakie.tubenext.tabs.TabPreviewStore
 import de.shakie.tubenext.tabs.TabSession
+import de.shakie.tubenext.tabs.YouTubePreviewArtworkLoader
 import de.shakie.tubenext.update.GitHubReleaseClient
 import de.shakie.tubenext.update.UpdateAsset
 import de.shakie.tubenext.update.UpdateCheckResult
@@ -81,6 +82,7 @@ import de.shakie.tubenext.ui.TabOverviewAdapter
 import de.shakie.tubenext.ui.TabOverviewItem
 import org.mozilla.geckoview.GeckoView
 import java.io.File
+import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
     private lateinit var toolbar: MaterialToolbar
@@ -103,6 +105,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var backgroundAudioCoordinator: AndroidBackgroundAudioCoordinator
     private lateinit var preferences: SharedPreferences
     private lateinit var updatePreferences: UpdatePreferences
+    private val tabPreviewArtworkLoader = YouTubePreviewArtworkLoader()
+    private val tabPreviewArtworkExecutor = Executors.newFixedThreadPool(2)
 
     private val browserTabs = linkedMapOf<String, AppTab>()
     private var selectedTabId: String? = null
@@ -271,6 +275,7 @@ class MainActivity : AppCompatActivity() {
         if (!keepBrowserSessions) {
             browserEngine.shutdown()
         }
+        tabPreviewArtworkExecutor.shutdownNow()
     }
 
     private fun setupToolbar() {
@@ -446,6 +451,7 @@ class MainActivity : AppCompatActivity() {
                     tab.navigationHistory.recordNavigationStart(url)
                 }
                 onTabMainNavigationStarted(tabId)
+                requestWatchArtworkPreview(tabId, url)
                 if (selectedTabId == tabId) updateToolbarState()
             },
             onMainUrlUpdated = { tabId, url ->
@@ -454,6 +460,7 @@ class MainActivity : AppCompatActivity() {
                     tab.rawHistoryNavigationPending = false
                 }
                 updateTabState(tabId, newUrl = url)
+                requestWatchArtworkPreview(tabId, url)
             },
             onMainTitleUpdated = { tabId, title ->
                 updateTabState(tabId, newTitle = title)
@@ -495,6 +502,7 @@ class MainActivity : AppCompatActivity() {
             onMediaControlsChanged = { tabId, controls ->
                 backgroundAudioCoordinator.onMediaControlsChanged(tabId, controls)
             },
+            onMediaArtworkChanged = ::onMediaArtworkChanged,
             onEngineProcessGone = { tabId, reason ->
                 recoverEngineTabAfterProcessExit(tabId, reason)
             }
@@ -1340,7 +1348,11 @@ class MainActivity : AppCompatActivity() {
                     ?: getString(R.string.default_tab_title)
             }.let(::normalizeTabTitle)
             val previewBitmap = tabPreviewStore.load(session.id)
-                ?: tab?.takeIf { it.engineTab.view.visibility == View.VISIBLE }
+                ?: tab?.takeIf {
+                    !it.loadingOverlayVisible &&
+                        it.engineTab.view !is GeckoView &&
+                        it.engineTab.view.visibility == View.VISIBLE
+                }
                     ?.let(::captureTabPreviewFallback)
             TabOverviewItem(
                 id = session.id,
@@ -1358,17 +1370,25 @@ class MainActivity : AppCompatActivity() {
     ): Boolean {
         return runCatching {
             val contentView = tab.engineTab.view
+            if (tab.loadingOverlayVisible) {
+                tab.previewCapturePending = true
+                return@runCatching false
+            }
             if (contentView.width <= 0 || contentView.height <= 0) return@runCatching false
             if (contentView is GeckoView) {
                 if (contentView.visibility != View.VISIBLE || contentView.parent != webViewContainer) {
                     return@runCatching false
                 }
+                val captureGeneration = tab.pageLoadGeneration
                 contentView.capturePixels().accept(
                     { captured ->
                         if (captured == null) return@accept
                         val preview = createTabPreviewBitmap(captured)
                         if (isEffectivelyBlankPreview(preview)) return@accept
-                        if (browserTabs[tab.id] !== tab) return@accept
+                        if (browserTabs[tab.id] !== tab ||
+                            tab.pageLoadGeneration != captureGeneration
+                        ) return@accept
+                        tab.pagePreviewCapturedGeneration = captureGeneration
                         tabPreviewStore.save(tab.id, preview)
                         publishTabPreview(tab.id, preview, onPreview)
                     },
@@ -1402,6 +1422,59 @@ class MainActivity : AppCompatActivity() {
             val tab = browserTabs[tabId] ?: return@post
             tab.previewCapturePending = true
             capturePendingPreviewIfVisible(tab)
+        }
+    }
+
+    private fun onMediaArtworkChanged(tabId: String, sourceUrl: String, artwork: Bitmap) {
+        webViewContainer.post {
+            val tab = browserTabs[tabId] ?: return@post
+            if (!YouTubeNavigationPolicy.urlsReferToSameVideo(sourceUrl, tab.url) &&
+                !YouTubeNavigationPolicy.urlsReferToSameVideo(sourceUrl, tab.engineLocationUrl)
+            ) return@post
+            if (tab.pagePreviewCapturedGeneration == tab.pageLoadGeneration) return@post
+
+            val preview = createTabPreviewBitmap(artwork)
+            if (isEffectivelyBlankPreview(preview)) return@post
+            tabPreviewStore.save(tab.id, preview)
+            publishTabPreview(tab.id, preview, null)
+            if (selectedTabId == tab.id && ::backgroundAudioCoordinator.isInitialized) {
+                backgroundAudioCoordinator.setArtwork(preview)
+            }
+        }
+    }
+
+    private fun requestWatchArtworkPreview(tabId: String, sourceUrl: String) {
+        val tab = browserTabs[tabId] ?: return
+        val videoId = YouTubeNavigationPolicy.videoIdForUrl(sourceUrl)
+        if (videoId == null) {
+            tab.previewArtworkVideoId = ""
+            return
+        }
+        if (tab.previewArtworkVideoId == videoId) return
+        tab.previewArtworkVideoId = videoId
+
+        val artworkTask = Runnable {
+            val artwork = tabPreviewArtworkLoader.load(videoId) ?: return@Runnable
+            webViewContainer.post {
+                val currentTab = browserTabs[tabId] ?: return@post
+                if (currentTab.previewArtworkVideoId != videoId) return@post
+                val currentVideoId = YouTubeNavigationPolicy.videoIdForUrl(currentTab.url)
+                    ?: YouTubeNavigationPolicy.videoIdForUrl(currentTab.engineLocationUrl)
+                if (currentVideoId != videoId) return@post
+                if (currentTab.pagePreviewCapturedGeneration == currentTab.pageLoadGeneration) {
+                    return@post
+                }
+
+                val preview = createTabPreviewBitmap(artwork)
+                if (isEffectivelyBlankPreview(preview)) return@post
+                tabPreviewStore.save(currentTab.id, preview)
+                publishTabPreview(currentTab.id, preview, null)
+            }
+        }
+        runCatching {
+            tabPreviewArtworkExecutor.execute(artworkTask)
+        }.onFailure { error ->
+            Log.w("TUBENEXT_STATE", "watch artwork request skipped tab=$tabId", error)
         }
     }
 

@@ -16,6 +16,8 @@ data class AppTab(
     var loadingOverlayVisible: Boolean = false,
     var loadingProgress: Int = 0,
     var previewCapturePending: Boolean = false,
+    var pagePreviewCapturedGeneration: Long = -1L,
+    var previewArtworkVideoId: String = "",
     var hasLoadedInitialUrl: Boolean = true,
     var isHibernated: Boolean = false,
     var hibernatedReason: String = "",

@@ -1,5 +1,6 @@
 package de.shakie.tubenext.engine
 
+import android.graphics.Bitmap
 import android.net.Uri
 
 data class EngineCallbacks(
@@ -17,5 +18,6 @@ data class EngineCallbacks(
     val onLoadError: (tabId: String) -> Unit,
     val onPlaybackStateChanged: (tabId: String, state: EnginePlaybackState) -> Unit = { _, _ -> },
     val onMediaControlsChanged: (tabId: String, controls: EngineMediaControls?) -> Unit = { _, _ -> },
+    val onMediaArtworkChanged: (tabId: String, sourceUrl: String, artwork: Bitmap) -> Unit = { _, _, _ -> },
     val onEngineProcessGone: (tabId: String, reason: String) -> Unit = { _, _ -> }
 )

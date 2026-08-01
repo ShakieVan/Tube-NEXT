@@ -33,6 +33,31 @@ object YouTubeNavigationPolicy {
         return isSupportedYouTubeHost(uri.host.lowercase())
     }
 
+    fun videoIdForUrl(url: String): String? {
+        val uri = parseHttpUri(url) ?: return null
+        val host = uri.host.lowercase()
+        if (!isSupportedYouTubeHost(host)) return null
+        if (host == "youtu.be") {
+            return uri.path.orEmpty()
+                .trim('/')
+                .substringBefore('/')
+                .takeIf(::isValidVideoId)
+        }
+        if (!uri.path.orEmpty().startsWith("/watch")) return null
+        return uri.rawQuery.orEmpty()
+            .split('&')
+            .firstNotNullOfOrNull { part ->
+                val key = part.substringBefore('=', missingDelimiterValue = "")
+                val value = part.substringAfter('=', missingDelimiterValue = "")
+                value.takeIf { key == "v" && isValidVideoId(it) }
+            }
+    }
+
+    fun urlsReferToSameVideo(firstUrl: String, secondUrl: String): Boolean {
+        val firstVideoId = videoIdForUrl(firstUrl) ?: return false
+        return firstVideoId == videoIdForUrl(secondUrl)
+    }
+
     private fun parseHttpUri(url: String): URI? {
         if (url.isBlank()) return null
         val uri = runCatching { URI(url) }.getOrNull() ?: return null
@@ -46,5 +71,11 @@ object YouTubeNavigationPolicy {
             host == "www.youtube.com" ||
             host == "m.youtube.com" ||
             host == "youtu.be"
+    }
+
+    private fun isValidVideoId(value: String): Boolean {
+        return value.isNotBlank() && value.all { character ->
+            character.isLetterOrDigit() || character == '-' || character == '_'
+        }
     }
 }

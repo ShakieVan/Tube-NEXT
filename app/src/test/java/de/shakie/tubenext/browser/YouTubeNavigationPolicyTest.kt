@@ -7,6 +7,32 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class YouTubeNavigationPolicyTest {
+
+    @Test
+    fun `extracts video ids from watch and short URLs`() {
+        assertEquals("abc_123-XYZ", YouTubeNavigationPolicy.videoIdForUrl(
+            "https://www.youtube.com/watch?v=abc_123-XYZ&list=PL123"
+        ))
+        assertEquals("abc_123-XYZ", YouTubeNavigationPolicy.videoIdForUrl(
+            "https://youtu.be/abc_123-XYZ?t=42"
+        ))
+    }
+
+    @Test
+    fun `matches artwork source only to the same video`() {
+        assertTrue(YouTubeNavigationPolicy.urlsReferToSameVideo(
+            "https://www.youtube.com/watch?v=sameVideo01",
+            "https://m.youtube.com/watch?feature=share&v=sameVideo01"
+        ))
+        assertFalse(YouTubeNavigationPolicy.urlsReferToSameVideo(
+            "https://www.youtube.com/watch?v=firstVideo1",
+            "https://www.youtube.com/watch?v=secondVideo"
+        ))
+        assertFalse(YouTubeNavigationPolicy.urlsReferToSameVideo(
+            "https://www.youtube.com/",
+            "https://www.youtube.com/watch?v=secondVideo"
+        ))
+    }
     @Test
     fun `uses desktop only for watch and youtu be targets`() {
         assertEquals(RenderMode.MOBILE, YouTubeNavigationPolicy.renderModeForUrl("https://youtube.com/"))

@@ -314,6 +314,20 @@ class GeckoBrowserEngine(
                 mediaTitle = metadata.title.orEmpty()
                 mediaArtist = metadata.artist.orEmpty()
                 debugLog("TUBENEXT_AUDIO", "tab=$tabId metadata title=$mediaTitle artist=$mediaArtist")
+                val artworkSourceUrl = retainedTab.currentUrl
+                metadata.artwork?.getBitmap(MEDIA_ARTWORK_SIZE_PX)?.accept(
+                    { artwork ->
+                        if (artwork != null) {
+                            callbacks.onMediaArtworkChanged(tabId, artworkSourceUrl, artwork)
+                        }
+                    },
+                    { error ->
+                        debugLog(
+                            "TUBENEXT_AUDIO",
+                            "tab=$tabId media artwork unavailable: ${error?.message.orEmpty()}"
+                        )
+                    }
+                )
                 emitPlaybackState()
             }
 
@@ -598,6 +612,7 @@ class GeckoBrowserEngine(
         private const val HOME_FEED_READY_TYPE = "HOME_FEED_READY"
         private const val HOME_FEED_SETTINGS_TYPE = "HOME_FEED_SETTINGS"
         private const val PAGE_PREVIEW_READY_TYPE = "PAGE_PREVIEW_READY"
+        private const val MEDIA_ARTWORK_SIZE_PX = 384
         fun debugLog(tag: String, message: String) {
             if (BuildConfig.DEBUG) {
                 Log.i(tag, message)

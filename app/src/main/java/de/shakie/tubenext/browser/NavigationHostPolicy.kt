@@ -6,7 +6,9 @@ import java.util.Locale
 object NavigationHostPolicy {
     private val googleLoginFlowHosts = setOf(
         "accounts.google.com",
-        "consent.google.com"
+        "consent.google.com",
+        // Google may show post-2FA account suggestions before returning to YouTube.
+        "gds.google.com"
     )
 
     fun isHttpOrHttpsScheme(scheme: String?): Boolean {

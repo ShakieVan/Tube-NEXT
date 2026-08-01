@@ -49,7 +49,14 @@ Sicherheitsregeln bleiben jedoch gueltig.
 App nur zu, wenn sie:
 
 - auf einen unterstuetzten YouTube-Host zeigt oder
-- exakt auf `accounts.google.com` oder `consent.google.com` zeigt.
+- exakt auf `accounts.google.com`, `consent.google.com` oder
+  `gds.google.com` zeigt.
+
+`gds.google.com` ist kein pauschal angenommener Google-Host. Er wurde auf
+einem echten Geraeteablauf nach Passwort und 2FA als Vorschlagsseite fuer
+Google-Kontodaten beobachtet, bevor der Flow zu YouTube zurueckkehrt. Fuer
+weitere Google-Hosts bleibt die Grenze geschlossen; neue Hosts werden erst
+nach einem protokollierten Top-Level-Ablauf einzeln aufgenommen.
 
 YouTube-Unterhosts bleiben ueber die label-begrenzte Domain
 `*.youtube.com` intern; dadurch funktionieren insbesondere

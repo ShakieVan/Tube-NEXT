@@ -15,6 +15,7 @@ class LinkInterceptorTest {
         assertInternal("https", "consent.youtube.com")
         assertInternal("https", "accounts.google.com")
         assertInternal("https", "consent.google.com")
+        assertInternal("https", "gds.google.com")
         assertInternal("HTTP", "WWW.YOUTUBE.COM")
     }
 
@@ -22,8 +23,10 @@ class LinkInterceptorTest {
     fun `rejects lookalike hosts outside trusted domain boundaries`() {
         assertExternal("https", "accounts.google.example.org")
         assertExternal("https", "consent.google.example.org")
+        assertExternal("https", "gds.google.example.org")
         assertExternal("https", "myaccount.google.example.org")
         assertExternal("https", "accounts.google.com.example.org")
+        assertExternal("https", "gds.google.com.example.org")
         assertExternal("https", "youtube.com.example.org")
         assertExternal("https", "notyoutube.com")
         assertExternal("https", "evil-youtube.com")

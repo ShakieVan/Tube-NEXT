@@ -39,6 +39,9 @@ Bestehende Querschnittsdokumente:
 - [`technical-notes/watch-fullscreen-lifecycle.md`](technical-notes/watch-fullscreen-lifecycle.md):
   heutige Aufgabenteilung und historische Erkenntnisse zu Watch,
   Landscape, Fullscreen und Lade-Overlay.
+- [`technical-notes/fullscreen-progress-diagnostics.md`](technical-notes/fullscreen-progress-diagnostics.md):
+  begrenzte Diagnosefassung fuer den sporadisch mehrzeilig umgebrochenen
+  YouTube-Fortschrittsbalken.
 - [`technical-notes/watch-readiness-and-retries.md`](technical-notes/watch-readiness-and-retries.md):
   Grenzen von Lade-/Fertigerkennung und Regeln fuer sichere DOM-Nachlaeufe.
 - [`technical-notes/youtube-responsive-layout-diagnostics.md`](technical-notes/youtube-responsive-layout-diagnostics.md):

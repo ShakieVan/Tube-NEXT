@@ -524,6 +524,16 @@ class GeckoBrowserEngine(
                             when (parseMessageType(message)) {
                                 HOME_FEED_READY_TYPE -> postHomeFeedSettings(bridge)
                                 PAGE_PREVIEW_READY_TYPE -> bridge.callbacks.onPageReadyForPreview(bridge.tabId)
+                                PROGRESS_LAYOUT_ANOMALY_TYPE -> {
+                                    if (BuildConfig.PROGRESS_DIAGNOSTICS_ENABLED) {
+                                        diagnosticPayload(message)?.let { payload ->
+                                            bridge.callbacks.onProgressLayoutDiagnostic(
+                                                bridge.tabId,
+                                                payload
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -535,6 +545,7 @@ class GeckoBrowserEngine(
                     })
                     postHomeFeedSettings(bridge)
                     postVideoTransform(bridge)
+                    postProgressDiagnosticsSettings(bridge)
                 }
             },
             NAV_NATIVE_APP_ID
@@ -589,6 +600,14 @@ class GeckoBrowserEngine(
         )
     }
 
+    private fun postProgressDiagnosticsSettings(bridge: NavBridge) {
+        bridge.homeFeedPort?.postMessage(
+            JSONObject()
+                .put("type", PROGRESS_DIAGNOSTICS_SETTINGS_TYPE)
+                .put("enabled", BuildConfig.PROGRESS_DIAGNOSTICS_ENABLED)
+        )
+    }
+
     private fun parseNavigationIntent(message: Any?): NavigationIntent? {
         return when (message) {
             is JSONObject -> {
@@ -611,6 +630,15 @@ class GeckoBrowserEngine(
             is Map<*, *> -> message["type"] as? String
             else -> null
         }
+    }
+
+    private fun diagnosticPayload(message: Any?): String? {
+        val serialized = when (message) {
+            is JSONObject -> message.toString()
+            is Map<*, *> -> runCatching { JSONObject(message).toString() }.getOrNull()
+            else -> null
+        } ?: return null
+        return serialized.takeIf { it.length <= MAX_DIAGNOSTIC_PAYLOAD_CHARACTERS }
     }
 
     private data class NavBridge(
@@ -654,6 +682,9 @@ class GeckoBrowserEngine(
         private const val HOME_FEED_SETTINGS_TYPE = "HOME_FEED_SETTINGS"
         private const val VIDEO_TRANSFORM_TYPE = "VIDEO_TRANSFORM"
         private const val PAGE_PREVIEW_READY_TYPE = "PAGE_PREVIEW_READY"
+        private const val PROGRESS_DIAGNOSTICS_SETTINGS_TYPE = "PROGRESS_DIAGNOSTICS_SETTINGS"
+        private const val PROGRESS_LAYOUT_ANOMALY_TYPE = "PROGRESS_LAYOUT_ANOMALY"
+        private const val MAX_DIAGNOSTIC_PAYLOAD_CHARACTERS = 48_000
         private const val MEDIA_ARTWORK_SIZE_PX = 384
         fun debugLog(tag: String, message: String) {
             if (BuildConfig.DEBUG) {

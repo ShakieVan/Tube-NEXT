@@ -40,6 +40,7 @@ import androidx.core.content.getSystemService
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -55,6 +56,7 @@ import de.shakie.tubenext.browser.LinkInteractionPolicy
 import de.shakie.tubenext.browser.LinkMenuAction
 import de.shakie.tubenext.browser.LinkMenuActionCallbacks
 import de.shakie.tubenext.browser.YouTubeNavigationPolicy
+import de.shakie.tubenext.diagnostics.ProgressLayoutDiagnosticStore
 import de.shakie.tubenext.engine.BrowserEngine
 import de.shakie.tubenext.engine.EngineCallbacks
 import de.shakie.tubenext.engine.EngineHomeFeedSettings
@@ -105,6 +107,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var backgroundAudioCoordinator: AndroidBackgroundAudioCoordinator
     private lateinit var preferences: SharedPreferences
     private lateinit var updatePreferences: UpdatePreferences
+    private lateinit var progressLayoutDiagnosticStore: ProgressLayoutDiagnosticStore
     private val tabPreviewArtworkLoader = YouTubePreviewArtworkLoader()
     private val tabPreviewArtworkExecutor = Executors.newFixedThreadPool(2)
 
@@ -155,6 +158,7 @@ class MainActivity : AppCompatActivity() {
         backgroundAudioCoordinator = AndroidBackgroundAudioCoordinator(applicationContext)
         preferences = getSharedPreferences(PREFERENCES_NAME, MODE_PRIVATE)
         updatePreferences = UpdatePreferences(this)
+        progressLayoutDiagnosticStore = ProgressLayoutDiagnosticStore(this)
 
         setupToolbar()
         setupTabs()
@@ -472,6 +476,11 @@ class MainActivity : AppCompatActivity() {
                 scheduleWatchViewportStabilization(tabId, url)
             },
             onPageReadyForPreview = ::onPageReadyForPreview,
+            onProgressLayoutDiagnostic = { tabId, payload ->
+                if (BuildConfig.PROGRESS_DIAGNOSTICS_ENABLED) {
+                    progressLayoutDiagnosticStore.append(tabId, payload)
+                }
+            },
             onProgressChanged = { tabId, progress ->
                 updateToolbarState()
                 onTabProgress(tabId, progress)
@@ -978,6 +987,9 @@ class MainActivity : AppCompatActivity() {
                 false
             )
         )
+        if (BuildConfig.PROGRESS_DIAGNOSTICS_ENABLED) {
+            addProgressDiagnosticSettings(container)
+        }
         container.addView(settingsDivider())
         container.addView(settingsSectionTitle(R.string.settings_section_updates))
         container.addView(updateStatusTextView())
@@ -1014,6 +1026,42 @@ class MainActivity : AppCompatActivity() {
             settingsDialog = null
         }
         settingsDialog?.show()
+    }
+
+    private fun addProgressDiagnosticSettings(container: LinearLayout) {
+        container.addView(settingsDivider())
+        container.addView(settingsSectionTitle(R.string.settings_section_progress_diagnostics))
+        val status = updateTextView()
+        val shareButton = updateButton(R.string.progress_diagnostics_share)
+        val deleteButton = updateButton(R.string.progress_diagnostics_delete)
+        val refresh = {
+            val count = progressLayoutDiagnosticStore.count()
+            status.text = getString(R.string.progress_diagnostics_count, count)
+            shareButton.isEnabled = count > 0
+            deleteButton.isEnabled = count > 0
+        }
+        shareButton.setOnClickListener { shareProgressDiagnostics() }
+        deleteButton.setOnClickListener {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.progress_diagnostics_delete_title)
+                .setMessage(R.string.progress_diagnostics_delete_message)
+                .setPositiveButton(R.string.progress_diagnostics_delete) { _, _ ->
+                    if (progressLayoutDiagnosticStore.clear()) {
+                        refresh()
+                        Snackbar.make(
+                            webViewContainer,
+                            R.string.progress_diagnostics_deleted,
+                            Snackbar.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
+        container.addView(status)
+        container.addView(shareButton)
+        container.addView(deleteButton)
+        refresh()
     }
 
     private fun settingsCheckBox(
@@ -2355,6 +2403,31 @@ class MainActivity : AppCompatActivity() {
             putExtra(Intent.EXTRA_TEXT, url)
         }
         startActivity(Intent.createChooser(shareIntent, null))
+    }
+
+    private fun shareProgressDiagnostics() {
+        val file = progressLayoutDiagnosticStore.fileForSharing()
+        if (file == null) {
+            Snackbar.make(
+                webViewContainer,
+                R.string.progress_diagnostics_empty,
+                Snackbar.LENGTH_SHORT
+            ).show()
+            return
+        }
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/x-ndjson"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newRawUri(file.name, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(
+            Intent.createChooser(
+                shareIntent,
+                getString(R.string.progress_diagnostics_share_chooser)
+            )
+        )
     }
 
     private fun copyToClipboard(url: String) {

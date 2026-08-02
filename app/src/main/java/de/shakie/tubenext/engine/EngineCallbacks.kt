@@ -10,6 +10,7 @@ data class EngineCallbacks(
     val onMainTitleUpdated: (tabId: String, title: String) -> Unit,
     val onMainPageFinished: (tabId: String, url: String) -> Unit,
     val onPageReadyForPreview: (tabId: String) -> Unit = {},
+    val onProgressLayoutDiagnostic: (tabId: String, payload: String) -> Unit = { _, _ -> },
     val onProgressChanged: (tabId: String, progress: Int) -> Unit,
     val onNewTabRequest: (url: String) -> Unit,
     val onLinkMenuRequest: (tabId: String, url: String) -> Unit,

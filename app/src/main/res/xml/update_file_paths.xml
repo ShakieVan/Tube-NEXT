@@ -3,4 +3,7 @@
     <files-path
         name="updates"
         path="updates/" />
+    <files-path
+        name="progress_diagnostics"
+        path="diagnostics/" />
 </paths>

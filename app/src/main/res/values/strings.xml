@@ -42,6 +42,15 @@
     <string name="settings_title">Einstellungen</string>
     <string name="settings_section_home_feed">Startseite</string>
     <string name="settings_section_watch_page">Watch-Seite</string>
+    <string name="settings_section_progress_diagnostics">Fullscreen-Fortschrittsdiagnose</string>
+    <string name="progress_diagnostics_count">Gespeicherte Auffälligkeiten: %1$d von maximal 20</string>
+    <string name="progress_diagnostics_share">Diagnoseprotokoll teilen</string>
+    <string name="progress_diagnostics_share_chooser">Diagnoseprotokoll teilen</string>
+    <string name="progress_diagnostics_delete">Diagnoseprotokoll löschen</string>
+    <string name="progress_diagnostics_delete_title">Diagnoseprotokoll löschen?</string>
+    <string name="progress_diagnostics_delete_message">Alle gespeicherten Auffälligkeiten werden dauerhaft entfernt.</string>
+    <string name="progress_diagnostics_deleted">Diagnoseprotokoll gelöscht</string>
+    <string name="progress_diagnostics_empty">Noch keine Auffälligkeit gespeichert</string>
     <string name="settings_section_updates">Updates</string>
     <string name="settings_section_background_playback">Hintergrundwiedergabe</string>
     <string name="settings_open_update_manager">Updateverwaltung öffnen</string>

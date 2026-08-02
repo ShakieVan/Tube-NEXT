@@ -55,6 +55,7 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appLabel"] = "Tube NEXT"
+        buildConfigField("boolean", "PROGRESS_DIAGNOSTICS_ENABLED", "false")
     }
 
     buildFeatures {
@@ -105,6 +106,14 @@ android {
             )
         }
 
+        create("diagnosticRelease") {
+            initWith(getByName("release"))
+            versionNameSuffix = "-diagnostic"
+            manifestPlaceholders["appLabel"] = "Tube NEXT Diagnose"
+            buildConfigField("boolean", "PROGRESS_DIAGNOSTICS_ENABLED", "true")
+            matchingFallbacks += listOf("release")
+        }
+
         create("localRelease") {
             initWith(getByName("release"))
             applicationIdSuffix = ".local"
@@ -136,7 +145,7 @@ dependencies {
 }
 
 tasks.configureEach {
-    if (name == "preReleaseBuild") {
+    if (name == "preReleaseBuild" || name == "preDiagnosticReleaseBuild") {
         dependsOn(verifyProductionReleaseSigning)
     }
 }

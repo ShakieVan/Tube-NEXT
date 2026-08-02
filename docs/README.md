@@ -39,6 +39,9 @@ Bestehende Querschnittsdokumente:
 - [`technical-notes/build-variants-and-geckoview-r8.md`](technical-notes/build-variants-and-geckoview-r8.md):
   getrennte App-IDs, verpflichtende Produktionssignierung und der weiterhin
   unminifizierte GeckoView-Release-Build.
+- [`technical-notes/release-and-diagnostic-deployment.md`](technical-notes/release-and-diagnostic-deployment.md):
+  verbindlicher Ablauf fuer ein regulaeres GitHub-Release und das
+  anschliessende, datenerhaltende Diagnose-Update des bekannten Testtelefons.
 - [`technical-notes/watch-fullscreen-lifecycle.md`](technical-notes/watch-fullscreen-lifecycle.md):
   heutige Aufgabenteilung und historische Erkenntnisse zu Watch,
   Landscape, Fullscreen und Lade-Overlay.

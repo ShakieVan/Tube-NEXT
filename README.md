@@ -95,6 +95,19 @@ getrennte App-ID `de.shakie.tubenext.local`:
 .\gradlew.bat :app:assembleLocalRelease --console=plain
 ```
 
+Fuer die zeitlich begrenzte Fullscreen-Fortschrittsdiagnose existiert ausserdem
+`diagnosticRelease`. Diese Variante verwendet absichtlich App-ID und
+Produktionssignatur des regulaeren Releases und darf deshalb nur nach dem
+dokumentierten Diagnose- und Deployment-Ablauf eingesetzt werden:
+
+```powershell
+.\gradlew.bat :app:assembleDiagnosticRelease --console=plain
+```
+
+Der vollstaendige Ablauf fuer Versionsanhebung, GitHub-Veroeffentlichung und
+Installation der Diagnosevariante auf dem Testtelefon steht unter
+[`docs/technical-notes/release-and-diagnostic-deployment.md`](docs/technical-notes/release-and-diagnostic-deployment.md).
+
 Vor einer Veroeffentlichung muss der Zertifikat-Fingerprint jeder erzeugten
 APK mit dem ausserhalb des Repositorys hinterlegten erwarteten SHA-256-Wert
 verglichen werden. Mit dem Android-SDK geht das beispielsweise so:
@@ -112,6 +125,10 @@ Keystore-Inhalte und `key.properties` duerfen dabei weder ausgegeben noch
 committed werden.
 
 ## Release-Checkliste
+
+Die verbindliche technische Checkliste einschliesslich Tag, GitHub-Assets,
+Pruefsummen und anschliessendem Diagnose-Update des Testtelefons steht in
+[`docs/technical-notes/release-and-diagnostic-deployment.md`](docs/technical-notes/release-and-diagnostic-deployment.md).
 
 GitHub-Release-Notes muessen bei jedem Release kurz erklaeren, welche APK fuer
 welches Geraet gedacht ist:

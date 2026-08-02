@@ -232,6 +232,12 @@ Login-Flow zugelassen. Andere externe Ziele gehen an eine externe App.
 - Dauerhafte Produkt- und Architekturentscheidungen unter `docs/decisions/`
   dokumentieren.
 - Bei Releases Versionswerte und `docs/releases/vX.Y.Z.md` aktualisieren.
+- Vor einem GitHub-Release und solange die Fortschrittsdiagnose aktiv ist den
+  verbindlichen Ablauf aus
+  [`docs/technical-notes/release-and-diagnostic-deployment.md`](docs/technical-notes/release-and-diagnostic-deployment.md)
+  befolgen. Der oeffentliche Release bleibt diagnosefrei; auf das bekannte
+  Testtelefon kommt anschliessend der passend versionierte
+  `diagnosticRelease`.
 - Aussagen aus alten Chats gegen Code, Git-Historie und Tests pruefen.
 - Ersetzte Workarounds und widerlegte Erkenntnisse in der kanonischen Notiz
   deutlich aktualisieren.

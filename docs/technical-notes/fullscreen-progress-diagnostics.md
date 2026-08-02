@@ -24,6 +24,15 @@ Produktionssignierung wie der normale Release, traegt aber den sichtbaren
 Versionszusatz `-diagnostic`. Ein regulaeres Update mit hoeherem VersionCode
 kann ihn ohne Datenverlust ersetzen.
 
+Solange diese Diagnosekampagne aktiv ist, wird bei jedem regulaeren Release
+aus demselben Stand auch `diagnosticRelease` gebaut. Auf GitHub werden nur die
+normalen Release-APKs veroeffentlicht; anschliessend wird die arm64-Diagnose-APK
+per `adb install -r` auf das bekannte Testtelefon aktualisiert. Versionierung,
+Signaturpruefung, Geraeteauswahl und Schutz der vorhandenen Diagnosedaten sind
+verbindlich in
+[`release-and-diagnostic-deployment.md`](release-and-diagnostic-deployment.md)
+dokumentiert.
+
 Nur dieser Buildtyp aktiviert die Fortschrittsdiagnose. Die WebExtension
 prueft im Landscape-Watch-Modus in einem Intervall von 2,5 Sekunden:
 

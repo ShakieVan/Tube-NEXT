@@ -1,30 +1,39 @@
 # Buildvarianten, Signierung und GeckoView/R8
 
-Stand: am 01.08.2026 gegen den `v1.4.0`-Release-Kandidaten sowie die
-historischen Builds `v1.0.1` und `v1.0.2` geprueft
+Stand: am 02.08.2026 gegen `v1.4.2` sowie die historischen Builds `v1.0.1`
+und `v1.0.2` geprueft
 
 ## Getrennte App-Identitaeten
 
-Gradle erzeugt drei absichtlich getrennte Installationen:
+Gradle erzeugt vier Varianten mit drei App-Identitaeten:
 
 | Variante | Application-ID | sichtbarer Name |
 |---|---|---|
 | Debug | `de.shakie.tubenext.debug` | `Tube NEXT Debug` |
 | Release | `de.shakie.tubenext` | `Tube NEXT` |
+| Diagnostic Release | `de.shakie.tubenext` | `Tube NEXT Diagnose` |
 | Local Release | `de.shakie.tubenext.local` | `Tube NEXT Local Release` |
 
 Der Debug-Suffix und Namensplatzhalter stehen ausschliesslich im
 `debug`-Build-Type. Ein Release kann dadurch nicht versehentlich die
 `.debug`-ID erben.
 
-Beide Apps koennen parallel installiert sein. Android behandelt sie aber als
-vollstaendig getrennte Apps mit eigenen:
+Debug, Local Release und die Produktionsidentitaet koennen parallel
+installiert sein. Android behandelt sie als vollstaendig getrennte Apps mit
+eigenen:
 
 - Gecko-Profilen,
 - Cookies und Logins,
 - Einstellungen,
 - Tabs,
 - Dateien und Update-Berechtigungen.
+
+Release und Diagnostic Release sind dagegen bewusst zwei Varianten derselben
+Produktions-App. Sie verwenden dieselbe App-ID und Produktionssignatur und
+ersetzen sich bei der Installation gegenseitig. Dadurch bleiben App-Daten und
+Android-Linkzuordnungen erhalten. Der Diagnostic Release darf nicht als
+oeffentliches GitHub-Asset angeboten werden; der verbindliche Ablauf steht in
+[`release-and-diagnostic-deployment.md`](release-and-diagnostic-deployment.md).
 
 Eine alte Debug-APK, die noch die Release-ID verwendete, kann wegen
 unterschiedlicher Signaturen mit dem Release kollidieren und muss gegebenenfalls

@@ -16,6 +16,7 @@
   var LANDSCAPE_STYLE_ID = "tubenext_landscape_watch_style";
   var HOME_FEED_READY = "HOME_FEED_READY";
   var HOME_FEED_SETTINGS = "HOME_FEED_SETTINGS";
+  var VIDEO_TRANSFORM = "VIDEO_TRANSFORM";
   var PAGE_PREVIEW_READY = "PAGE_PREVIEW_READY";
   var TAP_CONFIRM_DELAY_MS = 320;
   var LONG_PRESS_TRIGGER_MS = 520;
@@ -53,6 +54,29 @@
     showWatchHistory: true,
     hideWatchBranding: false
   };
+  var videoTransform = {
+    scale: 1,
+    translationXFraction: 0,
+    translationYFraction: 0
+  };
+
+  function applyVideoTransform() {
+    if (!document.documentElement) {
+      return;
+    }
+    document.documentElement.style.setProperty(
+      "--tubenext-video-scale",
+      String(videoTransform.scale)
+    );
+    document.documentElement.style.setProperty(
+      "--tubenext-video-translate-x",
+      String(videoTransform.translationXFraction * 100) + "vw"
+    );
+    document.documentElement.style.setProperty(
+      "--tubenext-video-translate-y",
+      String(videoTransform.translationYFraction * 100) + "vh"
+    );
+  }
 
   function isYouTubeHost(host) {
     var normalized = (host || "").toLowerCase();
@@ -361,7 +385,26 @@
     try {
       nativePort = browser.runtime.connectNative(NATIVE_APP);
       nativePort.onMessage.addListener(function (message) {
-        if (!message || message.type !== HOME_FEED_SETTINGS) {
+        if (!message) {
+          return;
+        }
+        if (message.type === VIDEO_TRANSFORM) {
+          var scale = Number(message.scale);
+          var translationXFraction = Number(message.translationXFraction);
+          var translationYFraction = Number(message.translationYFraction);
+          videoTransform = {
+            scale: Number.isFinite(scale) ? Math.max(1, Math.min(3, scale)) : 1,
+            translationXFraction: Number.isFinite(translationXFraction)
+              ? Math.max(-1, Math.min(1, translationXFraction))
+              : 0,
+            translationYFraction: Number.isFinite(translationYFraction)
+              ? Math.max(-1, Math.min(1, translationYFraction))
+              : 0
+          };
+          applyVideoTransform();
+          return;
+        }
+        if (message.type !== HOME_FEED_SETTINGS) {
           return;
         }
         homeFeedSettings = {
@@ -806,7 +849,11 @@
       "  width: 100vw !important;",
       "  height: 100vh !important;",
       "  object-fit: contain !important;",
-      "  transform: none !important;",
+      "  transform: translate(",
+      "    var(--tubenext-video-translate-x, 0),",
+      "    var(--tubenext-video-translate-y, 0)",
+      "  ) scale(var(--tubenext-video-scale, 1)) !important;",
+      "  transform-origin: center center !important;",
       "  background: #000 !important;",
       "  z-index: 0 !important;",
       "}",
@@ -905,6 +952,7 @@
     if (isLandscapeWatch()) {
       ensureLandscapeWatchStyle();
       document.documentElement.classList.add("tubenext-landscape-watch");
+      applyVideoTransform();
       updateCueOverlay();
       window.scrollTo(0, 0);
       return;
@@ -1362,14 +1410,19 @@
     video.currentTime = nextTime;
   }
 
-  function screenTapZone(event) {
-    var width = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
-    var x = Math.max(0, Math.min(width, event.clientX || 0));
-    return screenTapZoneForX(x);
+  function screenTapZone(point) {
+    var viewport = window.visualViewport;
+    var width = Math.max(
+      1,
+      viewport && viewport.width || document.documentElement.clientWidth || window.innerWidth || 1
+    );
+    var left = viewport && Number.isFinite(viewport.offsetLeft) ? viewport.offsetLeft : 0;
+    var x = (point && Number.isFinite(point.clientX) ? point.clientX : 0) - left;
+    return screenTapZoneForX(x, width);
   }
 
-  function screenTapZoneForX(x) {
-    var width = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
+  function screenTapZoneForX(x, width) {
+    width = Math.max(1, width || window.innerWidth || document.documentElement.clientWidth || 1);
     x = Math.max(0, Math.min(width, x || 0));
     if (x < width / 3) {
       return "left";
@@ -1416,10 +1469,12 @@
   }
 
   function handleLandscapePlayerClick(event) {
-    if (!isLandscapeWatch()) {
+    var landscape = isLandscapeWatch();
+    var controlTarget = isPlayerControlTarget(event.target);
+    if (!landscape) {
       return;
     }
-    if (event.defaultPrevented || isPlayerControlTarget(event.target)) {
+    if (event.defaultPrevented || controlTarget) {
       return;
     }
     stopPlayerTapEvent(event);
@@ -1463,7 +1518,9 @@
   }
 
   function handleLandscapePlayerTouchStart(event) {
-    if (!isLandscapeWatch() || event.defaultPrevented || isPlayerControlTarget(event.target)) {
+    var landscape = isLandscapeWatch();
+    var controlTarget = isPlayerControlTarget(event.target);
+    if (!landscape || event.defaultPrevented || controlTarget) {
       return;
     }
     if (!event.touches || event.touches.length !== 1) {
@@ -1479,8 +1536,8 @@
     }
     stopPlayerTapEvent(event);
     activePlayerTouch = {
-      x: touch.clientX,
-      y: touch.clientY,
+      clientX: touch.clientX,
+      clientY: touch.clientY,
       moved: false,
       longPressFired: false,
       timer: window.setTimeout(function () {
@@ -1509,8 +1566,8 @@
       return;
     }
     var touch = event.touches[0];
-    var dx = touch.clientX - activePlayerTouch.x;
-    var dy = touch.clientY - activePlayerTouch.y;
+    var dx = touch.clientX - activePlayerTouch.clientX;
+    var dy = touch.clientY - activePlayerTouch.clientY;
     if (Math.sqrt(dx * dx + dy * dy) > 18) {
       activePlayerTouch.moved = true;
       window.clearTimeout(activePlayerTouch.timer);
@@ -1535,7 +1592,7 @@
       lastTouchTapZone = null;
       return;
     }
-    var zone = screenTapZoneForX(touch.x);
+    var zone = screenTapZone(touch);
     var now = Date.now();
     var isMultiTap = lastTouchTapZone === zone && now - lastTouchTapAt <= TAP_CONFIRM_DELAY_MS;
     runLandscapeTapAction(zone, isMultiTap);

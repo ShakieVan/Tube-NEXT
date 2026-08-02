@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Tube NEXT Nav Switch",
-  "version": "1.16",
+  "version": "1.21",
   "description": "Handles YouTube mode changes and long-press link actions for Tube NEXT.",
   "applications": {
     "gecko": {

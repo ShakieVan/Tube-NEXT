@@ -1,6 +1,6 @@
 # Watch-Seiten-Optionen und Fullscreen-Taps
 
-Stand: am 25.07.2026 gegen `master`, `v1.2.0` und den zugehoerigen
+Stand: am 02.08.2026 gegen `master`, `v1.2.0` und den zugehoerigen
 Projekt-Task geprueft
 
 Diese Notiz ergaenzt die verbindliche Entscheidung
@@ -90,6 +90,49 @@ Geraetepfad unterschiedliche Ereignisse liefern. Zeitliche
 Unterdrueckungsmarker verhindern, dass dieselbe Touch-Geste danach nochmals
 als Click ausgefuehrt wird.
 
+### Bildschirmfeste Zonen bei nativem Zoom
+
+Der bisherige immersive Pinch-to-Zoom skalierte und verschob die native
+GeckoView. Ein DOM-`clientX` bezeichnete in diesem Zustand weiterhin eine
+Position im transformierten Browser-Viewport. Dadurch verschoben sich die
+Tap-Zonen zusammen mit dem vergroesserten Video.
+
+Ein erster Versuch mit DOM-`screenX` reichte unter GeckoView nicht aus: Ein
+Geraetetest auf dem Samsung SM-S928B zeigte, dass auch diese Koordinate nach
+der nativen View-Transformation nicht verlaesslich den sichtbaren Tap-Punkt
+abbildet.
+
+Die stabile Loesung skaliert nicht mehr die komplette GeckoView. Die native
+Ebene erkennt weiterhin Pinch und Verschieben, uebermittelt Skalierung und
+Translation aber an die WebExtension. Nur das `video`-Element erhaelt dort
+die entsprechende CSS-Transformation. Controls, Fortschrittsleiste, Menues,
+Captions und Tube-NEXT-Overlays bleiben im unveraenderten Viewport.
+
+Damit entspricht `clientX` wieder direkt der sichtbaren Bildschirmposition
+innerhalb des `visualViewport`; dessen `width` und `offsetLeft` bilden die
+sichtbaren Grenzen fuer die Drittelwahl. Die DOM-Zielpruefung bleibt getrennt,
+sodass echte Player-Bedienelemente weiterhin unveraendert bedient werden.
+
+Bei der Umstellung zeigte der Geraetetest zusaetzlich eine reine
+Uebergaberegression: Der Touchstart speicherte die Koordinate voruebergehend
+als `x`, waehrend die Zonenermittlung `clientX` las. Der Fallbackwert `0`
+ordnete dadurch jeden freien Tap der linken Zone zu. Touchzustand und
+Zonenermittlung verwenden nun durchgehend `clientX` und `clientY`.
+
+### Geraetevalidierung vom 02.08.2026
+
+Auf einem Samsung SM-S928B mit GeckoView wurde die Video-only-Transformation
+in der Debug-App bestaetigt:
+
+- Pinch und Ein-Finger-Pan skalieren beziehungsweise verschieben nur das
+  Videobild.
+- YouTube-Overlay, Fortschrittsleiste und Controls bleiben unskaliert am
+  Bildschirm.
+- Mitteltaps wurden mit `clientX` um 400 bei einer sichtbaren Breite um 798
+  korrekt als mittlere Zone erkannt und loesten nachweislich Play/Pause aus.
+- Mehrfach-Taps bei etwa 150 beziehungsweise 650 wurden korrekt als linke und
+  rechte Zone erkannt und loesten Rueck- beziehungsweise Vorlauf aus.
+
 ## Abgrenzung zu Long-Press und Kontextmenues
 
 Ein Long-Press ausserhalb der Player-Bedienelemente setzt im immersiven
@@ -149,9 +192,16 @@ kein dauerhafter eigener `MutationObserver` erforderlich.
    einblenden.
 5. Bei sichtbarem Overlay: Mitte einfach fuer Play/Pause, links und rechts
    mehrfach fuer Rueck-/Vorlauf testen.
-6. Mehrere Taps muessen den Overlay-Ausblendtimer sinnvoll neu anstossen.
-7. Player-Steuerung, Zahnrad-Menue und Audio-Kanal-Auswahl bedienen.
-8. Long-Press/Cue und Pinch-to-Zoom im Landscape-Modus pruefen.
-9. Das technische YouTube-Kontextmenue darf beim Zoom nicht erscheinen.
-10. Es darf weder eine Dislike-Option noch eine Anfrage an eine
+6. Auf mindestens zweifache Vergroesserung zoomen, horizontal bis an beide
+   Grenzen verschieben und erneut in der sichtbaren Bildschirmmitte
+   Play/Pause sowie an den sichtbaren Bildschirmraendern Rueck-/Vorlauf
+   pruefen. Die Zonen duerfen nicht mit dem Video wandern.
+7. Im selben Zoomzustand Player-Controls und Fortschrittsleiste einblenden:
+   Das Video darf vergroessert und verschoben bleiben, waehrend das gesamte
+   Overlay unskaliert am Bildschirm verbleibt.
+8. Mehrere Taps muessen den Overlay-Ausblendtimer sinnvoll neu anstossen.
+9. Player-Steuerung, Zahnrad-Menue und Audio-Kanal-Auswahl bedienen.
+10. Long-Press/Cue und Pinch-to-Zoom im Landscape-Modus pruefen.
+11. Das technische YouTube-Kontextmenue darf beim Zoom nicht erscheinen.
+12. Es darf weder eine Dislike-Option noch eine Anfrage an eine
     Dislike-Drittanbieter-API geben.

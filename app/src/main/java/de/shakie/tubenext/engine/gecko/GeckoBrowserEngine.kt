@@ -389,6 +389,14 @@ class GeckoBrowserEngine(
             },
             onHomeFeedSettingsChanged = { settings ->
                 updateHomeFeedSettings(session, settings)
+            },
+            onVideoTransformChanged = { scale, translationXFraction, translationYFraction ->
+                updateVideoTransform(
+                    session,
+                    scale,
+                    translationXFraction,
+                    translationYFraction
+                )
             }
         )
         if (shouldLoadInitialUrl) {
@@ -526,6 +534,7 @@ class GeckoBrowserEngine(
                         }
                     })
                     postHomeFeedSettings(bridge)
+                    postVideoTransform(bridge)
                 }
             },
             NAV_NATIVE_APP_ID
@@ -548,6 +557,35 @@ class GeckoBrowserEngine(
                 .put("showCommunityPosts", settings.showCommunityPosts)
                 .put("showWatchHistory", settings.showWatchHistory)
                 .put("hideWatchBranding", settings.hideWatchBranding)
+        )
+    }
+
+    private fun updateVideoTransform(
+        session: GeckoSession,
+        scale: Float,
+        translationXFraction: Float,
+        translationYFraction: Float
+    ) {
+        val bridge = navBridgeBySession[session] ?: return
+        bridge.videoScale = scale.coerceIn(1f, 3f)
+        bridge.videoTranslationXFraction = translationXFraction.coerceIn(-1f, 1f)
+        bridge.videoTranslationYFraction = translationYFraction.coerceIn(-1f, 1f)
+        postVideoTransform(bridge)
+    }
+
+    private fun postVideoTransform(bridge: NavBridge) {
+        bridge.homeFeedPort?.postMessage(
+            JSONObject()
+                .put("type", VIDEO_TRANSFORM_TYPE)
+                .put("scale", bridge.videoScale.toDouble())
+                .put(
+                    "translationXFraction",
+                    bridge.videoTranslationXFraction.toDouble()
+                )
+                .put(
+                    "translationYFraction",
+                    bridge.videoTranslationYFraction.toDouble()
+                )
         )
     }
 
@@ -580,7 +618,10 @@ class GeckoBrowserEngine(
         val callbacks: EngineCallbacks,
         val applyUserAgentForUrl: (String, String) -> Boolean,
         var homeFeedSettings: EngineHomeFeedSettings = EngineHomeFeedSettings(),
-        var homeFeedPort: WebExtension.Port? = null
+        var homeFeedPort: WebExtension.Port? = null,
+        var videoScale: Float = 1f,
+        var videoTranslationXFraction: Float = 0f,
+        var videoTranslationYFraction: Float = 0f
     )
 
     private data class RetainedGeckoTab(
@@ -611,6 +652,7 @@ class GeckoBrowserEngine(
         private const val SHOW_LINK_MENU_TYPE = LinkInteractionPolicy.SHOW_LINK_MENU_MESSAGE
         private const val HOME_FEED_READY_TYPE = "HOME_FEED_READY"
         private const val HOME_FEED_SETTINGS_TYPE = "HOME_FEED_SETTINGS"
+        private const val VIDEO_TRANSFORM_TYPE = "VIDEO_TRANSFORM"
         private const val PAGE_PREVIEW_READY_TYPE = "PAGE_PREVIEW_READY"
         private const val MEDIA_ARTWORK_SIZE_PX = 384
         fun debugLog(tag: String, message: String) {
@@ -639,7 +681,8 @@ private data class GeckoEngineTab(
     val shouldUseDesktopMode: (String) -> Boolean,
     val onDetach: () -> Unit,
     val onDestroy: () -> Unit,
-    val onHomeFeedSettingsChanged: (EngineHomeFeedSettings) -> Unit
+    val onHomeFeedSettingsChanged: (EngineHomeFeedSettings) -> Unit,
+    val onVideoTransformChanged: (Float, Float, Float) -> Unit
 ) : EngineTab {
     override val view: GeckoView = geckoView
     private var desktopMode: Boolean = true
@@ -700,6 +743,14 @@ private data class GeckoEngineTab(
 
     override fun setHomeFeedSettings(settings: EngineHomeFeedSettings) {
         onHomeFeedSettingsChanged(settings)
+    }
+
+    override fun setVideoTransform(
+        scale: Float,
+        translationXFraction: Float,
+        translationYFraction: Float
+    ) {
+        onVideoTransformChanged(scale, translationXFraction, translationYFraction)
     }
 
     override fun onPause() {

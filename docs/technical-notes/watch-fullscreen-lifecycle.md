@@ -53,8 +53,9 @@ Landscape-Watch-Modus verteilt die Verantwortung bewusst auf zwei Ebenen.
 
 - aktiviert den Modus nur bei einer Watch-URL im Landscape-Format,
 - versteckt App-Toolbar und Systemleisten,
-- haengt Pinch-to-Zoom und Verschieben an die aktuelle Engine-View,
-- setzt Skalierung und Translation beim Verlassen vollstaendig zurueck,
+- erkennt Pinch-to-Zoom und Verschieben an der aktuellen Engine-View,
+- uebergibt die Transformation an die WebExtension und setzt sie beim
+  Verlassen vollstaendig zurueck,
 - beendet den Modus beim Wechsel in Portrait, auf eine Nicht-Watch-Seite oder
   in einen anderen passenden Tab-Zustand.
 
@@ -100,6 +101,8 @@ Die WebExtension erkennt eine Watch-Seite im Landscape-Viewport und setzt
 `tubenext-landscape-watch` auf dem Wurzeldokument. Das zugehoerige CSS:
 
 - fixiert Player und Video auf den sichtbaren Viewport,
+- skaliert und verschiebt nur das Video, nicht Player-Controls, Menues oder
+  andere Overlays,
 - blendet Masthead, Kommentare, Empfehlungen und sonstige Seitenspalten nur
   in diesem Modus aus,
 - legt YouTubes Controls, Einstellungen, Captions und Tube-NEXT-Overlays ueber
@@ -153,8 +156,9 @@ Fullscreen und Overlay in eine gemeinsame lange Timer-Kette koppeln.
 2. Ins Landscape drehen: Toolbar und Systemleisten verschwinden, Player und
    Video fuellen den sichtbaren Bereich.
 3. Player-Controls, Zahnrad-Menue, Captions und Audio-Kanal-Menue bedienen.
-4. Pinch-to-Zoom und Verschieben pruefen; das technische Kontextmenue darf
-   nicht erscheinen.
+4. Pinch-to-Zoom und Verschieben pruefen; Player-Controls und
+   Fortschrittsleiste muessen unskaliert am Bildschirm bleiben und das
+   technische Kontextmenue darf nicht erscheinen.
 5. Zwischen Tabs wechseln und die Watch-Seite verlassen: App-Chrome erscheint
    wieder und die Engine-View hat Skalierung `1`, Translation `0`.
 6. Zurueck ins Portrait drehen und denselben Ruecksetz-Zustand pruefen.

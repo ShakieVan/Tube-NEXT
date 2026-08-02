@@ -1813,7 +1813,8 @@ class MainActivity : AppCompatActivity() {
         }
         landscapeVideoModeActive = true
         enableSystemImmersiveMode()
-        attachLandscapePinchToEngineView(tab.engineTab.view)
+        tab.engineTab.setVideoTransform(1f, 0f, 0f)
+        attachLandscapePinchToEngineView(tab.engineTab)
         updateBrowserChromeVisibility()
     }
 
@@ -1830,6 +1831,7 @@ class MainActivity : AppCompatActivity() {
             browserTab.engineTab.view.scaleY = 1f
             browserTab.engineTab.view.translationX = 0f
             browserTab.engineTab.view.translationY = 0f
+            browserTab.engineTab.setVideoTransform(1f, 0f, 0f)
         }
         if (supportsLegacyWatchTweaks()) {
             tab?.engineTab?.evaluateJavascript(
@@ -2192,7 +2194,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun attachLandscapePinchToEngineView(contentView: View) {
+    private fun attachLandscapePinchToEngineView(engineTab: EngineTab) {
+        val contentView = engineTab.view
         var downX = 0f
         var downY = 0f
         var startTranslationX = 0f
@@ -2212,12 +2215,7 @@ class MainActivity : AppCompatActivity() {
                     val maxY = ((landscapeVideoScale - 1f) * contentView.height) / 2f
                     landscapeVideoTranslationX = landscapeVideoTranslationX.coerceIn(-maxX, maxX)
                     landscapeVideoTranslationY = landscapeVideoTranslationY.coerceIn(-maxY, maxY)
-                    contentView.pivotX = contentView.width / 2f
-                    contentView.pivotY = contentView.height / 2f
-                    contentView.scaleX = landscapeVideoScale
-                    contentView.scaleY = landscapeVideoScale
-                    contentView.translationX = landscapeVideoTranslationX
-                    contentView.translationY = landscapeVideoTranslationY
+                    publishLandscapeVideoTransform(engineTab, contentView)
                     return true
                 }
             }
@@ -2274,8 +2272,7 @@ class MainActivity : AppCompatActivity() {
                     val maxY = ((landscapeVideoScale - 1f) * contentView.height) / 2f
                     landscapeVideoTranslationX = (startTranslationX + dx).coerceIn(-maxX, maxX)
                     landscapeVideoTranslationY = (startTranslationY + dy).coerceIn(-maxY, maxY)
-                    contentView.translationX = landscapeVideoTranslationX
-                    contentView.translationY = landscapeVideoTranslationY
+                    publishLandscapeVideoTransform(engineTab, contentView)
                     true
                 }
 
@@ -2297,11 +2294,8 @@ class MainActivity : AppCompatActivity() {
                         landscapeVideoScale = 1f
                         landscapeVideoTranslationX = 0f
                         landscapeVideoTranslationY = 0f
-                        contentView.scaleX = 1f
-                        contentView.scaleY = 1f
-                        contentView.translationX = 0f
-                        contentView.translationY = 0f
                     }
+                    publishLandscapeVideoTransform(engineTab, contentView)
                     val consumed = isPanning || gestureCaptured
                     isPanning = false
                     gestureCaptured = false
@@ -2312,6 +2306,16 @@ class MainActivity : AppCompatActivity() {
                 else -> gestureCaptured || event.pointerCount > 1
             }
         }
+    }
+
+    private fun publishLandscapeVideoTransform(engineTab: EngineTab, contentView: View) {
+        val width = contentView.width.takeIf { it > 0 } ?: 1
+        val height = contentView.height.takeIf { it > 0 } ?: 1
+        engineTab.setVideoTransform(
+            landscapeVideoScale,
+            landscapeVideoTranslationX / width.toFloat(),
+            landscapeVideoTranslationY / height.toFloat()
+        )
     }
 
     private fun enableSystemImmersiveMode() {
@@ -2860,6 +2864,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun setHomeFeedSettings(settings: EngineHomeFeedSettings) = Unit
+
+        override fun setVideoTransform(
+            scale: Float,
+            translationXFraction: Float,
+            translationYFraction: Float
+        ) = Unit
 
         override fun onPause() = Unit
 

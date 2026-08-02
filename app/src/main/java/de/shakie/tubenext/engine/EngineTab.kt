@@ -22,6 +22,11 @@ interface EngineTab {
     fun exitFullscreenIfNeeded()
     fun evaluateJavascript(script: String, callback: ((String?) -> Unit)? = null)
     fun setHomeFeedSettings(settings: EngineHomeFeedSettings)
+    fun setVideoTransform(
+        scale: Float,
+        translationXFraction: Float,
+        translationYFraction: Float
+    )
     fun onPause()
     fun onResume()
     fun recoverFromAudioRouteChange()

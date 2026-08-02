@@ -55,6 +55,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appLabel"] = "Tube NEXT"
+        manifestPlaceholders["youtubeLinkHandlingEnabled"] = "true"
+        buildConfigField("boolean", "YOUTUBE_LINK_HANDLING_ENABLED", "true")
         buildConfigField("boolean", "PROGRESS_DIAGNOSTICS_ENABLED", "false")
     }
 
@@ -87,6 +89,8 @@ android {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
             manifestPlaceholders["appLabel"] = "Tube NEXT Debug"
+            manifestPlaceholders["youtubeLinkHandlingEnabled"] = "false"
+            buildConfigField("boolean", "YOUTUBE_LINK_HANDLING_ENABLED", "false")
         }
 
         release {
@@ -119,6 +123,8 @@ android {
             applicationIdSuffix = ".local"
             versionNameSuffix = "-local"
             manifestPlaceholders["appLabel"] = "Tube NEXT Local Release"
+            manifestPlaceholders["youtubeLinkHandlingEnabled"] = "false"
+            buildConfigField("boolean", "YOUTUBE_LINK_HANDLING_ENABLED", "false")
             signingConfig = signingConfigs.getByName("debug")
         }
     }

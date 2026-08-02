@@ -56,6 +56,9 @@ import de.shakie.tubenext.browser.LinkInteractionPolicy
 import de.shakie.tubenext.browser.LinkMenuAction
 import de.shakie.tubenext.browser.LinkMenuActionCallbacks
 import de.shakie.tubenext.browser.YouTubeNavigationPolicy
+import de.shakie.tubenext.browser.YouTubeLinkAssociation
+import de.shakie.tubenext.browser.YouTubeLinkAssociationState
+import de.shakie.tubenext.browser.YouTubeLinkOnboardingPolicy
 import de.shakie.tubenext.diagnostics.ProgressLayoutDiagnosticStore
 import de.shakie.tubenext.engine.BrowserEngine
 import de.shakie.tubenext.engine.EngineCallbacks
@@ -119,10 +122,13 @@ class MainActivity : AppCompatActivity() {
     private var updateDownloadHandle: UpdateDownloader.DownloadHandle? = null
     private var settingsDialog: androidx.appcompat.app.AlertDialog? = null
     private var linkMenuDialog: androidx.appcompat.app.AlertDialog? = null
+    private var youtubeLinkAssociationStatusTextView: TextView? = null
     private var activeTabOverviewAdapter: TabOverviewAdapter? = null
     private var batteryOptimizationDialogVisible = false
     private var pendingUpdateNotificationRelease: UpdateRelease? = null
     private var updatePermissionDialogVisible = false
+    private var youtubeLinkOnboardingVisible = false
+    private var awaitingYouTubeLinkSettingsResult = false
     private var landscapeVideoModeActive = false
     private var landscapeVideoScale = 1f
     private var landscapeVideoTranslationX = 0f
@@ -165,7 +171,9 @@ class MainActivity : AppCompatActivity() {
         setupBackNavigation()
         restoreOrCreateInitialTab()
         handleIncomingIntent(intent)
-        if (!maybeShowPostInstallPermissionReminder()) {
+        if (!maybeShowPostInstallPermissionReminder() &&
+            !maybeShowYouTubeLinkOnboarding()
+        ) {
             maybeShowBatteryOptimizationHint()
         }
     }
@@ -217,6 +225,11 @@ class MainActivity : AppCompatActivity() {
         }
         logRecentProcessExitInfo("activity-resume")
         scheduleGeckoRenderHealthCheck("activity-resume")
+        refreshYouTubeLinkAssociationStatus()
+        if (awaitingYouTubeLinkSettingsResult) {
+            awaitingYouTubeLinkSettingsResult = false
+            webViewContainer.postDelayed(::showYouTubeLinkSettingsResult, 350L)
+        }
     }
 
     override fun onStart() {
@@ -958,6 +971,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showSettingsPage() {
+        settingsDialog?.dismiss()
+        youtubeLinkAssociationStatusTextView = null
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(24), dp(8), dp(24), dp(4))
@@ -990,6 +1005,18 @@ class MainActivity : AppCompatActivity() {
         if (BuildConfig.PROGRESS_DIAGNOSTICS_ENABLED) {
             addProgressDiagnosticSettings(container)
         }
+        if (BuildConfig.YOUTUBE_LINK_HANDLING_ENABLED) {
+            container.addView(settingsDivider())
+            container.addView(settingsSectionTitle(R.string.settings_section_youtube_links))
+            youtubeLinkAssociationStatusTextView = updateTextView()
+            container.addView(youtubeLinkAssociationStatusTextView)
+            container.addView(updateButton(R.string.youtube_links_open_settings).apply {
+                setOnClickListener {
+                    openYouTubeLinkSettings()
+                }
+            })
+            refreshYouTubeLinkAssociationStatus()
+        }
         container.addView(settingsDivider())
         container.addView(settingsSectionTitle(R.string.settings_section_updates))
         container.addView(updateStatusTextView())
@@ -1016,7 +1043,6 @@ class MainActivity : AppCompatActivity() {
         val scrollView = ScrollView(this).apply {
             addView(container)
         }
-        settingsDialog?.dismiss()
         settingsDialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.settings_title)
             .setView(scrollView)
@@ -1024,6 +1050,7 @@ class MainActivity : AppCompatActivity() {
             .create()
         settingsDialog?.setOnDismissListener {
             settingsDialog = null
+            youtubeLinkAssociationStatusTextView = null
         }
         settingsDialog?.show()
     }
@@ -1062,6 +1089,34 @@ class MainActivity : AppCompatActivity() {
         container.addView(shareButton)
         container.addView(deleteButton)
         refresh()
+    }
+
+    private fun refreshYouTubeLinkAssociationStatus() {
+        val statusView = youtubeLinkAssociationStatusTextView ?: return
+        statusView.text = youtubeLinkAssociationStatusText(
+            YouTubeLinkAssociation.inspect(this)
+        )
+    }
+
+    private fun youtubeLinkAssociationStatus(state: YouTubeLinkAssociationState): Int {
+        return when {
+            !state.inspectionAvailable -> R.string.youtube_links_status_check_settings
+            state.allHostsEnabled -> R.string.youtube_links_status_enabled
+            state.enabledHostCount > 0 -> R.string.youtube_links_status_partial
+            else -> R.string.youtube_links_status_disabled
+        }
+    }
+
+    private fun youtubeLinkAssociationStatusText(state: YouTubeLinkAssociationState): String {
+        return if (youtubeLinkAssociationStatus(state) == R.string.youtube_links_status_partial) {
+            getString(
+                R.string.youtube_links_status_partial,
+                state.enabledHostCount,
+                state.supportedHostCount
+            )
+        } else {
+            getString(youtubeLinkAssociationStatus(state))
+        }
     }
 
     private fun settingsCheckBox(
@@ -2814,6 +2869,87 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun maybeShowYouTubeLinkOnboarding(): Boolean {
+        if (!BuildConfig.YOUTUBE_LINK_HANDLING_ENABLED) return false
+        if (youtubeLinkOnboardingVisible) return true
+        val association = YouTubeLinkAssociation.inspect(this)
+        val lastPromptAt = preferences.getLong(KEY_YOUTUBE_LINK_ONBOARDING_LAST_PROMPT_AT, 0L)
+        if (!YouTubeLinkOnboardingPolicy.shouldPrompt(
+                association = association,
+                permanentlyDisabled = preferences.getBoolean(
+                    KEY_YOUTUBE_LINK_ONBOARDING_DISABLED,
+                    false
+                ),
+                legacyPromptShown = preferences.getBoolean(
+                    KEY_YOUTUBE_LINK_ONBOARDING_LEGACY_SHOWN,
+                    false
+                ),
+                lastPromptAt = lastPromptAt,
+                now = System.currentTimeMillis()
+            )
+        ) {
+            return false
+        }
+
+        preferences.edit()
+            .putLong(KEY_YOUTUBE_LINK_ONBOARDING_LAST_PROMPT_AT, System.currentTimeMillis())
+            .putBoolean(
+                KEY_YOUTUBE_LINK_ONBOARDING_LEGACY_SHOWN,
+                !association.inspectionAvailable
+            )
+            .apply()
+        youtubeLinkOnboardingVisible = true
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.youtube_links_onboarding_title)
+            .setMessage(R.string.youtube_links_onboarding_message)
+            .setPositiveButton(R.string.youtube_links_onboarding_configure) { _, _ ->
+                openYouTubeLinkSettings()
+            }
+            .setNeutralButton(R.string.youtube_links_onboarding_never) { _, _ ->
+                preferences.edit()
+                    .putBoolean(KEY_YOUTUBE_LINK_ONBOARDING_DISABLED, true)
+                    .apply()
+            }
+            .setNegativeButton(R.string.youtube_links_onboarding_later, null)
+            .setOnDismissListener {
+                youtubeLinkOnboardingVisible = false
+            }
+            .show()
+        return true
+    }
+
+    private fun openYouTubeLinkSettings() {
+        awaitingYouTubeLinkSettingsResult = true
+        try {
+            startActivity(YouTubeLinkAssociation.settingsIntent(this))
+        } catch (_: ActivityNotFoundException) {
+            try {
+                startActivity(
+                    Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", packageName, null)
+                    }
+                )
+            } catch (_: ActivityNotFoundException) {
+                awaitingYouTubeLinkSettingsResult = false
+                startActivity(Intent(android.provider.Settings.ACTION_SETTINGS))
+            }
+        }
+    }
+
+    private fun showYouTubeLinkSettingsResult() {
+        if (isFinishing || isDestroyed) return
+        val association = YouTubeLinkAssociation.inspect(this)
+        refreshYouTubeLinkAssociationStatus()
+        val message = when {
+            association.allHostsEnabled -> R.string.youtube_links_result_enabled
+            association.inspectionAvailable && association.enabledHostCount > 0 ->
+                R.string.youtube_links_result_partial
+            association.inspectionAvailable -> R.string.youtube_links_result_not_enabled
+            else -> R.string.youtube_links_result_check_settings
+        }
+        Snackbar.make(webViewContainer, message, Snackbar.LENGTH_LONG).show()
+    }
+
     private fun isUpdateCheckDue(): Boolean {
         return System.currentTimeMillis() - updatePreferences.lastCheckAtMillis >=
             UPDATE_CHECK_INTERVAL_MS
@@ -2972,6 +3108,12 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_SHOW_COMMUNITY_POSTS = "home_feed_show_community_posts"
         private const val KEY_SHOW_WATCH_HISTORY = "home_feed_show_watch_history"
         private const val KEY_HIDE_WATCH_BRANDING = "watch_page_hide_branding"
+        private const val KEY_YOUTUBE_LINK_ONBOARDING_DISABLED =
+            "youtube_link_onboarding_disabled"
+        private const val KEY_YOUTUBE_LINK_ONBOARDING_LAST_PROMPT_AT =
+            "youtube_link_onboarding_last_prompt_at"
+        private const val KEY_YOUTUBE_LINK_ONBOARDING_LEGACY_SHOWN =
+            "youtube_link_onboarding_legacy_shown"
         private const val KEY_BATTERY_OPTIMIZATION_HINT_VERSION_CODE =
             "battery_optimization_hint_version_code"
         private const val KEY_BATTERY_OPTIMIZATION_HINT_DISABLED =

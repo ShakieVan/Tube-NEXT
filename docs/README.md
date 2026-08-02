@@ -28,6 +28,9 @@ Bestehende Querschnittsdokumente:
   aktueller GeckoView-Laufzeit-, Session- und Navigationsvertrag.
 - [`technical-notes/login-consent-and-link-handling.md`](technical-notes/login-consent-and-link-handling.md):
   interne Login-/Consent-Flows, externe Ziele sowie Long-Press-Slider fuer Linkaktionen.
+- [`technical-notes/android-youtube-link-association.md`](technical-notes/android-youtube-link-association.md):
+  nutzergesteuerte Android-Zuordnung eingehender YouTube-Links und
+  Variantenabgrenzung.
 - [`technical-notes/canonical-back-forward-navigation.md`](technical-notes/canonical-back-forward-navigation.md):
   tabbezogene kanonische Zurueck-/Vorwaerts-History und Gecko-Fallback.
 - [`technical-notes/tab-restoration-and-previews.md`](technical-notes/tab-restoration-and-previews.md):

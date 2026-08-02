@@ -26,7 +26,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <intent-filter android:autoVerify="false">
+        </activity>
+
+        <activity-alias
+            android:name=".YouTubeLinkHandler"
+            android:enabled="${youtubeLinkHandlingEnabled}"
+            android:exported="true"
+            android:targetActivity=".MainActivity">
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />
@@ -39,7 +46,7 @@
                 <data android:host="m.youtube.com" />
                 <data android:host="youtu.be" />
             </intent-filter>
-        </activity>
+        </activity-alias>
         <service
             android:name=".audio.BackgroundAudioService"
             android:exported="false"

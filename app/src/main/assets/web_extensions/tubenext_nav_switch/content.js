@@ -905,6 +905,14 @@
       "html.tubenext-landscape-watch .ytp-fullscreen .ytp-chrome-top {",
       "  width: auto !important;",
       "}",
+      "html.tubenext-landscape-watch .ytp-chapters-container {",
+      "  display: flex !important;",
+      "  flex-wrap: nowrap !important;",
+      "}",
+      "html.tubenext-landscape-watch .ytp-chapters-container > .ytp-chapter-hover-container {",
+      "  float: none !important;",
+      "  flex: 0 0 auto !important;",
+      "}",
       "html.tubenext-landscape-watch .tubenext-cue-overlay {",
       "  position: fixed !important;",
       "  left: 18px !important;",
@@ -1109,6 +1117,8 @@
       ".ytp-chrome-bottom",
       ".ytp-progress-bar-container",
       ".ytp-progress-bar",
+      ".ytp-chapters-container",
+      ".ytp-chapter-hover-container",
       ".ytp-progress-list"
     ];
     var elements = {};
@@ -1120,10 +1130,12 @@
     var segments = playSegments.concat(loadSegments).slice(0, 24).map(function (element) {
       return elementDiagnosticSnapshot(element);
     });
+    var capturedAtEpochMs = Date.now();
     return {
       type: PROGRESS_LAYOUT_ANOMALY,
-      schemaVersion: 1,
-      capturedAtEpochMs: Date.now(),
+      schemaVersion: 2,
+      capturedAtEpochMs: capturedAtEpochMs,
+      capturedAtIso8601: new Date(capturedAtEpochMs).toISOString(),
       reason: reasons,
       page: {
         path: String(window.location.pathname || "").slice(0, 120),
@@ -1145,6 +1157,7 @@
         visualOffsetTop: rounded(visualViewport && visualViewport.offsetTop)
       },
       videoTransform: videoTransform,
+      playerOverlayVisible: isPlayerOverlayVisible(),
       playerClassName: String(player.className || "").slice(0, 500),
       playProgressRows: playRows.map(rounded),
       loadProgressRows: loadRows.map(rounded),
@@ -1179,6 +1192,7 @@
       return;
     }
     if (nativePort) {
+      showPlayerOverlay();
       nativePort.postMessage(snapshot);
       progressDiagnosticEpisodeActive = true;
       lastProgressDiagnosticAt = Date.now();

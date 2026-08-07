@@ -9,13 +9,8 @@ wahrscheinlich die Geometrie der segmentierten Fortschrittsanzeige und nicht
 die Medienzeit selbst.
 
 Eine manuelle Aenderung der Videoaufloesung reproduzierte den Zustand nicht.
-Eine dynamische Neuerstellung der Kapitel-, Werbe- oder Playersegmente bleibt
-eine Hypothese. Insbesondere muss noch geklaert werden, ob YouTubes intern
-berechnete Segmentbreiten zeitweise mit der von Tube NEXT begrenzten
-`.ytp-chrome-bottom`-Breite kollidieren.
-
-Bis zur folgenden Auswertung wurde die Player-CSS bewusst nicht auf Verdacht
-geaendert.
+Die spaetere Auswertung der realen Diagnoseereignisse hat diese erste
+Hypothese ersetzt.
 
 ## Auswertung der realen Ereignisse vom 07.08.2026
 
@@ -44,6 +39,16 @@ Ein Fix muss eng auf den Landscape-Player begrenzt verhindern, dass YouTubes
 Kapitelcontainer an dieser Subpixel-Rundungsgrenze umbrechen. Die
 Medienposition, Kapitelbreiten und Videotransformation selbst sollen dabei
 nicht neu berechnet werden.
+
+## Fix
+
+YouTube richtet `.ytp-chapter-hover-container` mit `float: left` aus. Tube NEXT
+setzt deshalb nur innerhalb von `html.tubenext-landscape-watch` den direkten
+`.ytp-chapters-container` auf eine nicht umbrechende Flex-Zeile und hebt den
+Float der direkten Kapitelkinder auf. Die von YouTube gesetzten Kapitelbreiten
+bleiben mit `flex: 0 0 auto` erhalten. Ein moeglicher Subpixel-Ueberstand bleibt
+damit horizontal und kann das letzte Kapitel nicht mehr in eine zweite Zeile
+verschieben.
 
 ## Diagnosevariante
 
@@ -75,34 +80,48 @@ gilt eine Mindestpause von fuenf Minuten.
 
 ## Inhalt und Aufbewahrung
 
-Ein Ereignis enthaelt ausschliesslich:
+Der JSON-Eintrag eines Ereignisses enthaelt:
 
-- Zeitpunkt, App-Version und interne Tab-ID,
+- eindeutige Ereignis-ID, Epoch- und lesbaren UTC-ISO-Zeitpunkt, App-Version
+  und interne Tab-ID,
 - YouTube-Video-ID und URL-Pfad, aber keine vollstaendige URL,
 - Medienzeit, Dauer und Pausezustand,
 - Viewport-, Zoom- und Player-Geometrie,
 - begrenzte Klassennamen und berechnete Layoutwerte der relevanten
-  Fortschrittselemente.
+  Fortschrittselemente,
+- den eindeutig aus der Ereignis-ID abgeleiteten Screenshot-Dateinamen.
 
-Cookies, Accountdaten, Seitentexte, Titel, Kommentare und Medieninhalte werden
-nicht gespeichert.
+Cookies und Accountdaten werden nicht aus dem DOM ausgelesen oder in JSON
+geschrieben. Zu jedem neuen Ereignis versucht die Diagnosefassung jedoch
+automatisch einen Screenshot der sichtbaren GeckoView zu speichern. Dieser
+kann naturgemaess das sichtbare Videobild, Player-Overlay, Untertitel oder
+andere gerade eingeblendete Seiteninhalte enthalten. Vor der Aufnahme blendet
+die Diagnose das Player-Overlay ein, damit der beanstandete Balken sichtbar
+ist. Alte Eintraege aus Diagnose-Schema 1 besitzen keinen nachtraeglich
+erzeugbaren Screenshot. Beim Export erhalten sie aber aus ihrem vorhandenen
+Epoch-Wert ebenfalls das neue lesbare UTC-ISO-Zeitfeld.
 
 Die App haelt maximal 20 Ereignisse als JSON Lines unter
-`files/diagnostics/fullscreen-progress-layout.jsonl`. Neue Ereignisse
-verdraengen die aeltesten atomar. Der private App-Speicher uebersteht
-Neustarts und signierte App-Updates; nur die Schaltflaeche in den Einstellungen
-oder eine Deinstallation loescht das Protokoll. In den Einstellungen werden
-Zaehler, Teilen und explizites Loeschen angeboten.
+`files/diagnostics/fullscreen-progress-layout.jsonl`; zugehoerige JPEG-Dateien
+liegen unter `files/diagnostics/screenshots/`. Neue Ereignisse verdraengen die
+aeltesten atomar und nicht mehr referenzierte Screenshots werden mit entfernt.
+Der private App-Speicher uebersteht Neustarts und signierte App-Updates. Die
+Schaltflaeche `Diagnosedaten loeschen` entfernt Protokoll, interne Screenshots
+und temporaere Exportarchive gemeinsam; bereits unter Downloads gespeicherte
+Kopien bleiben bewusst bestehen.
 
-Zusaetzlich kann die Diagnosefassung eine lokale Kopie direkt ueber Androids
-`MediaStore.Downloads` unter `Download/Tube NEXT/` speichern. Dafuer ist ab
-Android 10 keine allgemeine Speicherberechtigung notwendig. Der Export erhaelt
-einen Zeitstempel im Dateinamen; das interne Ringprotokoll bleibt unveraendert.
+Teilen und lokales Speichern erstellen ein ZIP-Diagnosepaket mit der JSONL und
+allen zu den enthaltenen Ereignissen vorhandenen Screenshots. Die lokale Kopie
+wird ueber Androids `MediaStore.Downloads` unter `Download/Tube NEXT/`
+gespeichert. Dafuer ist ab Android 10 keine allgemeine Speicherberechtigung
+notwendig. Der ZIP-Dateiname erhaelt einen lokalen Zeitstempel; das interne
+Ringprotokoll bleibt unveraendert.
 
 ## Regression
 
 `ProgressLayoutDiagnosticStoreTest` prueft Ringbegrenzung, erneutes Oeffnen,
-ungueltige beziehungsweise uebergrosse Nutzdaten sowie das Loeschen. Vor dem
-Installieren der Diagnosefassung muessen ausserdem JavaScript-Syntax,
-WebExtension-Manifest, Unit-Tests, Release-Lint, Produktionssignatur, App-ID
-und Versionsname geprueft werden.
+IDs und lesbare Zeitstempel, ZIP-Zuordnung, ungueltige beziehungsweise
+uebergrosse Nutzdaten sowie das gemeinsame Loeschen. Vor dem Installieren der
+Diagnosefassung muessen ausserdem JavaScript-Syntax, WebExtension-Manifest,
+Unit-Tests, Release-Lint, Produktionssignatur, App-ID und Versionsname geprueft
+werden.

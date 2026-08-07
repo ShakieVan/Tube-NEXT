@@ -63,14 +63,14 @@ class ProgressLayoutDiagnosticExporter(
 
     companion object {
         private const val EXPORT_DIRECTORY = "Tube NEXT"
-        private const val MIME_TYPE = "application/x-ndjson"
+        private const val MIME_TYPE = "application/zip"
         private val FILE_NAME_TIMESTAMP_FORMAT = DateTimeFormatter
             .ofPattern("yyyyMMdd-HHmmss-SSS", Locale.ROOT)
             .withZone(ZoneId.systemDefault())
 
         internal fun buildDisplayName(epochMs: Long): String {
             val timestamp = FILE_NAME_TIMESTAMP_FORMAT.format(Instant.ofEpochMilli(epochMs))
-            return "Tube-NEXT-fullscreen-progress-$timestamp.jsonl"
+            return "Tube-NEXT-fullscreen-progress-$timestamp.zip"
         }
     }
 }

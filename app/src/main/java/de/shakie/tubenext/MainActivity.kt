@@ -115,6 +115,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progressLayoutDiagnosticStore: ProgressLayoutDiagnosticStore
     private val tabPreviewArtworkLoader = YouTubePreviewArtworkLoader()
     private val tabPreviewArtworkExecutor = Executors.newFixedThreadPool(2)
+    private val progressDiagnosticScreenshotExecutor = Executors.newSingleThreadExecutor()
 
     private val browserTabs = linkedMapOf<String, AppTab>()
     private var selectedTabId: String? = null
@@ -296,6 +297,7 @@ class MainActivity : AppCompatActivity() {
             browserEngine.shutdown()
         }
         tabPreviewArtworkExecutor.shutdownNow()
+        progressDiagnosticScreenshotExecutor.shutdownNow()
     }
 
     private fun setupToolbar() {
@@ -494,7 +496,7 @@ class MainActivity : AppCompatActivity() {
             onPageReadyForPreview = ::onPageReadyForPreview,
             onProgressLayoutDiagnostic = { tabId, payload ->
                 if (BuildConfig.PROGRESS_DIAGNOSTICS_ENABLED) {
-                    progressLayoutDiagnosticStore.append(tabId, payload)
+                    recordProgressLayoutDiagnostic(tabId, payload)
                 }
             },
             onProgressChanged = { tabId, progress ->
@@ -2468,7 +2470,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun shareProgressDiagnostics() {
-        val file = progressLayoutDiagnosticStore.fileForSharing()
+        val file = progressLayoutDiagnosticStore.archiveForSharing()
         if (file == null) {
             Snackbar.make(
                 webViewContainer,
@@ -2479,7 +2481,7 @@ class MainActivity : AppCompatActivity() {
         }
         val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/x-ndjson"
+            type = "application/zip"
             putExtra(Intent.EXTRA_STREAM, uri)
             clipData = ClipData.newRawUri(file.name, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -2493,7 +2495,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveProgressDiagnostics() {
-        val file = progressLayoutDiagnosticStore.fileForSharing()
+        val file = progressLayoutDiagnosticStore.archiveForSharing()
         if (file == null) {
             Snackbar.make(
                 webViewContainer,
@@ -2521,6 +2523,53 @@ class MainActivity : AppCompatActivity() {
                 ).show()
             }
         )
+    }
+
+    private fun recordProgressLayoutDiagnostic(tabId: String, payload: String) {
+        val entry = progressLayoutDiagnosticStore.appendWithScreenshot(tabId, payload) ?: return
+        runOnUiThread {
+            val tab = browserTabs[tabId] ?: return@runOnUiThread
+            val geckoView = tab.engineTab.view as? GeckoView ?: return@runOnUiThread
+            if (selectedTabId != tabId || geckoView.visibility != View.VISIBLE ||
+                geckoView.parent != webViewContainer || geckoView.width <= 0 || geckoView.height <= 0
+            ) {
+                return@runOnUiThread
+            }
+            runCatching {
+                geckoView.capturePixels().accept(
+                    { captured ->
+                        if (captured == null) return@accept
+                        runCatching {
+                            progressDiagnosticScreenshotExecutor.execute {
+                                try {
+                                    progressLayoutDiagnosticStore.saveScreenshot(entry) { output ->
+                                        captured.compress(
+                                            Bitmap.CompressFormat.JPEG,
+                                            PROGRESS_DIAGNOSTIC_SCREENSHOT_QUALITY,
+                                            output
+                                        )
+                                    }
+                                } finally {
+                                    if (!captured.isRecycled) captured.recycle()
+                                }
+                            }
+                        }.onFailure { error ->
+                            if (!captured.isRecycled) captured.recycle()
+                            Log.w(
+                                "TUBENEXT_DIAGNOSTICS",
+                                "progress screenshot could not be queued",
+                                error
+                            )
+                        }
+                    },
+                    { error ->
+                        Log.w("TUBENEXT_DIAGNOSTICS", "progress screenshot capture failed", error)
+                    }
+                )
+            }.onFailure { error ->
+                Log.w("TUBENEXT_DIAGNOSTICS", "progress screenshot capture skipped", error)
+            }
+        }
     }
 
     private fun copyToClipboard(url: String) {
@@ -3141,6 +3190,7 @@ class MainActivity : AppCompatActivity() {
         private const val UPDATE_CHECK_INTERVAL_MS = 24L * 60L * 60L * 1000L
         private const val TAB_PREVIEW_TOP_OFFSET_RATIO = 0.12f
         private const val TAB_PREVIEW_REATTACH_DELAY_MS = 300L
+        private const val PROGRESS_DIAGNOSTIC_SCREENSHOT_QUALITY = 88
         private const val PREFERENCES_NAME = "tube_next_preferences"
         private const val KEY_SHOW_SHORTS = "home_feed_show_shorts"
         private const val KEY_SHOW_COMMUNITY_POSTS = "home_feed_show_community_posts"

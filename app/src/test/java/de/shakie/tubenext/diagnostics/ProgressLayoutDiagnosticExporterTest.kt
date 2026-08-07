@@ -7,7 +7,7 @@ import java.time.ZonedDateTime
 
 class ProgressLayoutDiagnosticExporterTest {
     @Test
-    fun `export name contains local timestamp and jsonl suffix`() {
+    fun `export name contains local timestamp and zip suffix`() {
         val timestamp = ZonedDateTime.of(
             2026,
             8,
@@ -19,7 +19,7 @@ class ProgressLayoutDiagnosticExporterTest {
             ZoneId.systemDefault()
         ).toInstant().toEpochMilli()
         assertEquals(
-            "Tube-NEXT-fullscreen-progress-20260807-162915-123.jsonl",
+            "Tube-NEXT-fullscreen-progress-20260807-162915-123.zip",
             ProgressLayoutDiagnosticExporter.buildDisplayName(timestamp)
         )
     }

@@ -215,8 +215,9 @@ Verbindliche Schutzregeln:
 
 `install -r` mit derselben Produktionssignatur und einem mindestens gleich
 hohen `versionCode` erhaelt insbesondere
-`files/diagnostics/fullscreen-progress-layout.jsonl`. Die App muss fuer die
-reine Installation nicht zusaetzlich durchgeklickt werden.
+`files/diagnostics/fullscreen-progress-layout.jsonl` sowie zugehoerige Dateien
+unter `files/diagnostics/screenshots/`. Die App muss fuer die reine
+Installation nicht zusaetzlich durchgeklickt werden.
 
 Nach der Installation pruefen:
 

@@ -14,8 +14,36 @@ eine Hypothese. Insbesondere muss noch geklaert werden, ob YouTubes intern
 berechnete Segmentbreiten zeitweise mit der von Tube NEXT begrenzten
 `.ytp-chrome-bottom`-Breite kollidieren.
 
-Bis ein Ereignis mit Messwerten vorliegt, wird die Player-CSS nicht auf
-Verdacht geaendert.
+Bis zur folgenden Auswertung wurde die Player-CSS bewusst nicht auf Verdacht
+geaendert.
+
+## Auswertung der realen Ereignisse vom 07.08.2026
+
+Sieben gespeicherte Ereignisse vom 02. bis 07.08.2026 und ein realer
+Screenshot vom 06.08.2026 grenzen die Ursache deutlich ein:
+
+- alle Ereignisse entstanden bei `798 x 384` CSS-Pixeln und
+  `devicePixelRatio = 1.9`,
+- der Tube-NEXT-Videozoom stand immer auf `1` ohne Verschiebung,
+- der Player war etwa `797.9` CSS-Pixel und die durch je 12 Pixel Seitenrand
+  begrenzte Fortschrittsleiste etwa `773.9` CSS-Pixel breit,
+- Geckos ganzzahliges `clientWidth` der Leiste war gleichzeitig `774`,
+- YouTube teilte die Kapitelbreiten samt 4-Pixel-Abstaenden in jedem Ereignis
+  auf exakt diese ganzzahligen `774` Pixel auf,
+- dadurch ueberschritt die Kapitelzeile die reale Subpixelbreite um ungefaehr
+  `0.1` Pixel und das jeweils letzte Kapitel sprang sechs CSS-Pixel nach unten.
+
+In sechs Ereignissen war im umgebrochenen letzten Kapitel nur der graue
+Ladefortschritt sichtbar. In einem Ereignis waren Lade- und roter
+Abspielfortschritt zweizeilig. Das erklaert, warum sichtbarer Fortschritt und
+maximaler Balken zeitweise nicht zusammenpassen. Unterschiedliche Videos mit
+vier bis siebzehn Kapiteln waren betroffen; eine Aufloesungsaenderung oder der
+Tube-NEXT-Zoom sind damit als Ursache widerlegt.
+
+Ein Fix muss eng auf den Landscape-Player begrenzt verhindern, dass YouTubes
+Kapitelcontainer an dieser Subpixel-Rundungsgrenze umbrechen. Die
+Medienposition, Kapitelbreiten und Videotransformation selbst sollen dabei
+nicht neu berechnet werden.
 
 ## Diagnosevariante
 
@@ -65,6 +93,11 @@ verdraengen die aeltesten atomar. Der private App-Speicher uebersteht
 Neustarts und signierte App-Updates; nur die Schaltflaeche in den Einstellungen
 oder eine Deinstallation loescht das Protokoll. In den Einstellungen werden
 Zaehler, Teilen und explizites Loeschen angeboten.
+
+Zusaetzlich kann die Diagnosefassung eine lokale Kopie direkt ueber Androids
+`MediaStore.Downloads` unter `Download/Tube NEXT/` speichern. Dafuer ist ab
+Android 10 keine allgemeine Speicherberechtigung notwendig. Der Export erhaelt
+einen Zeitstempel im Dateinamen; das interne Ringprotokoll bleibt unveraendert.
 
 ## Regression
 

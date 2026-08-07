@@ -59,6 +59,7 @@ import de.shakie.tubenext.browser.YouTubeNavigationPolicy
 import de.shakie.tubenext.browser.YouTubeLinkAssociation
 import de.shakie.tubenext.browser.YouTubeLinkAssociationState
 import de.shakie.tubenext.browser.YouTubeLinkOnboardingPolicy
+import de.shakie.tubenext.diagnostics.ProgressLayoutDiagnosticExporter
 import de.shakie.tubenext.diagnostics.ProgressLayoutDiagnosticStore
 import de.shakie.tubenext.engine.BrowserEngine
 import de.shakie.tubenext.engine.EngineCallbacks
@@ -110,6 +111,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var backgroundAudioCoordinator: AndroidBackgroundAudioCoordinator
     private lateinit var preferences: SharedPreferences
     private lateinit var updatePreferences: UpdatePreferences
+    private lateinit var progressLayoutDiagnosticExporter: ProgressLayoutDiagnosticExporter
     private lateinit var progressLayoutDiagnosticStore: ProgressLayoutDiagnosticStore
     private val tabPreviewArtworkLoader = YouTubePreviewArtworkLoader()
     private val tabPreviewArtworkExecutor = Executors.newFixedThreadPool(2)
@@ -164,6 +166,7 @@ class MainActivity : AppCompatActivity() {
         backgroundAudioCoordinator = AndroidBackgroundAudioCoordinator(applicationContext)
         preferences = getSharedPreferences(PREFERENCES_NAME, MODE_PRIVATE)
         updatePreferences = UpdatePreferences(this)
+        progressLayoutDiagnosticExporter = ProgressLayoutDiagnosticExporter(this)
         progressLayoutDiagnosticStore = ProgressLayoutDiagnosticStore(this)
 
         setupToolbar()
@@ -1059,14 +1062,17 @@ class MainActivity : AppCompatActivity() {
         container.addView(settingsDivider())
         container.addView(settingsSectionTitle(R.string.settings_section_progress_diagnostics))
         val status = updateTextView()
+        val saveButton = updateButton(R.string.progress_diagnostics_save)
         val shareButton = updateButton(R.string.progress_diagnostics_share)
         val deleteButton = updateButton(R.string.progress_diagnostics_delete)
         val refresh = {
             val count = progressLayoutDiagnosticStore.count()
             status.text = getString(R.string.progress_diagnostics_count, count)
+            saveButton.isEnabled = count > 0
             shareButton.isEnabled = count > 0
             deleteButton.isEnabled = count > 0
         }
+        saveButton.setOnClickListener { saveProgressDiagnostics() }
         shareButton.setOnClickListener { shareProgressDiagnostics() }
         deleteButton.setOnClickListener {
             MaterialAlertDialogBuilder(this)
@@ -1086,6 +1092,7 @@ class MainActivity : AppCompatActivity() {
                 .show()
         }
         container.addView(status)
+        container.addView(saveButton)
         container.addView(shareButton)
         container.addView(deleteButton)
         refresh()
@@ -2482,6 +2489,37 @@ class MainActivity : AppCompatActivity() {
                 shareIntent,
                 getString(R.string.progress_diagnostics_share_chooser)
             )
+        )
+    }
+
+    private fun saveProgressDiagnostics() {
+        val file = progressLayoutDiagnosticStore.fileForSharing()
+        if (file == null) {
+            Snackbar.make(
+                webViewContainer,
+                R.string.progress_diagnostics_empty,
+                Snackbar.LENGTH_SHORT
+            ).show()
+            return
+        }
+        progressLayoutDiagnosticExporter.saveToDownloads(file).fold(
+            onSuccess = { exportedFile ->
+                Snackbar.make(
+                    webViewContainer,
+                    getString(
+                        R.string.progress_diagnostics_saved,
+                        exportedFile.relativePath
+                    ),
+                    Snackbar.LENGTH_LONG
+                ).show()
+            },
+            onFailure = {
+                Snackbar.make(
+                    webViewContainer,
+                    R.string.progress_diagnostics_save_failed,
+                    Snackbar.LENGTH_LONG
+                ).show()
+            }
         )
     }
 

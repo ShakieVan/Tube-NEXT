@@ -59,6 +59,9 @@
     <string name="youtube_links_result_check_settings">Die Linkzuordnung kann auf dieser Android-Version nicht automatisch geprüft werden.</string>
     <string name="settings_section_progress_diagnostics">Fullscreen-Fortschrittsdiagnose</string>
     <string name="progress_diagnostics_count">Gespeicherte Auffälligkeiten: %1$d von maximal 20</string>
+    <string name="progress_diagnostics_save">Diagnoseprotokoll in Downloads speichern</string>
+    <string name="progress_diagnostics_saved">Gespeichert unter %1$s</string>
+    <string name="progress_diagnostics_save_failed">Diagnoseprotokoll konnte nicht gespeichert werden</string>
     <string name="progress_diagnostics_share">Diagnoseprotokoll teilen</string>
     <string name="progress_diagnostics_share_chooser">Diagnoseprotokoll teilen</string>
     <string name="progress_diagnostics_delete">Diagnoseprotokoll löschen</string>

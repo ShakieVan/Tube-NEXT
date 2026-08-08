@@ -1,6 +1,7 @@
 # GitHub-Release und Diagnose-Deployment
 
-Stand: am 02.08.2026 mit `v1.4.2` praktisch durchgefuehrt und geprueft
+Stand: am 08.08.2026 fuer `v1.4.4` aktualisiert und gegen den mit `v1.4.3`
+praktisch durchgefuehrten Ablauf geprueft
 
 Diese Notiz ist der verbindliche Arbeitsablauf fuer einen neuen stabilen
 Tube-NEXT-Release, solange parallel die Fullscreen-Fortschrittsdiagnose auf
@@ -45,6 +46,13 @@ und duerfen nicht fest in Skripte oder Dokumentation geschrieben werden. Das
 aktuell erreichbare Geraet wird bei jedem Vorgang neu mit `adb devices -l`
 ermittelt. Bei mehreren erreichbaren Geraeten muss jeder ADB-Befehl mit
 `-s <serial>` eindeutig auf das `SM-S928B` begrenzt werden.
+
+Ist der ADB-Daemon beim ersten Aufruf noch nicht aktiv, kann
+`adb devices -l` zunaechst nur den Daemon starten und eine leere Geraeteliste
+liefern, waehrend die WLAN-ADB-Verbindung unmittelbar danach aufgebaut wird.
+Die Abfrage in diesem Fall mindestens einmal direkt wiederholen. Erst wenn
+auch die Wiederholung kein Geraet zeigt, den Verbindungszustand anders
+diagnostizieren oder auf MTP ausweichen.
 
 Eine APK-Installation beendet gegebenenfalls den laufenden App-Prozess. Vor
 dem Update deshalb kurz ankuendigen, dass am Telefon gearbeitet wird. Ohne

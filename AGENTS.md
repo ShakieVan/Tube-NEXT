@@ -217,6 +217,10 @@ Login-Flow zugelassen. Andere externe Ziele gehen an eine externe App.
 - Kleine, nachvollziehbare und separat pruefbare Schritte bevorzugen.
 - Vor Beginn Arbeitsordner, Branch und Worktree mit Git pruefen; alte
   Chat-Handoffs sind keine Autoritaet fuer den aktuellen Stand.
+- Beim Zugriff auf das bekannte Testtelefon kann der erste ADB-Aufruf nur den
+  Daemon starten. Eine leere erste Ausgabe von `adb devices -l` deshalb
+  mindestens einmal unmittelbar wiederholen, bevor das Telefon als nicht
+  erreichbar gilt oder auf MTP ausgewichen wird.
 - Bestehende Nutzerveraenderungen im Worktree erhalten.
 - Technische Grenzen klar benennen, statt fragile Workarounds zu verstecken.
 - Architektur nur bei einem konkreten Engpass erweitern.

@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -22,6 +23,7 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
+import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.ViewConfiguration
@@ -47,6 +49,7 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.core.view.WindowCompat
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
@@ -2619,6 +2622,51 @@ class MainActivity : AppCompatActivity() {
         var activeRelease = activeResult?.release ?: latestUpdateResult?.release
         var isDownloading = false
 
+        val titleView = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(dp(24), dp(12), dp(8), 0)
+        }
+        val titleText = TextView(this).apply {
+            text = getString(R.string.update_manager_title)
+            textSize = 20f
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(
+                MaterialColors.getColor(
+                    this,
+                    com.google.android.material.R.attr.colorOnSurface,
+                    Color.WHITE
+                )
+            )
+            layoutParams = LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                1f
+            )
+        }
+        val updateReloadButton = ImageButton(this).apply {
+            contentDescription = getString(R.string.menu_reload)
+            setImageResource(android.R.drawable.ic_popup_sync)
+            val selectableBackground = TypedValue()
+            theme.resolveAttribute(
+                android.R.attr.selectableItemBackgroundBorderless,
+                selectableBackground,
+                true
+            )
+            setBackgroundResource(selectableBackground.resourceId)
+            imageTintList = ColorStateList.valueOf(
+                MaterialColors.getColor(
+                    this,
+                    com.google.android.material.R.attr.colorOnSurface,
+                    Color.WHITE
+                )
+            )
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
+        }
+        titleView.addView(titleText)
+        titleView.addView(updateReloadButton)
+
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(24), dp(8), dp(24), dp(4))
@@ -2645,7 +2693,6 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        val checkButton = updateButton(R.string.menu_reload)
         val releaseNotesButton = updateButton(R.string.update_open_release_notes)
         val downloadButton = updateButton(R.string.update_download)
         val cancelDownloadButton = updateButton(R.string.update_cancel_download)
@@ -2659,20 +2706,23 @@ class MainActivity : AppCompatActivity() {
             latestText,
             assetText,
             downloadStatusText,
-            notificationsCheck,
-            postInstallReminderCheck,
-            checkButton,
-            releaseNotesButton,
             downloadButton,
-            cancelDownloadButton,
             installButton,
+            cancelDownloadButton,
+            releaseNotesButton,
             deleteButton,
-            settingsButton
+            settingsButton,
+            notificationsCheck,
+            postInstallReminderCheck
         ).forEach(container::addView)
 
+        val scrollView = ScrollView(this).apply {
+            isFillViewport = true
+            addView(container)
+        }
         val dialog = MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.update_manager_title)
-            .setView(container)
+            .setCustomTitle(titleView)
+            .setView(scrollView)
             .setPositiveButton(android.R.string.ok, null)
             .create()
 
@@ -2720,7 +2770,7 @@ class MainActivity : AppCompatActivity() {
             installButton.visibility = if (file != null && !isDownloading) View.VISIBLE else View.GONE
             deleteButton.visibility = if (file != null && !isDownloading) View.VISIBLE else View.GONE
             cancelDownloadButton.visibility = if (isDownloading) View.VISIBLE else View.GONE
-            checkButton.isEnabled = !updateCheckInProgress && !isDownloading
+            updateReloadButton.isEnabled = !updateCheckInProgress && !isDownloading
             settingsButton.visibility = View.VISIBLE
         }
 
@@ -2779,7 +2829,7 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        checkButton.setOnClickListener {
+        updateReloadButton.setOnClickListener {
             runDialogCheck()
         }
         releaseNotesButton.setOnClickListener {

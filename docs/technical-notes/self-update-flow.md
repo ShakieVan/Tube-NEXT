@@ -1,6 +1,6 @@
 # GitHub-/Sideload-Updateverwaltung
 
-Stand: am 01.08.2026 gegen den `v1.4.0`-Release-Kandidaten und die
+Stand: am 08.08.2026 gegen den Stand von `v1.4.4` und die
 Git-Historie geprueft
 
 ## Distributionsmodell
@@ -143,6 +143,33 @@ externe Anwendung gegeben. Dadurch kann keine GitHub-Seite im Gecko-Tab
 angezeigt werden, waehrend die Toolbar weiterhin eine alte YouTube-Adresse
 zeigt.
 
+## Updateverwaltungsdialog
+
+Der Dialoginhalt liegt in einem vertikalen `ScrollView`, damit alle Aktionen
+auch bei grosser Systemschrift, hoher Anzeigeskalierung und kleinen
+Dialoghoehen erreichbar bleiben. Die erste sichtbare Schaltflaeche ist je
+nach Zustand `Download`, `Installieren` oder `Download abbrechen`; direkt
+danach folgen die Release Notes. Die manuelle Aktualisierung sitzt als
+Reload-Symbol rechts im Dialogkopf. Benachrichtigungs- und
+Installationsfreigabe-Optionen stehen am Ende des scrollbaren Inhalts.
+
+## Wiederherstellung bei einem defekten Updateverwaltungsdialog
+
+Das Verhalten einer bereits installierten App-Version laesst sich nicht
+nachtraeglich ueber GitHub aendern, und Android verlangt ohne privilegierte
+Geraeteverwaltung weiterhin eine ausdrueckliche Installationsentscheidung.
+Wenn eine alte Version ihre Download-/Installationsaktion wegen eines
+Layoutfehlers nicht erreichbar darstellt, dient die weiterhin sichtbare
+Aktion `Neuerungen oeffnen` als Wiederherstellungspfad. Die Release Notes des
+behebenden Releases sollen dazu am Anfang einen direkten Link auf die
+signierte ABI-APK und eine kurze Installationsanleitung enthalten. Eine APK
+mit identischer Signatur, identischem Paketnamen und hoeherem `versionCode`
+wird als datenerhaltendes Update installiert.
+
+Auf einem betreuten Geraet ist alternativ `adb install -r <apk>` der
+datenerhaltende Wiederherstellungspfad. Eine stille Installation fuer
+beliebige Endnutzer ist nicht vorgesehen.
+
 ## Sicherheits- und Robustheitsgrenzen
 
 Der aktuelle Downloader verifiziert selbst weder:
@@ -183,6 +210,10 @@ bei einer spaeteren Haertung bewusst priorisiert und getestet werden.
 - `v1.4.0`: ABI-Namen werden als vollstaendige Tokens abgegrenzt, damit
   insbesondere `x86` nicht mit `x86_64` verwechselt wird; die Auswahl ist
   durch Offline-Unit-Tests abgesichert.
+- `v1.4.4`: Der Updateverwaltungsdialog ist scrollbar, priorisiert die
+  Download-/Installationsaktion und bietet den manuellen Reload platzsparend
+  im Dialogkopf an. Direkte APK-Links in den Release Notes bilden den
+  Wiederherstellungspfad fuer bereits installierte fehlerhafte Versionen.
 
 ## Regressionstest
 
@@ -200,4 +231,7 @@ bei einer spaeteren Haertung bewusst priorisiert und getestet werden.
 9. Installationsfreigabe vor Download und vor Installation verweigern.
 10. APK spaeter aus der Updateverwaltung installieren.
 11. Post-Install-Hinweis einmalig, dauerhaft und nach Reaktivierung pruefen.
-12. Release Notes muessen in einem neuen Tube-NEXT-Tab oeffnen.
+12. Release Notes muessen ueber einen externen HTTP(S)-Handler oeffnen.
+13. Bei grosser Systemschrift und Anzeigeskalierung pruefen, dass Download
+    beziehungsweise Installation die erste sichtbare Aktion ist und der
+    gesamte Dialog bis zu den Optionen am Ende gescrollt werden kann.

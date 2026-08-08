@@ -58,6 +58,11 @@ object YouTubeNavigationPolicy {
         return firstVideoId == videoIdForUrl(secondUrl)
     }
 
+    fun privacyShareUrlForUrl(url: String): String? {
+        val videoId = videoIdForUrl(url) ?: return null
+        return "https://www.youtube.com/watch?v=$videoId"
+    }
+
     private fun parseHttpUri(url: String): URI? {
         if (url.isBlank()) return null
         val uri = runCatching { URI(url) }.getOrNull() ?: return null

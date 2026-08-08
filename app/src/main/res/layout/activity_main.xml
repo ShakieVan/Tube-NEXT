@@ -16,6 +16,9 @@
             android:layout_height="wrap_content"
             android:background="@color/yt_surface_lowest"
             android:minHeight="?attr/actionBarSize"
+            app:contentInsetEnd="0dp"
+            app:contentInsetStart="0dp"
+            app:contentInsetStartWithNavigation="0dp"
             app:subtitleTextColor="@android:color/white"
             app:titleTextColor="@android:color/white">
 
@@ -24,38 +27,38 @@
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
+                android:paddingStart="2dp"
+                android:paddingEnd="2dp"
                 android:paddingTop="8dp"
                 android:paddingBottom="8dp">
 
                 <ImageButton
                     android:id="@+id/backButton"
-                    android:layout_width="40dp"
+                    android:layout_width="38dp"
                     android:layout_height="44dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/navigation_back"
-                    android:padding="9dp"
+                    android:padding="7dp"
                     android:src="@drawable/ic_navigation_back"
                     app:tint="@color/yt_primary" />
 
                 <ImageButton
                     android:id="@+id/forwardButton"
-                    android:layout_width="40dp"
+                    android:layout_width="38dp"
                     android:layout_height="44dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/navigation_forward"
-                    android:padding="9dp"
+                    android:padding="7dp"
                     android:src="@drawable/ic_navigation_forward"
                     app:tint="@color/yt_primary" />
 
                 <ImageButton
                     android:id="@+id/reloadButton"
-                    android:layout_width="40dp"
+                    android:layout_width="38dp"
                     android:layout_height="44dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/menu_reload"
-                    android:padding="9dp"
+                    android:padding="7dp"
                     android:src="@android:drawable/ic_popup_sync"
                     app:tint="@color/yt_primary" />
 
@@ -63,8 +66,8 @@
                     android:id="@+id/urlText"
                     android:layout_width="0dp"
                     android:layout_height="36dp"
-                    android:layout_marginStart="8dp"
-                    android:layout_marginEnd="8dp"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginEnd="4dp"
                     android:layout_weight="1"
                     android:background="@drawable/toolbar_url_pill_background"
                     android:ellipsize="end"
@@ -74,9 +77,20 @@
                     android:textSize="15sp"
                     android:textStyle="bold" />
 
+                <ImageButton
+                    android:id="@+id/privacyShareButton"
+                    android:layout_width="38dp"
+                    android:layout_height="44dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/privacy_share_video"
+                    android:padding="7dp"
+                    android:src="@drawable/ic_share"
+                    android:visibility="gone"
+                    app:tint="@color/yt_primary" />
+
                 <FrameLayout
                     android:id="@+id/tabSwitcherButton"
-                    android:layout_width="44dp"
+                    android:layout_width="38dp"
                     android:layout_height="44dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:clickable="true"
@@ -87,7 +101,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:contentDescription="@string/tab_switcher_button"
-                        android:padding="8dp"
+                        android:padding="7dp"
                         android:src="@drawable/ic_tabs_overview"
                         app:tint="@color/yt_primary" />
 
@@ -107,12 +121,11 @@
 
                 <ImageButton
                     android:id="@+id/homeFeedMenuButton"
-                    android:layout_width="44dp"
+                    android:layout_width="38dp"
                     android:layout_height="44dp"
-                    android:layout_marginStart="4dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/home_feed_menu_button"
-                    android:padding="10dp"
+                    android:padding="8dp"
                     android:src="@drawable/ic_more_vertical"
                     app:tint="@color/yt_primary" />
             </LinearLayout>

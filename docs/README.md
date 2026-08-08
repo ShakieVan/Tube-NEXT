@@ -52,6 +52,9 @@ Bestehende Querschnittsdokumente:
   Grenzen von Lade-/Fertigerkennung und Regeln fuer sichere DOM-Nachlaeufe.
 - [`technical-notes/youtube-responsive-layout-diagnostics.md`](technical-notes/youtube-responsive-layout-diagnostics.md):
   Live-Diagnose von Layout-, Sichtviewport und YouTube-Breakpoints.
+- [`technical-notes/privacy-preserving-watch-sharing.md`](technical-notes/privacy-preserving-watch-sharing.md):
+  nativer Watch-Share-Link ohne Kontextparameter und eng begrenztes
+  Ausblenden von YouTubes Teilen-Aktion.
 
 ## Was wird wo dokumentiert?
 

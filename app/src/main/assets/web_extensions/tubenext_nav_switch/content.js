@@ -31,6 +31,7 @@
   var LINK_ACTIVATION_SUPPRESS_MS = 1200;
   var MENU_TOUCH_THROUGH_GUARD_MS = 1000;
   var SEEK_STEP_SECONDS = 10;
+  var HIDE_WATCH_SHARE_BUTTON = true;
   var pendingSingleTapTimer = null;
   var activePlayerTouch = null;
   var lastTouchTapAt = 0;
@@ -45,6 +46,7 @@
   var homeFeedFilterTimer = null;
   var homeFeedObserver = null;
   var watchPageTimer = null;
+  var watchPageObserver = null;
   var previewReadyGeneration = 0;
   var nativePort = null;
   var activeLinkHold = null;
@@ -326,9 +328,125 @@
       "html.tubenext-hide-watch-branding .branding-img-container {",
       "  display: none !important;",
       "  pointer-events: none !important;",
+      "}",
+      "html.tubenext-hide-watch-share ytd-watch-metadata #actions .tubenext-watch-share-hidden {",
+      "  margin-inline-end: calc(-1 * var(--tubenext-watch-share-width, 0px)) !important;",
+      "  visibility: hidden !important;",
+      "  pointer-events: none !important;",
+      "}",
+      "html.tubenext-hide-watch-share:not(.tubenext-landscape-watch) ytd-watch-metadata #actions,",
+      "html.tubenext-hide-watch-share:not(.tubenext-landscape-watch) ytd-watch-metadata #actions-inner,",
+      "html.tubenext-hide-watch-share:not(.tubenext-landscape-watch) ytd-watch-metadata #menu,",
+      "html.tubenext-hide-watch-share:not(.tubenext-landscape-watch) ytd-watch-metadata #menu > ytd-menu-renderer,",
+      "html.tubenext-hide-watch-share:not(.tubenext-landscape-watch) ytd-watch-metadata #top-level-buttons-computed {",
+      "  height: 40px !important;",
+      "  min-height: 40px !important;",
+      "  overflow: visible !important;",
       "}"
     ].join("\n");
     (document.documentElement || document.head || document.body).appendChild(style);
+  }
+
+  function isWatchShareEndpoint(endpoint) {
+    if (!endpoint || typeof endpoint !== "object") {
+      return false;
+    }
+    if (endpoint.shareEntityServiceEndpoint) {
+      return true;
+    }
+    var webCommandMetadata = endpoint.commandMetadata &&
+      endpoint.commandMetadata.webCommandMetadata;
+    return !!(webCommandMetadata &&
+      typeof webCommandMetadata.apiUrl === "string" &&
+      webCommandMetadata.apiUrl.indexOf("/share/get_share_panel") >= 0);
+  }
+
+  function isWatchShareRenderer(renderer) {
+    var button = renderer && renderer.querySelector && renderer.querySelector("button");
+    if (button) {
+      var label = (button.getAttribute("aria-label") || "").trim().toLowerCase();
+      var iconPath = button.querySelector("svg path");
+      var iconPathData = iconPath && iconPath.getAttribute("d") || "";
+      if (label === "share" || label === "teilen" ||
+          iconPathData.indexOf("M10 3.158V7.51") === 0) {
+        return true;
+      }
+    }
+    var data = renderer && (renderer.data || renderer.__data && renderer.__data.data);
+    if (!data) {
+      return false;
+    }
+    var candidates = [
+      data,
+      data.serviceEndpoint,
+      data.navigationEndpoint,
+      data.command,
+      data.buttonRenderer,
+      data.buttonRenderer && data.buttonRenderer.serviceEndpoint
+    ];
+    return candidates.some(isWatchShareEndpoint);
+  }
+
+  function markWatchShareButtons(root) {
+    if (!root || !isWatchPage()) {
+      return;
+    }
+    var renderers = [];
+    var rendererSelector = [
+      "ytd-button-renderer",
+      "yt-button-shape",
+      "yt-button-view-model",
+      "button-view-model"
+    ].join(", ");
+    if (root.matches && root.matches(rendererSelector)) {
+      renderers.push(root);
+    }
+    if (root.querySelectorAll) {
+      root.querySelectorAll(rendererSelector).forEach(function (renderer) {
+        renderers.push(renderer);
+      });
+    }
+    renderers.forEach(function (renderer) {
+      if (!isWatchShareRenderer(renderer)) {
+        return;
+      }
+      var actionContainer = renderer.closest && renderer.closest("ytd-watch-metadata #actions");
+      if (!actionContainer) {
+        return;
+      }
+      var wrapper = renderer.closest("yt-button-view-model") ||
+        renderer.closest("ytd-button-renderer") ||
+        renderer;
+      var shareWidth = wrapper.getBoundingClientRect().width;
+      if (shareWidth > 0) {
+        wrapper.style.setProperty("--tubenext-watch-share-width", String(shareWidth) + "px");
+      }
+      wrapper.classList.add("tubenext-watch-share-hidden");
+    });
+  }
+
+  function updateWatchPageObserver(watch) {
+    if (!watch) {
+      if (watchPageObserver) {
+        watchPageObserver.disconnect();
+        watchPageObserver = null;
+      }
+      return;
+    }
+    markWatchShareButtons(document);
+    if (watchPageObserver || typeof MutationObserver !== "function") {
+      return;
+    }
+    var observerRoot = document.body || document.documentElement;
+    if (!observerRoot) {
+      return;
+    }
+    watchPageObserver = new MutationObserver(function (mutations) {
+      mutations.forEach(function (mutation) {
+        mutation.addedNodes.forEach(markWatchShareButtons);
+      });
+    });
+    watchPageObserver.observe(observerRoot, { childList: true, subtree: true });
   }
 
   function applyWatchPageTweaks() {
@@ -337,10 +455,16 @@
     }
     ensureWatchPageStyle();
     var watch = isWatchPage();
+    document.documentElement.classList.toggle("tubenext-watch-page", watch);
+    document.documentElement.classList.toggle(
+      "tubenext-hide-watch-share",
+      watch && HIDE_WATCH_SHARE_BUTTON
+    );
     document.documentElement.classList.toggle(
       "tubenext-hide-watch-branding",
       watch && homeFeedSettings.hideWatchBranding
     );
+    updateWatchPageObserver(watch && HIDE_WATCH_SHARE_BUTTON);
   }
 
   function scheduleWatchPageTweaks() {

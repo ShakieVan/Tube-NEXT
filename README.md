@@ -30,8 +30,26 @@ Tube NEXT ist der Versuch, genau diese Browser-Erfahrung in eine alltagstauglich
 - **Fullscreen bei Querformat:** Dreht man das Telefon, wird die Watch-Ansicht immersiv und zoombar.
 - **Pinch-to-Zoom im Video:** Besonders praktisch fuer Tutorials, Tanzvideos oder Detailanalyse.
 - **Cue-Modus:** Per Long-Tap im Landscape-Player kann ein Cue-Punkt gesetzt werden. Der Cue-Button springt exakt zu dieser Stelle zurueck.
-- **Saubere Links teilen:** Tap auf die Adressleiste kopiert die sichtbare URL, ohne zusaetzliche YouTube-Share-Parameter. Long-Tap auf die Adressleiste oeffnet den URL-Editor.
+- **Datensparsame Watch-Links teilen:** Auf Video-Seiten oeffnet ein eigener
+  Button in der App-Leiste Androids Teilen-Dialog mit einer kanonischen
+  `watch?v=...`-Adresse. YouTubes eigener Teilen-Button wird dort ausgeblendet;
+  Tap auf die Adressleiste kopiert weiterhin die sichtbare URL und Long-Tap
+  oeffnet den URL-Editor.
 - **Dunkles, eigenstaendiges Design:** App-Rahmen, Ladescreen und Tab-Uebersicht nutzen die Tube NEXT Optik statt Android-Standardgrau.
+
+## Warum ein eigener Teilen-Button?
+
+Von YouTube erzeugte Share-Links enthalten neben der fuer das Video noetigen
+`v`-Kennung oft weitere, fuer den Aufruf nicht erforderliche Kontextparameter
+wie `si`. Deren genaue serverseitige Auswertung ist fuer Tube NEXT nicht
+transparent. Wer einen Link weitergibt, soll solche zusaetzlichen Werte deshalb
+nicht unbemerkt mitsenden muessen.
+
+Tube NEXT teilt auf Watch-Seiten ausschliesslich
+`https://www.youtube.com/watch?v=<VIDEO-ID>` und entfernt unter anderem
+Kontext-, Playlist- und Zeitparameter. Das reduziert die im weitergegebenen
+Link enthaltenen Metadaten. Es verhindert nicht, dass YouTube bei der normalen
+Nutzung seiner offiziellen Webseite eigene Nutzungsdaten verarbeitet.
 
 ## Screenshots
 

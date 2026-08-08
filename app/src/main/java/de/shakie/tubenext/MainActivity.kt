@@ -97,6 +97,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var backButton: ImageButton
     private lateinit var forwardButton: ImageButton
     private lateinit var reloadButton: ImageButton
+    private lateinit var privacyShareButton: ImageButton
     private lateinit var tabSwitcherButton: FrameLayout
     private lateinit var homeFeedMenuButton: ImageButton
     private lateinit var tabCountBadge: TextView
@@ -150,6 +151,7 @@ class MainActivity : AppCompatActivity() {
         backButton = findViewById(R.id.backButton)
         forwardButton = findViewById(R.id.forwardButton)
         reloadButton = findViewById(R.id.reloadButton)
+        privacyShareButton = findViewById(R.id.privacyShareButton)
         tabSwitcherButton = findViewById(R.id.tabSwitcherButton)
         homeFeedMenuButton = findViewById(R.id.homeFeedMenuButton)
         tabCountBadge = findViewById(R.id.tabCountBadge)
@@ -311,6 +313,12 @@ class MainActivity : AppCompatActivity() {
         }
         reloadButton.setOnClickListener {
             currentTab()?.engineTab?.reload()
+        }
+        privacyShareButton.setOnClickListener {
+            currentTab()
+                ?.url
+                ?.let(YouTubeNavigationPolicy::privacyShareUrlForUrl)
+                ?.let(::shareLink)
         }
         tabSwitcherButton.setOnClickListener {
             showTabOverview()
@@ -1308,6 +1316,14 @@ class MainActivity : AppCompatActivity() {
         val navigationPending = current?.let { tab ->
             tab.navigationHistory.isNavigationPending || tab.rawHistoryNavigationPending
         } == true
+        privacyShareButton.visibility = if (
+            !navigationPending &&
+            current?.url?.let(YouTubeNavigationPolicy::privacyShareUrlForUrl) != null
+        ) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
         backButton.isEnabled = !navigationPending && current?.let { tab ->
             tab.navigationHistory.canGoBack(tab.url) ||
                 (CanonicalTabHistory.shouldUseEngineHistory(tab.engineLocationUrl) &&

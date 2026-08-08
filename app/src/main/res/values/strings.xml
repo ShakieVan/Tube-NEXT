@@ -15,6 +15,7 @@
     <string name="link_open_external">Extern öffnen</string>
     <string name="link_copy">Link kopieren</string>
     <string name="link_share">Link teilen</string>
+    <string name="privacy_share_video">Video datensparsam teilen</string>
     <string name="tab_closed_message">Tab wurde geschlossen</string>
     <string name="page_load_error">Seite konnte nicht geladen werden</string>
     <string name="tab_switcher_title">%1$d Tabs</string>

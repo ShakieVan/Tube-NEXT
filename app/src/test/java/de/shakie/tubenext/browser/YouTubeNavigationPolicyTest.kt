@@ -33,6 +33,36 @@ class YouTubeNavigationPolicyTest {
             "https://www.youtube.com/watch?v=secondVideo"
         ))
     }
+
+    @Test
+    fun `builds privacy share urls containing only the video id`() {
+        assertEquals(
+            "https://www.youtube.com/watch?v=abc_123-XYZ",
+            YouTubeNavigationPolicy.privacyShareUrlForUrl(
+                "https://m.youtube.com/watch?si=recipient-token&v=abc_123-XYZ&list=PL123&t=42"
+            )
+        )
+        assertEquals(
+            "https://www.youtube.com/watch?v=abc_123-XYZ",
+            YouTubeNavigationPolicy.privacyShareUrlForUrl(
+                "https://youtu.be/abc_123-XYZ?si=recipient-token&t=42"
+            )
+        )
+    }
+
+    @Test
+    fun `does not offer privacy sharing outside valid watch urls`() {
+        assertEquals(null, YouTubeNavigationPolicy.privacyShareUrlForUrl("https://www.youtube.com/"))
+        assertEquals(
+            null,
+            YouTubeNavigationPolicy.privacyShareUrlForUrl("https://www.youtube.com/watch?list=PL123")
+        )
+        assertEquals(
+            null,
+            YouTubeNavigationPolicy.privacyShareUrlForUrl("https://example.org/watch?v=abc_123-XYZ")
+        )
+    }
+
     @Test
     fun `uses desktop only for watch and youtu be targets`() {
         assertEquals(RenderMode.MOBILE, YouTubeNavigationPolicy.renderModeForUrl("https://youtube.com/"))

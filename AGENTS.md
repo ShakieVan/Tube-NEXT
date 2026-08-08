@@ -235,7 +235,10 @@ Login-Flow zugelassen. Andere externe Ziele gehen an eine externe App.
   `docs/technical-notes/` festhalten.
 - Dauerhafte Produkt- und Architekturentscheidungen unter `docs/decisions/`
   dokumentieren.
-- Bei Releases Versionswerte und `docs/releases/vX.Y.Z.md` aktualisieren.
+- Bei Releases Versionswerte und `docs/releases/vX.Y.Z.md` aktualisieren. Die
+  Release Notes enthalten dauerhaft direkt anklickbare, nutzerfreundlich
+  beschriftete Links auf alle drei ABI-APKs; `arm64-v8a` steht zuerst mit dem
+  Hinweis, dass es fuer die meisten aktuellen Android-Geraete geeignet ist.
 - Vor einem GitHub-Release und solange die Fortschrittsdiagnose aktiv ist den
   verbindlichen Ablauf aus
   [`docs/technical-notes/release-and-diagnostic-deployment.md`](docs/technical-notes/release-and-diagnostic-deployment.md)

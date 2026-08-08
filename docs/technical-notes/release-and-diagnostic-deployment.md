@@ -92,6 +92,20 @@ nennt die ABI-Zuordnung. Interne Diagnosefunktionen duerfen nicht als Funktion
 des regulaeren Releases dargestellt werden; falls relevant, ausdruecklich
 erwaehnen, dass sie dort deaktiviert sind.
 
+Jede Release-Notiz enthaelt im sichtbaren Fliesstext direkt anklickbare Links
+auf alle drei APKs. Die Linktexte nennen nicht nur das ABI-Kuerzel, sondern
+erklaeren die Zielgruppe in einfacher Sprache. Die Reihenfolge und
+Grundbeschriftung bleiben konsistent:
+
+1. `arm64-v8a` - fuer die meisten aktuellen Android-Geraete,
+2. `armeabi-v7a` - fuer aeltere 32-Bit-ARM-Geraete,
+3. `x86_64` - fuer entsprechende Emulatoren und Geraete.
+
+Die Links zeigen direkt auf die versionierten APK-Assets unter
+`releases/download/vX.Y.Z/` und nicht nur allgemein auf die Asset-Liste. Ein
+besonderer Wiederherstellungshinweis wie in `v1.4.4` ist nur bei Bedarf
+noetig; die erklaerten Direktlinks selbst bleiben Bestandteil jedes Releases.
+
 ## 3. Beide Varianten aus demselben Stand pruefen und bauen
 
 Mindestens folgende Pruefungen ausfuehren:

@@ -143,6 +143,13 @@ externe Anwendung gegeben. Dadurch kann keine GitHub-Seite im Gecko-Tab
 angezeigt werden, waehrend die Toolbar weiterhin eine alte YouTube-Adresse
 zeigt.
 
+Jede kuenftige Release-Beschreibung bietet direkt im Fliesstext beschriftete
+Links auf alle drei ABI-APKs. `arm64-v8a` steht zuerst und wird als passende
+Variante fuer die meisten aktuellen Android-Geraete erklaert; die weiteren
+Links benennen `armeabi-v7a` fuer aeltere 32-Bit-ARM-Geraete und `x86_64` fuer
+entsprechende Emulatoren und Geraete. Dadurch muss der Nutzer die Bedeutung
+der Dateinamen nicht aus der unkommentierten GitHub-Asset-Liste ableiten.
+
 ## Updateverwaltungsdialog
 
 Der Dialoginhalt liegt in einem vertikalen `ScrollView`, damit alle Aktionen

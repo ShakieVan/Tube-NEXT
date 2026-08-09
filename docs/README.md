@@ -55,6 +55,9 @@ Bestehende Querschnittsdokumente:
 - [`technical-notes/privacy-preserving-watch-sharing.md`](technical-notes/privacy-preserving-watch-sharing.md):
   nativer Watch-Share-Link ohne Kontextparameter und eng begrenztes
   Ausblenden von YouTubes Teilen-Aktion.
+- [`technical-notes/return-youtube-dislike-integration.md`](technical-notes/return-youtube-dislike-integration.md):
+  optionale geschaetzte Dislike-Zahl mit Einwilligung, Stimmenprotokoll,
+  Cache und konservativen lokalen Abfragelimits.
 
 ## Was wird wo dokumentiert?
 

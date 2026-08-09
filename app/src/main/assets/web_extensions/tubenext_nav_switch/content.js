@@ -20,6 +20,11 @@
   var PAGE_PREVIEW_READY = "PAGE_PREVIEW_READY";
   var PROGRESS_DIAGNOSTICS_SETTINGS = "PROGRESS_DIAGNOSTICS_SETTINGS";
   var PROGRESS_LAYOUT_ANOMALY = "PROGRESS_LAYOUT_ANOMALY";
+  var RYD_GET_VOTES = "TUBENEXT_RYD_GET_VOTES";
+  var RYD_SUBMIT_VOTE = "TUBENEXT_RYD_SUBMIT_VOTE";
+  var RYD_SET_ENABLED = "TUBENEXT_RYD_SET_ENABLED";
+  var RYD_COUNT_CLASS = "tubenext-ryd-dislike-count";
+  var RYD_STATUS_ID = "tubenext_ryd_status";
   var PROGRESS_DIAGNOSTIC_INTERVAL_MS = 2500;
   var PROGRESS_DIAGNOSTIC_COOLDOWN_MS = 5 * 60 * 1000;
   var TAP_CONFIRM_DELAY_MS = 320;
@@ -47,6 +52,17 @@
   var homeFeedObserver = null;
   var watchPageTimer = null;
   var watchPageObserver = null;
+  var rydCounterTimer = null;
+  var rydVideoId = "";
+  var rydDislikes = null;
+  var rydVoteState = null;
+  var rydLocalDislikeDelta = 0;
+  var rydFetchVideoId = "";
+  var rydFetchGeneration = 0;
+  var rydBackgroundReady = false;
+  var rydSettingGeneration = 0;
+  var rydDomState = null;
+  var rydLastTapActivationAt = 0;
   var previewReadyGeneration = 0;
   var nativePort = null;
   var activeLinkHold = null;
@@ -64,7 +80,8 @@
     showShorts: true,
     showCommunityPosts: true,
     showWatchHistory: true,
-    hideWatchBranding: false
+    hideWatchBranding: false,
+    showWatchDislikes: false
   };
   var videoTransform = {
     scale: 1,
@@ -342,6 +359,24 @@
       "  height: 40px !important;",
       "  min-height: 40px !important;",
       "  overflow: visible !important;",
+      "}",
+      "." + RYD_COUNT_CLASS + " {",
+      "  pointer-events: none !important;",
+      "}",
+      "#" + RYD_STATUS_ID + " {",
+      "  position: fixed !important;",
+      "  left: 50% !important;",
+      "  bottom: 72px !important;",
+      "  z-index: 2147483647 !important;",
+      "  max-width: calc(100vw - 32px) !important;",
+      "  transform: translateX(-50%) !important;",
+      "  padding: 10px 14px !important;",
+      "  border-radius: 8px !important;",
+      "  background: rgba(32, 32, 32, 0.96) !important;",
+      "  color: #fff !important;",
+      "  font: 500 14px/20px Roboto, Arial, sans-serif !important;",
+      "  text-align: center !important;",
+      "  pointer-events: none !important;",
       "}"
     ].join("\n");
     (document.documentElement || document.head || document.body).appendChild(style);
@@ -425,6 +460,436 @@
     });
   }
 
+  function currentWatchVideoId() {
+    try {
+      var url = new URL(window.location.href);
+      var videoId = url.hostname.toLowerCase() === "youtu.be"
+        ? url.pathname.split("/").filter(Boolean)[0]
+        : url.pathname.startsWith("/watch") ? url.searchParams.get("v") : "";
+      return /^[A-Za-z0-9_-]{11}$/.test(videoId || "") ? videoId : "";
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function firstMatch(root, selectors) {
+    if (!root || !root.querySelector) {
+      return null;
+    }
+    for (var index = 0; index < selectors.length; index += 1) {
+      var match = root.querySelector(selectors[index]);
+      if (match) {
+        return match;
+      }
+    }
+    return null;
+  }
+
+  function findRydVoteControls() {
+    var actions = document.querySelector("ytd-watch-metadata #actions");
+    if (!actions) {
+      return null;
+    }
+    var segmented = actions.querySelector("ytd-segmented-like-dislike-button-renderer");
+    var likeRenderer = segmented && firstMatch(segmented, [
+      "#segmented-like-button",
+      ":scope > :first-child"
+    ]) || firstMatch(actions, [
+      "like-button-view-model",
+      "#segmented-like-button"
+    ]);
+    var dislikeRenderer = segmented && firstMatch(segmented, [
+      "#segmented-dislike-button",
+      ":scope > :nth-child(2)"
+    ]) || firstMatch(actions, [
+      "dislike-button-view-model",
+      "#segmented-dislike-button",
+      "#dislike-button"
+    ]);
+    var likeButton = likeRenderer && (
+      likeRenderer.matches && likeRenderer.matches("button")
+        ? likeRenderer
+        : likeRenderer.querySelector("button")
+    );
+    var dislikeButton = dislikeRenderer && (
+      dislikeRenderer.matches && dislikeRenderer.matches("button")
+        ? dislikeRenderer
+        : dislikeRenderer.querySelector("button")
+    );
+    if (!likeRenderer || !dislikeRenderer || !likeButton || !dislikeButton) {
+      return null;
+    }
+    return {
+      actions: actions,
+      likeRenderer: likeRenderer,
+      dislikeRenderer: dislikeRenderer,
+      likeButton: likeButton,
+      dislikeButton: dislikeButton
+    };
+  }
+
+  function pressedState(renderer, button) {
+    return button.getAttribute("aria-pressed") === "true" ||
+      renderer.getAttribute && renderer.getAttribute("aria-pressed") === "true" ||
+      renderer.classList && renderer.classList.contains("style-default-active");
+  }
+
+  function readRydVoteState(controls) {
+    if (!controls) {
+      return null;
+    }
+    if (pressedState(controls.dislikeRenderer, controls.dislikeButton)) {
+      return -1;
+    }
+    if (pressedState(controls.likeRenderer, controls.likeButton)) {
+      return 1;
+    }
+    return 0;
+  }
+
+  function findButtonTextContainer(renderer, button) {
+    var selectors = [
+      ".yt-spec-button-shape-next__button-text-content",
+      ".ytSpecButtonShapeNextButtonTextContent",
+      "#text",
+      "yt-formatted-string",
+      "span[role='text']"
+    ];
+    for (var index = 0; index < selectors.length; index += 1) {
+      var match = renderer.querySelector(selectors[index]);
+      if (match && match !== button) {
+        return match;
+      }
+    }
+    return null;
+  }
+
+  function buttonClassSnapshot(button) {
+    var classes = [
+      "yt-spec-button-shape-next--icon-button",
+      "ytSpecButtonShapeNextIconButton",
+      "yt-spec-button-shape-next--icon-leading",
+      "ytSpecButtonShapeNextIconLeading"
+    ];
+    var snapshot = {};
+    classes.forEach(function (className) {
+      snapshot[className] = button.classList.contains(className);
+    });
+    return snapshot;
+  }
+
+  function restoreButtonClasses(button, snapshot) {
+    if (!button || !snapshot) {
+      return;
+    }
+    Object.keys(snapshot).forEach(function (className) {
+      button.classList.toggle(className, snapshot[className]);
+    });
+  }
+
+  function cleanupRydDom() {
+    if (!rydDomState) {
+      return;
+    }
+    var state = rydDomState;
+    rydDomState = null;
+    if (state.created) {
+      if (state.container && state.container.isConnected) {
+        state.container.remove();
+      }
+    } else if (state.container && state.container.isConnected) {
+      while (state.container.firstChild) {
+        state.container.removeChild(state.container.firstChild);
+      }
+      state.originalChildren.forEach(function (child) {
+        state.container.appendChild(child.cloneNode(true));
+      });
+      if (state.hadIsEmpty) {
+        state.container.setAttribute("is-empty", state.originalIsEmptyValue);
+      }
+      state.container.classList.remove(RYD_COUNT_CLASS);
+      if (state.hadTitle) {
+        state.container.setAttribute("title", state.originalTitle);
+      } else {
+        state.container.removeAttribute("title");
+      }
+    }
+    if (state.button && state.button.isConnected) {
+      restoreButtonClasses(state.button, state.buttonClasses);
+    }
+  }
+
+  function ensureRydTextContainer(controls) {
+    if (rydDomState && rydDomState.button === controls.dislikeButton &&
+        rydDomState.container && rydDomState.container.isConnected) {
+      return rydDomState.container;
+    }
+    cleanupRydDom();
+    var container = findButtonTextContainer(controls.dislikeRenderer, controls.dislikeButton);
+    var created = false;
+    if (!container) {
+      var template = findButtonTextContainer(controls.likeRenderer, controls.likeButton);
+      if (template) {
+        container = template.cloneNode(true);
+      } else {
+        container = document.createElement("span");
+        container.className = "yt-spec-button-shape-next__button-text-content";
+      }
+      controls.dislikeButton.appendChild(container);
+      created = true;
+    }
+    rydDomState = {
+      button: controls.dislikeButton,
+      buttonClasses: buttonClassSnapshot(controls.dislikeButton),
+      container: container,
+      created: created,
+      originalChildren: created ? [] : Array.from(container.childNodes).map(function (child) {
+        return child.cloneNode(true);
+      }),
+      hadIsEmpty: container.hasAttribute("is-empty"),
+      originalIsEmptyValue: container.getAttribute("is-empty") || "",
+      hadTitle: container.hasAttribute("title"),
+      originalTitle: container.getAttribute("title") || ""
+    };
+    container.removeAttribute("is-empty");
+    container.classList.add(RYD_COUNT_CLASS);
+    controls.dislikeButton.classList.remove(
+      "yt-spec-button-shape-next--icon-button",
+      "ytSpecButtonShapeNextIconButton"
+    );
+    controls.dislikeButton.classList.add(
+      "yt-spec-button-shape-next--icon-leading",
+      "ytSpecButtonShapeNextIconLeading"
+    );
+    return container;
+  }
+
+  function formatRydCount(value) {
+    try {
+      return new Intl.NumberFormat(document.documentElement.lang || undefined, {
+        notation: "compact",
+        compactDisplay: "short",
+        maximumFractionDigits: 1
+      }).format(Math.max(0, value));
+    } catch (_) {
+      return String(Math.max(0, Math.round(value)));
+    }
+  }
+
+  function renderRydCount() {
+    if (!homeFeedSettings.showWatchDislikes || !isWatchPage() || rydDislikes === null) {
+      cleanupRydDom();
+      return false;
+    }
+    var controls = findRydVoteControls();
+    if (!controls) {
+      cleanupRydDom();
+      return false;
+    }
+    var container = ensureRydTextContainer(controls);
+    var formatted = formatRydCount(rydDislikes);
+    if (container.textContent !== formatted) {
+      container.textContent = formatted;
+    }
+    container.setAttribute(
+      "title",
+      "Geschätzte Dislikes laut Return YouTube Dislike"
+    );
+    return true;
+  }
+
+  function showRydStatus(message) {
+    var existing = document.getElementById(RYD_STATUS_ID);
+    if (existing) {
+      existing.remove();
+    }
+    var status = document.createElement("div");
+    status.id = RYD_STATUS_ID;
+    status.setAttribute("role", "status");
+    status.textContent = message;
+    (document.body || document.documentElement).appendChild(status);
+    window.setTimeout(function () {
+      if (status.isConnected) {
+        status.remove();
+      }
+    }, 4000);
+  }
+
+  function resetRydPageState() {
+    rydFetchGeneration += 1;
+    rydVideoId = "";
+    rydDislikes = null;
+    rydVoteState = null;
+    rydLocalDislikeDelta = 0;
+    rydFetchVideoId = "";
+    cleanupRydDom();
+  }
+
+  function sendRydMessage(message) {
+    if (typeof browser === "undefined" || !browser.runtime || !browser.runtime.sendMessage) {
+      return Promise.resolve({ ok: false, error: { code: "runtime_unavailable" } });
+    }
+    try {
+      return Promise.resolve(browser.runtime.sendMessage(message)).catch(function () {
+        return { ok: false, error: { code: "runtime_error" } };
+      });
+    } catch (_) {
+      return Promise.resolve({ ok: false, error: { code: "runtime_error" } });
+    }
+  }
+
+  function scheduleRydCounter(delay) {
+    if (rydCounterTimer) {
+      window.clearTimeout(rydCounterTimer);
+    }
+    rydCounterTimer = window.setTimeout(function () {
+      rydCounterTimer = null;
+      ensureRydCounter();
+    }, typeof delay === "number" ? delay : 140);
+  }
+
+  function ensureRydCounter() {
+    if (!homeFeedSettings.showWatchDislikes || !rydBackgroundReady || !isWatchPage()) {
+      resetRydPageState();
+      return;
+    }
+    var videoId = currentWatchVideoId();
+    if (!videoId) {
+      resetRydPageState();
+      return;
+    }
+    if (rydVideoId !== videoId) {
+      resetRydPageState();
+      rydVideoId = videoId;
+      rydVoteState = readRydVoteState(findRydVoteControls());
+    }
+    if (rydDislikes !== null) {
+      renderRydCount();
+      return;
+    }
+    if (rydFetchVideoId === videoId) {
+      return;
+    }
+    rydFetchVideoId = videoId;
+    var generation = ++rydFetchGeneration;
+    sendRydMessage({ type: RYD_GET_VOTES, videoId: videoId }).then(function (result) {
+      if (generation !== rydFetchGeneration || rydVideoId !== videoId ||
+          !homeFeedSettings.showWatchDislikes) {
+        return;
+      }
+      rydFetchVideoId = "";
+      if (!result || result.ok !== true || !result.data) {
+        return;
+      }
+      rydDislikes = Math.max(0, Number(result.data.dislikes || 0) + rydLocalDislikeDelta);
+      if (rydVoteState === null) {
+        rydVoteState = readRydVoteState(findRydVoteControls());
+      }
+      if (!renderRydCount()) {
+        scheduleRydCounter(500);
+      }
+    });
+  }
+
+  function updateRydFeatureState() {
+    rydSettingGeneration += 1;
+    var generation = rydSettingGeneration;
+    rydBackgroundReady = false;
+    if (!homeFeedSettings.showWatchDislikes) {
+      resetRydPageState();
+    }
+    sendRydMessage({
+      type: RYD_SET_ENABLED,
+      enabled: homeFeedSettings.showWatchDislikes
+    }).then(function (result) {
+      if (generation !== rydSettingGeneration) {
+        return;
+      }
+      rydBackgroundReady = !!(
+        homeFeedSettings.showWatchDislikes && result && result.ok === true
+      );
+      if (rydBackgroundReady) {
+        scheduleRydCounter(0);
+      }
+    });
+  }
+
+  function targetInsideRenderer(target, renderer) {
+    return !!(target && renderer && (
+      target === renderer || renderer.contains && renderer.contains(target)
+    ));
+  }
+
+  function checkRydVoteStateChange(videoId) {
+    if (!homeFeedSettings.showWatchDislikes || videoId !== rydVideoId ||
+        videoId !== currentWatchVideoId()) {
+      return;
+    }
+    var controls = findRydVoteControls();
+    var newState = readRydVoteState(controls);
+    if (newState === null || newState === rydVoteState) {
+      return;
+    }
+    var previousState = rydVoteState;
+    rydVoteState = newState;
+    var dislikeDelta = 0;
+    if (previousState === -1 && newState !== -1) {
+      dislikeDelta = -1;
+    } else if (previousState !== -1 && newState === -1) {
+      dislikeDelta = 1;
+    }
+    rydLocalDislikeDelta += dislikeDelta;
+    if (rydDislikes !== null) {
+      rydDislikes = Math.max(0, rydDislikes + dislikeDelta);
+      renderRydCount();
+    }
+    sendRydMessage({
+      type: RYD_SUBMIT_VOTE,
+      videoId: videoId,
+      value: newState,
+      dislikeDelta: dislikeDelta
+    }).then(function (result) {
+      if (result && result.ok === false &&
+          (!result.error || result.error.code !== "disabled")) {
+        showRydStatus("RYD-Stimme konnte nicht übermittelt werden");
+      }
+    });
+  }
+
+  function handleRydVoteActivation(event) {
+    if (!homeFeedSettings.showWatchDislikes || !isWatchPage()) {
+      return;
+    }
+    var controls = findRydVoteControls();
+    if (!controls || !(
+      targetInsideRenderer(event.target, controls.likeRenderer) ||
+      targetInsideRenderer(event.target, controls.dislikeRenderer)
+    )) {
+      return;
+    }
+    var videoId = currentWatchVideoId();
+    if (!videoId) {
+      return;
+    }
+    var now = Date.now();
+    if (event.type === "click" && now - rydLastTapActivationAt < 800) {
+      return;
+    }
+    if (event.type === "tap") {
+      rydLastTapActivationAt = now;
+    }
+    if (rydVideoId !== videoId) {
+      resetRydPageState();
+      rydVideoId = videoId;
+    }
+    rydVoteState = readRydVoteState(controls);
+    [0, 120, 500].forEach(function (delay) {
+      window.setTimeout(function () {
+        checkRydVoteStateChange(videoId);
+      }, delay);
+    });
+  }
+
   function updateWatchPageObserver(watch) {
     if (!watch) {
       if (watchPageObserver) {
@@ -434,6 +899,9 @@
       return;
     }
     markWatchShareButtons(document);
+    if (homeFeedSettings.showWatchDislikes) {
+      scheduleRydCounter(0);
+    }
     if (watchPageObserver || typeof MutationObserver !== "function") {
       return;
     }
@@ -443,7 +911,12 @@
     }
     watchPageObserver = new MutationObserver(function (mutations) {
       mutations.forEach(function (mutation) {
-        mutation.addedNodes.forEach(markWatchShareButtons);
+        if (mutation.addedNodes) {
+          mutation.addedNodes.forEach(markWatchShareButtons);
+          if (homeFeedSettings.showWatchDislikes && mutation.addedNodes.length) {
+            scheduleRydCounter();
+          }
+        }
       });
     });
     watchPageObserver.observe(observerRoot, { childList: true, subtree: true });
@@ -464,7 +937,14 @@
       "tubenext-hide-watch-branding",
       watch && homeFeedSettings.hideWatchBranding
     );
-    updateWatchPageObserver(watch && HIDE_WATCH_SHARE_BUTTON);
+    updateWatchPageObserver(
+      watch && (HIDE_WATCH_SHARE_BUTTON || homeFeedSettings.showWatchDislikes)
+    );
+    if (watch && homeFeedSettings.showWatchDislikes) {
+      scheduleRydCounter();
+    } else {
+      resetRydPageState();
+    }
   }
 
   function scheduleWatchPageTweaks() {
@@ -550,8 +1030,10 @@
           showShorts: message.showShorts !== false,
           showCommunityPosts: message.showCommunityPosts !== false,
           showWatchHistory: message.showWatchHistory !== false,
-          hideWatchBranding: message.hideWatchBranding === true
+          hideWatchBranding: message.hideWatchBranding === true,
+          showWatchDislikes: message.showWatchDislikes === true
         };
+        updateRydFeatureState();
         updateHomeFeedObserver();
         scheduleHomeFeedFilters();
         scheduleWatchPageTweaksBurst();
@@ -2442,6 +2924,8 @@
   document.addEventListener("pointercancel", handleLinkPointerCancel, true);
   document.addEventListener("tap", handleSuppressedLinkActivation, true);
   document.addEventListener("click", handleSuppressedLinkActivation, true);
+  document.addEventListener("tap", handleRydVoteActivation, true);
+  document.addEventListener("click", handleRydVoteActivation, true);
   document.addEventListener("touchmove", handleLandscapePlayerTouchMove, true);
   document.addEventListener("touchend", handleLandscapePlayerTouchEnd, true);
   document.addEventListener("touchcancel", handleLandscapePlayerTouchCancel, true);

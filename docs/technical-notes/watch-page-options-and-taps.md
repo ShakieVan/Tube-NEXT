@@ -1,7 +1,7 @@
 # Watch-Seiten-Optionen und Fullscreen-Taps
 
-Stand: am 02.08.2026 gegen `master`, `v1.2.0` und den zugehoerigen
-Projekt-Task geprueft
+Stand: am 09.08.2026 gegen den aktuellen Arbeitsstand geprueft; Aussagen zu
+`v1.2.0` bleiben als historische Abgrenzung erhalten
 
 Diese Notiz ergaenzt die verbindliche Entscheidung
 [`desktop-watch-mobile-layout.md`](../decisions/desktop-watch-mobile-layout.md).
@@ -38,7 +38,7 @@ Ausserhalb einer Watch-Seite oder bei deaktivierter Option ist die Root-Klasse
 nicht aktiv. Die Anpassung betrifft weder den normalen Einstellungsdialog des
 Players noch Audio-Kanal-Auswahl, Kommentare oder allgemeine Links.
 
-## Nicht veroeffentlicht: Dislike-Anzeige
+## Historischer Dislike-Prototyp und heutige Option
 
 Im historischen Task wurde zunaechst eine optionale Dislike-Anzeige
 prototypisch umgesetzt. Da YouTube keine oeffentliche aktuelle Dislike-Zahl
@@ -54,10 +54,12 @@ wurden deshalb wieder entfernt:
 - der Drittanbieter-Netzwerkabruf,
 - Cache-, DOM- und CSS-Code fuer die Anzeige.
 
-Der heutige Stand sendet keine Video-ID an diesen Dienst und verspricht keine
-Dislike-Anzeige. Eine spaetere Wiederaufnahme waere eine neue
-Produktentscheidung mit eigener Datenschutz-, Zuverlaessigkeits- und
-DOM-Pruefung; sie ist kein unvollstaendiger Teil der aktuellen Funktion.
+Diese Entfernung bleibt fuer `v1.2.0` historisch richtig. Fuer `v1.4.5` wurde
+die Funktion mit ausdruecklicher
+Einwilligung, stabilerer Renderer-Erkennung, Stimmenrueckmeldung und
+konservativen lokalen Abfragelimits neu umgesetzt. Der kanonische heutige
+Vertrag steht in
+[`return-youtube-dislike-integration.md`](return-youtube-dislike-integration.md).
 
 ## Overlay-gekoppelte Fullscreen-Taps
 
@@ -203,5 +205,15 @@ kein dauerhafter eigener `MutationObserver` erforderlich.
 9. Player-Steuerung, Zahnrad-Menue und Audio-Kanal-Auswahl bedienen.
 10. Long-Press/Cue und Pinch-to-Zoom im Landscape-Modus pruefen.
 11. Das technische YouTube-Kontextmenue darf beim Zoom nicht erscheinen.
-12. Es darf weder eine Dislike-Option noch eine Anfrage an eine
-    Dislike-Drittanbieter-API geben.
+12. `Geschätzte Dislikes anzeigen (Return YouTube Dislike)` muss
+    standardmaessig aus sein; ohne Aktivierung darf kein RYD-Abruf erfolgen.
+13. Beim ersten Aktivieren den Datenschutzhinweis einmal abbrechen und einmal
+    bestaetigen. Nur die Bestaetigung darf die Funktion einschalten.
+14. Mit aktiver Option auf mindestens zwei Watch-Seiten samt SPA-Wechsel die
+    jeweils passende Zahl im vorhandenen Dislike-Segment pruefen.
+15. Option ohne Reload deaktivieren; YouTubes urspruenglicher Button muss
+    wiederhergestellt werden.
+16. Cache-, 429- und Abbruchverhalten nach
+    [`return-youtube-dislike-integration.md`](return-youtube-dislike-integration.md)
+    automatisiert pruefen. Stimmen nur auf eigenen oder ausdruecklichen
+    Testvideos abnehmen.

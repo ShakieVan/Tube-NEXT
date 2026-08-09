@@ -1018,6 +1018,7 @@ class MainActivity : AppCompatActivity() {
                 false
             )
         )
+        container.addView(watchDislikesCheckBox())
         if (BuildConfig.PROGRESS_DIAGNOSTICS_ENABLED) {
             addProgressDiagnosticSettings(container)
         }
@@ -1153,6 +1154,50 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun watchDislikesCheckBox(): CheckBox {
+        return CheckBox(this).apply {
+            text = getString(R.string.watch_page_show_dislikes)
+            isChecked = preferences.getBoolean(KEY_SHOW_WATCH_DISLIKES, false)
+            setOnCheckedChangeListener { button, checked ->
+                if (!checked) {
+                    setHomeFeedPreference(KEY_SHOW_WATCH_DISLIKES, false)
+                    return@setOnCheckedChangeListener
+                }
+                val consentVersion = preferences.getInt(KEY_RYD_CONSENT_VERSION, 0)
+                if (consentVersion >= RYD_CONSENT_VERSION) {
+                    setHomeFeedPreference(KEY_SHOW_WATCH_DISLIKES, true)
+                    return@setOnCheckedChangeListener
+                }
+                showRydConsentDialog(
+                    onAccepted = {
+                        preferences.edit()
+                            .putInt(KEY_RYD_CONSENT_VERSION, RYD_CONSENT_VERSION)
+                            .putBoolean(KEY_SHOW_WATCH_DISLIKES, true)
+                            .apply()
+                        applyHomeFeedSettingsToTabs()
+                    },
+                    onDeclined = {
+                        button.isChecked = false
+                    }
+                )
+            }
+        }
+    }
+
+    private fun showRydConsentDialog(onAccepted: () -> Unit, onDeclined: () -> Unit) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.ryd_consent_title)
+            .setMessage(R.string.ryd_consent_message)
+            .setPositiveButton(R.string.ryd_consent_accept) { _, _ -> onAccepted() }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> onDeclined() }
+            .setNeutralButton(R.string.ryd_consent_more) { _, _ ->
+                onDeclined()
+                openExternalUrl(Uri.parse(RYD_PRIVACY_URL))
+            }
+            .setOnCancelListener { onDeclined() }
+            .show()
+    }
+
     private fun updateStatusTextView(): TextView {
         val permissionStatus = if (UpdateInstallHelper.canRequestPackageInstalls(this)) {
             getString(R.string.settings_install_permission_active)
@@ -1215,7 +1260,8 @@ class MainActivity : AppCompatActivity() {
             showShorts = preferences.getBoolean(KEY_SHOW_SHORTS, true),
             showCommunityPosts = preferences.getBoolean(KEY_SHOW_COMMUNITY_POSTS, true),
             showWatchHistory = preferences.getBoolean(KEY_SHOW_WATCH_HISTORY, true),
-            hideWatchBranding = preferences.getBoolean(KEY_HIDE_WATCH_BRANDING, false)
+            hideWatchBranding = preferences.getBoolean(KEY_HIDE_WATCH_BRANDING, false),
+            showWatchDislikes = preferences.getBoolean(KEY_SHOW_WATCH_DISLIKES, false)
         )
     }
 
@@ -3262,6 +3308,10 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_SHOW_COMMUNITY_POSTS = "home_feed_show_community_posts"
         private const val KEY_SHOW_WATCH_HISTORY = "home_feed_show_watch_history"
         private const val KEY_HIDE_WATCH_BRANDING = "watch_page_hide_branding"
+        private const val KEY_SHOW_WATCH_DISLIKES = "watch_page_show_dislikes"
+        private const val KEY_RYD_CONSENT_VERSION = "ryd_consent_version"
+        private const val RYD_CONSENT_VERSION = 1
+        private const val RYD_PRIVACY_URL = "https://returnyoutubedislike.com"
         private const val KEY_YOUTUBE_LINK_ONBOARDING_DISABLED =
             "youtube_link_onboarding_disabled"
         private const val KEY_YOUTUBE_LINK_ONBOARDING_LAST_PROMPT_AT =

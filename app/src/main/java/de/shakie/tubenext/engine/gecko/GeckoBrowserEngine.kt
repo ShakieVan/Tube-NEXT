@@ -568,6 +568,7 @@ class GeckoBrowserEngine(
                 .put("showCommunityPosts", settings.showCommunityPosts)
                 .put("showWatchHistory", settings.showWatchHistory)
                 .put("hideWatchBranding", settings.hideWatchBranding)
+                .put("showWatchDislikes", settings.showWatchDislikes)
         )
     }
 

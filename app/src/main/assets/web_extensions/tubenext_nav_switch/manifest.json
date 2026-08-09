@@ -1,21 +1,28 @@
 {
   "manifest_version": 2,
   "name": "Tube NEXT Nav Switch",
-  "version": "1.30",
+  "version": "1.31",
   "description": "Handles YouTube mode changes, watch-page tweaks, and link actions for Tube NEXT.",
   "applications": {
     "gecko": {
       "id": "tubenext-nav-switch@shakie.de"
     }
   },
+  "background": {
+    "scripts": [
+      "ryd-background.js"
+    ]
+  },
   "permissions": [
     "nativeMessaging",
     "nativeMessagingFromContent",
     "geckoViewAddons",
+    "storage",
     "*://youtube.com/*",
     "*://www.youtube.com/*",
     "*://m.youtube.com/*",
-    "*://youtu.be/*"
+    "*://youtu.be/*",
+    "https://returnyoutubedislikeapi.com/*"
   ],
   "content_scripts": [
     {

@@ -40,6 +40,11 @@
     <string name="home_feed_show_history">Zuletzt gesehen</string>
     <string name="watch_page_menu_title">Watch-Seite:</string>
     <string name="watch_page_hide_branding">Kanal-Branding ausblenden</string>
+    <string name="watch_page_show_dislikes">Geschätzte Dislikes anzeigen (Return YouTube Dislike)</string>
+    <string name="ryd_consent_title">Datenschutzhinweis</string>
+    <string name="ryd_consent_message">Für diese Funktion kontaktiert Tube NEXT den Dienst „Return YouTube Dislike“. Dabei werden die ID angesehener Videos sowie technisch bedingt deine IP-Adresse und der Zeitpunkt des Abrufs übertragen. Wenn du ein Video likest oder dislikest, werden außerdem deine Auswahl und eine zufällig erzeugte, dauerhafte RYD-ID übermittelt. Der Dienst könnte diese Daten zu einem Nutzungs- oder Interessenprofil zusammenführen. Die angezeigten Dislike-Zahlen sind Schätzungen von Return YouTube Dislike und keine offiziellen YouTube-Werte.</string>
+    <string name="ryd_consent_accept">Zustimmen und aktivieren</string>
+    <string name="ryd_consent_more">Mehr erfahren</string>
     <string name="settings_title">Einstellungen</string>
     <string name="settings_section_home_feed">Startseite</string>
     <string name="settings_section_watch_page">Watch-Seite</string>

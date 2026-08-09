@@ -102,6 +102,8 @@ Wenn Wiedergabe pausiert oder beendet wird:
 - wird AudioFocus freigegeben,
 - entfernt der Service die Foreground-Benachrichtigung,
 - beendet sich `BackgroundAudioService`,
+- bleibt die leichte native MediaSession-Bruecke erhalten, solange Gecko fuer
+  den Tab Mediensteuerung anbietet,
 - bleibt die Gecko-Seite als inaktiver Tab im Speicher, solange kein
   Speicherdruck sie spaeter hiberniert.
 

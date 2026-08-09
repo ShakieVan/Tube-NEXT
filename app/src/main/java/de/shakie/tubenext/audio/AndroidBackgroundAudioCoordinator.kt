@@ -7,8 +7,12 @@ import android.graphics.Paint
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.media.MediaMetadata
+import android.media.session.MediaSession
+import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import de.shakie.tubenext.BuildConfig
 import de.shakie.tubenext.engine.EngineMediaControls
@@ -18,13 +22,36 @@ class AndroidBackgroundAudioCoordinator(
     private val context: Context
 ) : BackgroundAudioCoordinator, BackgroundAudioService.Controller {
     private val audioManager = context.getSystemService(AudioManager::class.java)
+    private val mediaAudioAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_MEDIA)
+        .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
+        .build()
+    private val mediaSession = MediaSession(context, MEDIA_SESSION_TAG).apply {
+        setCallback(object : MediaSession.Callback() {
+            override fun onPlay() = this@AndroidBackgroundAudioCoordinator.play()
+
+            override fun onPause() = this@AndroidBackgroundAudioCoordinator.pause()
+
+            override fun onStop() = this@AndroidBackgroundAudioCoordinator.stop()
+
+            override fun onFastForward() = this@AndroidBackgroundAudioCoordinator.seekForward()
+
+            override fun onRewind() = this@AndroidBackgroundAudioCoordinator.seekBackward()
+
+            override fun onSkipToNext() {
+                controls?.nextTrack()
+            }
+
+            override fun onSkipToPrevious() {
+                controls?.previousTrack()
+            }
+        })
+        setPlaybackToLocal(mediaAudioAttributes)
+        setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS)
+        isActive = false
+    }
     private val audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-        .setAudioAttributes(
-            AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
-                .build()
-        )
+        .setAudioAttributes(mediaAudioAttributes)
         .setAcceptsDelayedFocusGain(false)
         .setWillPauseWhenDucked(true)
         .setOnAudioFocusChangeListener(::onAudioFocusChanged, Handler(Looper.getMainLooper()))
@@ -40,6 +67,8 @@ class AndroidBackgroundAudioCoordinator(
     private var artworkVersion = 0
     private var controlsGeneration = 0
     private var lastNotification: NotificationSnapshot? = null
+    private var lastMediaMetadata: MediaMetadataSnapshot? = null
+    private var isShutdown = false
     private val handler = Handler(Looper.getMainLooper())
     private val foregroundServiceStopRunnable = Runnable {
         if (!appInBackground) {
@@ -48,6 +77,7 @@ class AndroidBackgroundAudioCoordinator(
     }
 
     override fun onMediaControlsChanged(tabId: String, controls: EngineMediaControls?) {
+        if (isShutdown) return
         if (controls == null && controlsTabId != tabId) {
             debugLog("ignore controls=false tab=$tabId active=$controlsTabId")
             return
@@ -56,6 +86,7 @@ class AndroidBackgroundAudioCoordinator(
         controlsTabId = if (controls == null) null else tabId
         controlsGeneration += 1
         val generation = controlsGeneration
+        mediaSession.isActive = MediaSessionLifecyclePolicy.shouldExposeSession(controls != null)
         BackgroundAudioService.controller = if (controls == null) null else this
         debugLog("controls=${controls != null} tab=$tabId")
         if (controls == null) {
@@ -77,24 +108,31 @@ class AndroidBackgroundAudioCoordinator(
                 ?.takeIf { lastStateTabId == tabId && it.isPlaying }
                 ?.let(::showNotification)
         }
+        if (controls != null && lastStateTabId == tabId) {
+            lastState?.let(::updateMediaSession)
+        }
     }
 
     fun setArtwork(bitmap: Bitmap?) {
+        if (isShutdown) return
         artwork = bitmap?.let(::createSoftArtwork)
         artworkVersion += 1
         debugLog("artwork=${artwork != null} source=${bitmap?.width ?: 0}x${bitmap?.height ?: 0}")
+        lastState?.let { updateMediaSession(it, forceMetadata = true) }
         if (appInBackground) {
             lastState?.takeIf { it.isPlaying }?.let { showNotification(it, force = true) }
         }
     }
 
     override fun onForegroundPlaybackState(tabId: String, state: EnginePlaybackState) {
+        if (isShutdown) return
         if (!state.isPlaying && lastStateTabId != null && lastStateTabId != tabId) {
             debugLog("ignore paused state tab=$tabId active=$lastStateTabId")
             return
         }
         lastState = state
         lastStateTabId = tabId
+        updateMediaSession(state)
         if (state.isPlaying && controls != null && !requestAudioFocus()) {
             pauseForAudioFocus("request denied")
             return
@@ -102,7 +140,12 @@ class AndroidBackgroundAudioCoordinator(
         if (!state.isPlaying) {
             abandonAudioFocus()
         }
-        if (appInBackground && controls != null && controlsTabId == tabId) {
+        if (MediaSessionLifecyclePolicy.shouldShowBackgroundPlayer(
+                appInBackground = appInBackground,
+                isPlaying = state.isPlaying,
+                controlsMatchPlayback = controls != null && controlsTabId == tabId
+            )
+        ) {
             showNotification(state)
         }
     }
@@ -126,15 +169,22 @@ class AndroidBackgroundAudioCoordinator(
     }
 
     override fun onAppBackgrounded() {
+        if (isShutdown) return
         appInBackground = true
         handler.removeCallbacks(foregroundServiceStopRunnable)
         debugLog("app backgrounded playing=${lastState?.isPlaying} tab=$lastStateTabId controlsTab=$controlsTabId")
-        if (controls != null && controlsTabId == lastStateTabId) {
+        if (MediaSessionLifecyclePolicy.shouldShowBackgroundPlayer(
+                appInBackground = appInBackground,
+                isPlaying = lastState?.isPlaying == true,
+                controlsMatchPlayback = controls != null && controlsTabId == lastStateTabId
+            )
+        ) {
             lastState?.takeIf { it.isPlaying }?.let { showNotification(it, force = true) }
         }
     }
 
     override fun onAppForegrounded() {
+        if (isShutdown) return
         appInBackground = false
         lastNotification = null
         debugLog("app foregrounded")
@@ -142,11 +192,14 @@ class AndroidBackgroundAudioCoordinator(
     }
 
     override fun shutdown() {
+        if (isShutdown) return
+        isShutdown = true
         BackgroundAudioService.controller = null
         handler.removeCallbacksAndMessages(null)
         abandonAudioFocus()
         clearPlaybackState(stopService = false)
         BackgroundAudioService.stop(context)
+        mediaSession.release()
     }
 
     override fun play() {
@@ -169,6 +222,12 @@ class AndroidBackgroundAudioCoordinator(
         }
         controls?.pause()
         lastState = lastState?.copy(isPlaying = false)
+        lastState?.let { state ->
+            updateMediaSession(state)
+            if (appInBackground && controls != null) {
+                showNotification(state, force = true)
+            }
+        }
         abandonAudioFocus()
     }
 
@@ -199,10 +258,55 @@ class AndroidBackgroundAudioCoordinator(
             context,
             BackgroundAudioService.NotificationState(
                 title = snapshot.title,
-                text = snapshot.text,
+                text = state.artist.ifBlank { snapshot.text },
                 isPlaying = snapshot.isPlaying,
-                artwork = artwork
+                artwork = artwork,
+                sessionToken = mediaSession.sessionToken
             )
+        )
+    }
+
+    private fun updateMediaSession(state: EnginePlaybackState, forceMetadata: Boolean = false) {
+        val metadataSnapshot = MediaMetadataSnapshot(
+            title = state.title,
+            artist = state.artist,
+            durationMs = state.durationMs,
+            artworkVersion = artworkVersion
+        )
+        if (forceMetadata || metadataSnapshot != lastMediaMetadata) {
+            lastMediaMetadata = metadataSnapshot
+            val metadata = MediaMetadata.Builder()
+                .putString(MediaMetadata.METADATA_KEY_TITLE, state.title)
+                .putString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE, state.title)
+                .putString(MediaMetadata.METADATA_KEY_ARTIST, state.artist)
+                .putString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE, state.artist)
+                .apply {
+                    state.durationMs?.let { putLong(MediaMetadata.METADATA_KEY_DURATION, it) }
+                    artwork?.let { bitmap ->
+                        putBitmap(MediaMetadata.METADATA_KEY_ART, bitmap)
+                        putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, bitmap)
+                        putBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON, bitmap)
+                    }
+                }
+                .build()
+            mediaSession.setMetadata(metadata)
+        }
+
+        val playbackState = if (state.isPlaying) {
+            PlaybackState.STATE_PLAYING
+        } else {
+            PlaybackState.STATE_PAUSED
+        }
+        mediaSession.setPlaybackState(
+            PlaybackState.Builder()
+                .setActions(MEDIA_SESSION_ACTIONS)
+                .setState(
+                    playbackState,
+                    state.positionMs.coerceAtLeast(0L),
+                    if (state.isPlaying) 1f else 0f,
+                    SystemClock.elapsedRealtime()
+                )
+                .build()
         )
     }
 
@@ -241,6 +345,7 @@ class AndroidBackgroundAudioCoordinator(
         controls?.pause()
         lastState = lastState?.copy(isPlaying = false)
         lastState?.let { state ->
+            updateMediaSession(state)
             if (appInBackground && controls != null) {
                 showNotification(state, force = true)
             }
@@ -253,7 +358,16 @@ class AndroidBackgroundAudioCoordinator(
         lastState = null
         lastStateTabId = null
         lastNotification = null
+        lastMediaMetadata = null
         foregroundRecoveryPending = false
+        mediaSession.setPlaybackState(
+            PlaybackState.Builder()
+                .setActions(MEDIA_SESSION_ACTIONS)
+                .setState(PlaybackState.STATE_NONE, 0L, 0f)
+                .build()
+        )
+        mediaSession.setMetadata(null)
+        mediaSession.isActive = false
         BackgroundAudioService.controller = null
         abandonAudioFocus()
         if (stopService) {
@@ -280,8 +394,18 @@ class AndroidBackgroundAudioCoordinator(
     }
 
     private companion object {
+        private const val MEDIA_SESSION_TAG = "Tube NEXT"
         private const val CONTROLS_LOST_GRACE_MS = 5_000L
         private const val FOREGROUND_SERVICE_STOP_DELAY_MS = 750L
+        private const val MEDIA_SESSION_ACTIONS =
+            PlaybackState.ACTION_PLAY or
+                PlaybackState.ACTION_PAUSE or
+                PlaybackState.ACTION_PLAY_PAUSE or
+                PlaybackState.ACTION_STOP or
+                PlaybackState.ACTION_FAST_FORWARD or
+                PlaybackState.ACTION_REWIND or
+                PlaybackState.ACTION_SKIP_TO_NEXT or
+                PlaybackState.ACTION_SKIP_TO_PREVIOUS
 
         fun debugLog(message: String) {
             if (BuildConfig.DEBUG) {
@@ -294,6 +418,13 @@ class AndroidBackgroundAudioCoordinator(
         val title: String,
         val text: String,
         val isPlaying: Boolean,
+        val artworkVersion: Int
+    )
+
+    private data class MediaMetadataSnapshot(
+        val title: String,
+        val artist: String,
+        val durationMs: Long?,
         val artworkVersion: Int
     )
 }

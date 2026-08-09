@@ -1,6 +1,6 @@
 # GitHub-Release und Diagnose-Deployment
 
-Stand: am 08.08.2026 fuer `v1.4.4` aktualisiert und gegen den mit `v1.4.3`
+Stand: am 09.08.2026 fuer `v1.4.6` aktualisiert und gegen den mit `v1.4.3`
 praktisch durchgefuehrten Ablauf geprueft
 
 Diese Notiz ist der verbindliche Arbeitsablauf fuer einen neuen stabilen

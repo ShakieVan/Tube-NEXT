@@ -114,6 +114,14 @@ class GeckoBrowserEngine(
             override fun seekBackward() {
                 activeMediaSession?.seekBackward()
             }
+
+            override fun nextTrack() {
+                activeMediaSession?.nextTrack()
+            }
+
+            override fun previousTrack() {
+                activeMediaSession?.previousTrack()
+            }
         }
         fun emitPlaybackState() {
             callbacks.onPlaybackStateChanged(
@@ -121,6 +129,7 @@ class GeckoBrowserEngine(
                 EnginePlaybackState(
                     url = retainedTab.currentUrl,
                     title = mediaTitle.ifBlank { title.ifBlank { retainedTab.currentUrl } },
+                    artist = mediaArtist,
                     isPlaying = mediaPlaying,
                     positionMs = mediaPositionMs,
                     durationMs = mediaDurationMs,

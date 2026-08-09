@@ -40,6 +40,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.content.getSystemService
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.FileProvider
@@ -54,6 +55,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
 import de.shakie.tubenext.audio.AndroidBackgroundAudioCoordinator
+import de.shakie.tubenext.audio.BackgroundAudioCoordinatorViewModel
 import de.shakie.tubenext.browser.LinkInterceptor
 import de.shakie.tubenext.browser.LinkInteractionPolicy
 import de.shakie.tubenext.browser.LinkMenuAction
@@ -94,6 +96,7 @@ import java.io.File
 import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
+    private val backgroundAudioCoordinatorViewModel by viewModels<BackgroundAudioCoordinatorViewModel>()
     private lateinit var toolbar: MaterialToolbar
     private lateinit var tabLayout: TabLayout
     private lateinit var urlTextView: TextView
@@ -169,7 +172,7 @@ class MainActivity : AppCompatActivity() {
         )
         tabManager = TabManager(TabPersistence(this))
         tabPreviewStore = TabPreviewStore(this)
-        backgroundAudioCoordinator = AndroidBackgroundAudioCoordinator(applicationContext)
+        backgroundAudioCoordinator = backgroundAudioCoordinatorViewModel.coordinator
         preferences = getSharedPreferences(PREFERENCES_NAME, MODE_PRIVATE)
         updatePreferences = UpdatePreferences(this)
         progressLayoutDiagnosticExporter = ProgressLayoutDiagnosticExporter(this)
@@ -281,7 +284,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         activeTabOverviewAdapter = null
         updateDownloadHandle?.cancel()
         val keepBrowserSessions = isChangingConfigurations
@@ -303,6 +305,7 @@ class MainActivity : AppCompatActivity() {
         }
         tabPreviewArtworkExecutor.shutdownNow()
         progressDiagnosticScreenshotExecutor.shutdownNow()
+        super.onDestroy()
     }
 
     private fun setupToolbar() {

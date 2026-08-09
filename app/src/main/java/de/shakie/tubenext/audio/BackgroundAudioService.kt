@@ -10,22 +10,17 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Bitmap
-import android.media.AudioAttributes
 import android.media.AudioManager
-import android.media.MediaMetadata
 import android.media.session.MediaSession
-import android.media.session.PlaybackState
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
-import android.view.KeyEvent
 import de.shakie.tubenext.BuildConfig
 import de.shakie.tubenext.MainActivity
 import de.shakie.tubenext.R
 
 class BackgroundAudioService : Service() {
-    private lateinit var mediaSession: MediaSession
     private var wakeLock: PowerManager.WakeLock? = null
     private var noisyReceiverRegistered = false
     private val noisyReceiver = object : BroadcastReceiver() {
@@ -41,53 +36,6 @@ class BackgroundAudioService : Service() {
         super.onCreate()
         isRunning = true
         ensureChannel()
-        mediaSession = MediaSession(this, MEDIA_SESSION_TAG).apply {
-            setCallback(object : MediaSession.Callback() {
-                override fun onPlay() {
-                    BackgroundAudioService.controller?.play()
-                }
-
-                override fun onPause() {
-                    BackgroundAudioService.controller?.pause()
-                }
-
-                override fun onStop() {
-                    BackgroundAudioService.controller?.stop()
-                    stopSelf()
-                }
-
-                override fun onFastForward() {
-                    BackgroundAudioService.controller?.seekForward()
-                }
-
-                override fun onRewind() {
-                    BackgroundAudioService.controller?.seekBackward()
-                }
-
-                override fun onMediaButtonEvent(mediaButtonIntent: Intent): Boolean {
-                    val event = mediaButtonIntent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
-                    if (event?.action != KeyEvent.ACTION_UP) return true
-                    when (event.keyCode) {
-                        KeyEvent.KEYCODE_MEDIA_PLAY -> BackgroundAudioService.controller?.play()
-                        KeyEvent.KEYCODE_MEDIA_PAUSE,
-                        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> BackgroundAudioService.controller?.pause()
-                        KeyEvent.KEYCODE_MEDIA_STOP -> BackgroundAudioService.controller?.stop()
-                        KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> BackgroundAudioService.controller?.seekForward()
-                        KeyEvent.KEYCODE_MEDIA_REWIND -> BackgroundAudioService.controller?.seekBackward()
-                        else -> return super.onMediaButtonEvent(mediaButtonIntent)
-                    }
-                    return true
-                }
-            })
-            setPlaybackToLocal(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
-                    .build()
-            )
-            setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS)
-            isActive = true
-        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -118,8 +66,6 @@ class BackgroundAudioService : Service() {
         )
         updateWakeLock(state.isPlaying)
         updateNoisyReceiver(state.isPlaying)
-        mediaSession.setMetadata(buildMetadata(state))
-        mediaSession.setPlaybackState(buildPlaybackState(state.isPlaying))
         debugLog("service foreground playing=${state.isPlaying} artwork=${state.artwork != null} title=${state.title}")
         startForeground(NOTIFICATION_ID, buildNotification(state))
         foregroundStartPending = false
@@ -135,7 +81,9 @@ class BackgroundAudioService : Service() {
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
-        return if (state.isPlaying) START_STICKY else START_NOT_STICKY
+        // Restarting this service without its Gecko controller would create an
+        // orphan notification that cannot control playback.
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
@@ -144,7 +92,6 @@ class BackgroundAudioService : Service() {
         stopAfterForegroundStart = false
         updateWakeLock(false)
         updateNoisyReceiver(false)
-        mediaSession.release()
         super.onDestroy()
     }
 
@@ -179,6 +126,10 @@ class BackgroundAudioService : Service() {
             serviceIntent(ACTION_STOP, 3)
         ).build()
 
+        val mediaStyle = Notification.MediaStyle()
+            .setShowActionsInCompactView(0)
+        state.sessionToken?.let(mediaStyle::setMediaSession)
+
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setLargeIcon(state.artwork)
@@ -190,11 +141,7 @@ class BackgroundAudioService : Service() {
             .setShowWhen(false)
             .addAction(playPauseAction)
             .addAction(stopAction)
-            .setStyle(
-                Notification.MediaStyle()
-                    .setMediaSession(mediaSession.sessionToken)
-                    .setShowActionsInCompactView(0)
-            )
+            .setStyle(mediaStyle)
             .build()
     }
 
@@ -206,37 +153,6 @@ class BackgroundAudioService : Service() {
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-    }
-
-    private fun buildPlaybackState(isPlaying: Boolean): PlaybackState {
-        val state = if (isPlaying) {
-            PlaybackState.STATE_PLAYING
-        } else {
-            PlaybackState.STATE_PAUSED
-        }
-        return PlaybackState.Builder()
-            .setActions(
-                PlaybackState.ACTION_PLAY or
-                    PlaybackState.ACTION_PAUSE or
-                    PlaybackState.ACTION_PLAY_PAUSE or
-                    PlaybackState.ACTION_STOP or
-                    PlaybackState.ACTION_FAST_FORWARD or
-                    PlaybackState.ACTION_REWIND
-            )
-            .setState(state, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f)
-            .build()
-    }
-
-    private fun buildMetadata(state: NotificationState): MediaMetadata {
-        val builder = MediaMetadata.Builder()
-            .putString(MediaMetadata.METADATA_KEY_TITLE, state.title)
-            .putString(MediaMetadata.METADATA_KEY_ARTIST, state.text)
-        state.artwork?.let { artwork ->
-            builder.putBitmap(MediaMetadata.METADATA_KEY_ART, artwork)
-            builder.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, artwork)
-            builder.putBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON, artwork)
-        }
-        return builder.build()
     }
 
     private fun ensureChannel() {
@@ -281,7 +197,8 @@ class BackgroundAudioService : Service() {
         val title: String,
         val text: String,
         val isPlaying: Boolean,
-        val artwork: Bitmap? = null
+        val artwork: Bitmap? = null,
+        val sessionToken: MediaSession.Token? = null
     )
 
     interface Controller {
@@ -295,7 +212,6 @@ class BackgroundAudioService : Service() {
 
     companion object {
         private const val CHANNEL_ID = "tubenext_background_audio"
-        private const val MEDIA_SESSION_TAG = "Tube NEXT"
         private const val NOTIFICATION_ID = 42
         private const val ACTION_PLAY = "de.shakie.tubenext.audio.PLAY"
         private const val ACTION_PAUSE = "de.shakie.tubenext.audio.PAUSE"

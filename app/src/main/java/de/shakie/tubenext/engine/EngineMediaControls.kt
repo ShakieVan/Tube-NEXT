@@ -6,4 +6,6 @@ interface EngineMediaControls {
     fun stop()
     fun seekForward()
     fun seekBackward()
+    fun nextTrack()
+    fun previousTrack()
 }

@@ -3,6 +3,7 @@ package de.shakie.tubenext.engine
 data class EnginePlaybackState(
     val url: String,
     val title: String,
+    val artist: String,
     val isPlaying: Boolean,
     val positionMs: Long,
     val durationMs: Long?,

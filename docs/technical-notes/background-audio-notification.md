@@ -1,17 +1,36 @@
 # Hintergrund-Audio und Player-Benachrichtigung
 
-Stand: am 25.07.2026 gegen `master`, `v1.2.1` und den zugehoerigen
-Projekt-Task geprueft
+Stand: am 09.08.2026 gegen `master`, den Bluetooth-/MediaSession-Befund auf
+dem bekannten Testtelefon und den aktuellen Android-Vertrag geprueft
 
 ## Zweck
 
 Tube NEXT laesst die YouTube-Wiedergabe in einem Gecko-Tab weiterlaufen, wenn
-die App in den Hintergrund wechselt. Fuer diesen Zeitraum stellt ein
-Foreground-Service eine Android-Medienbenachrichtigung und eine `MediaSession`
-bereit.
+die App in den Hintergrund wechselt. Eine pro Activity-Aufgabe gehaltene
+Android-`MediaSession` spiegelt die Gecko-Mediensteuerung fuer System und
+externe Geraete. Nur waehrend aktiver Hintergrundwiedergabe stellt ein
+Foreground-Service die Android-Medienbenachrichtigung bereit.
 
 Die Benachrichtigung ist kein eigenstaendiger Player. Sie spiegelt immer den
 Zustand und die Steuerung des zugehoerigen Gecko-Tabs.
+
+## MediaSession und Foreground-Service sind getrennt
+
+Die native `MediaSession` gehoert zum `AndroidBackgroundAudioCoordinator` und
+bleibt aktiv, solange Gecko fuer einen Tab eine aktive Mediensteuerung meldet.
+Das gilt unabhaengig davon, ob Tube NEXT im Vordergrund oder Hintergrund ist,
+die Wiedergabe gerade spielt oder pausiert ist und die MediaStyle-
+Benachrichtigung sichtbar ist.
+
+Der Coordinator wird ueber ein Activity-`ViewModel` gehalten. Dadurch bleibt
+dieselbe native Session bei einem Activity-Neustart erhalten und wird erst bei
+einem echten Ende der Aufgabe freigegeben.
+
+Diese Trennung ist fuer Bluetooth- und Autoradio-Steuerung notwendig. Vor der
+Korrektur wurde die einzige native Session zusammen mit dem
+`BackgroundAudioService` im Vordergrund nach 750 Millisekunden sowie direkt
+nach Pause zerstoert. Android meldete auf dem laufenden Testtelefon deshalb
+bei eingehenden Bluetooth-Play-Befehlen `Media button session is null`.
 
 ## Historischer Fehler
 
@@ -80,22 +99,30 @@ Daraus folgt eine bewusste Produktentscheidung:
 
 - aktive Hintergrundwiedergabe besitzt eine System-Mediensteuerung,
 - eine pausierte Wiedergabe besitzt keine dauerhaft sichtbare
-  Tube-NEXT-Player-Zeile.
+  Tube-NEXT-Player-Zeile,
+- die unsichtbare native MediaSession bleibt dennoch erhalten, solange Gecko
+  den Tab steuern kann; externe Play-Befehle koennen die Wiedergabe deshalb
+  wieder aufnehmen.
 
 ## MediaSession und externe Tasten
 
-`BackgroundAudioService` leitet die Android-Transportbefehle an die
-Gecko-Mediensteuerung des zugeordneten Tabs weiter:
+Die vom Coordinator gehaltene Android-`MediaSession` leitet Transportbefehle
+an die Gecko-Mediensteuerung des zugeordneten Tabs weiter:
 
 - Play,
 - Pause,
 - Stop,
 - Vorlauf,
-- Ruecklauf.
+- Ruecklauf,
+- naechster Titel,
+- vorheriger Titel.
 
-Zusätzlich werden passende direkte Media-Button-Ereignisse verarbeitet. Die
-Session ist als lokale Medienwiedergabe mit `USAGE_MEDIA` und
-`CONTENT_TYPE_MOVIE` deklariert.
+Direkte Media-Button-Ereignisse verwendet der Android-Standardhandler. Dadurch
+wird insbesondere `PLAY_PAUSE` anhand des veroeffentlichten Zustands korrekt
+als Play oder Pause behandelt. Position, Dauer, Titel, Interpret und Artwork
+werden aus der Gecko-MediaSession an Android weitergegeben. Die Session ist
+als lokale Medienwiedergabe mit `USAGE_MEDIA` und `CONTENT_TYPE_MOVIE`
+deklariert.
 
 Ein partieller Wake-Lock und der Empfaenger fuer Audio-Routenwechsel sind nur
 waehrend aktiver Wiedergabe eingeschaltet und werden beim Service-Ende
@@ -148,9 +175,12 @@ keinen solchen Marker.
   Der Marker speichert keine eigene Tab-ID. Das entspricht dem historischen
   Fehlerbild, sollte aber bei kuenftigen Mehrtab-Audio-Aenderungen erneut
   geprueft werden.
-- Eine pausierte Notification absichtlich nicht persistent zu halten bedeutet,
-  dass Androids Player-Uebersicht Tube NEXT nach einer Pause nicht als
-  dauerhaft fortsetzbare Session anbietet.
+- Eine pausierte Notification wird absichtlich nicht persistent gehalten.
+  Ob Android die aktive Session zusaetzlich in seiner Systemoberflaeche zeigt,
+  entscheidet das Betriebssystem.
+- Nach einem echten Prozess- oder Aufgabenende existiert auch die Gecko-Session
+  nicht mehr. Externe Tasten stellen in diesem Fall absichtlich keinen
+  eigenstaendigen Player wieder her.
 
 ## Historie
 
@@ -161,6 +191,11 @@ keinen solchen Marker.
 - direkte MediaSession-/Media-Button-Steuerung,
 - Pause bei `ACTION_AUDIO_BECOMING_NOISY`,
 - Gecko-Reaktivierung nach einer externen Audio-Routen-Unterbrechung.
+
+Am 09.08.2026 wurde die native MediaSession vom kurzlebigen
+Benachrichtigungs-Service getrennt. Anlass war der auf dem Testtelefon
+nachgewiesene Zustand, dass Bluetooth-Befehle ankamen, waehrend Tube NEXT im
+Vordergrund keine Media-Button-Session besass.
 
 ## Regressionstest
 
@@ -177,7 +212,11 @@ keinen solchen Marker.
    weiterlaufen.
 6. Nach diesem Routenwechsel die App oeffnen: Der bestehende YouTube-Tab muss
    ohne Reload bedienbar sein und darf nicht dauerhaft am Ladekringel haengen.
-7. Play, Pause, Stop, Vorlauf und Ruecklauf ueber Bluetooth-/Systemtasten
-   pruefen.
+7. Play, Pause, Play/Pause-Toggle, Stop, Vorlauf, Ruecklauf, Next und Previous
+   ueber Bluetooth-/Systemtasten pruefen; dies muss auch im Vordergrund und
+   nach einer extern ausgeloesten Pause funktionieren.
 8. App mit aktiver und pausierter Wiedergabe beenden: Service, Wake-Lock und
    Notification duerfen nicht verwaist bleiben.
+9. Eine Watch-Seite vor ihrer vorgesehenen Wiedergabebereitschaft oeffnen:
+   Das blosse Erzeugen der nativen MediaSession darf keinen automatischen
+   Videoanlauf ausloesen.

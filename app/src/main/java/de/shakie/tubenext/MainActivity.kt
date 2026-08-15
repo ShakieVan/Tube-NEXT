@@ -196,6 +196,13 @@ class MainActivity : AppCompatActivity() {
         handleIncomingIntent(intent)
     }
 
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        if (::backgroundAudioCoordinator.isInitialized) {
+            backgroundAudioCoordinator.onUserInteraction()
+        }
+    }
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,

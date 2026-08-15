@@ -1,7 +1,7 @@
 # Hintergrund-Audio und Player-Benachrichtigung
 
-Stand: am 09.08.2026 gegen `master`, den Bluetooth-/MediaSession-Befund auf
-dem bekannten Testtelefon und den aktuellen Android-Vertrag geprueft
+Stand: am 15.08.2026 gegen `master` und den aktuellen Android-Audiofokus-
+Vertrag geprueft
 
 ## Zweck
 
@@ -155,9 +155,41 @@ in die App dauerhaft einen Ladekringel zeigte.
 ## Audio-Fokus
 
 Vor dem Start beziehungsweise Fortsetzen fordert der Koordinator Android
-Audio Focus an. Bei verweigertem Fokus oder Fokusverlust wird die Wiedergabe
-pausiert und der interne Zustand auf nicht spielend gesetzt. Bei Pause,
-Tab-Schliessen und Shutdown wird der Fokus wieder aufgegeben.
+Audio Focus an. Duckbare kurze Unterbrechungen wie normale Benachrichtigungstoene
+werden von Android automatisch leiser gemischt; Tube NEXT pausiert Gecko dafuer
+nicht mehr.
+
+Bei einem transienten exklusiven Fokusverlust wird eine zuvor laufende
+Wiedergabe normalerweise pausiert. Ein eingehender, noch nicht angenommener
+Anruf ist davon ausgenommen: Manche Headset-Routen melden bereits beim Klingeln
+`AUDIOFOCUS_LOSS_TRANSIENT`, waehrend der Lautsprecherpfad erst beim Annehmen
+reagiert. Tube NEXT prueft deshalb nach einer kurzen Stabilisierungsfrist den
+Audio-Modus und ignoriert den Fokusverlust in `MODE_RINGTONE`.
+
+Erst der Wechsel in `MODE_IN_CALL`, `MODE_IN_COMMUNICATION` oder einen
+entsprechenden Redirect-Modus pausiert eine laufende Wiedergabe. Dieser
+Moduswechsel wird ab Android 12 direkt ueber einen
+`AudioManager.OnModeChangedListener` beobachtet und macht das Verhalten von der
+Audio-Route unabhaengig. Waehlt der Nutzer waehrend des Gespraechs aktiv Play
+oder startet ein anderes Video, darf die Wiedergabe wieder anlaufen; dieser
+Eingriff hebt zugleich die sonst vorgemerkte automatische Wiederaufnahme auf.
+Ohne solchen Eingriff wird die zuvor laufende Wiedergabe nach dem Gespraech
+automatisch fortgesetzt. War sie vorher pausiert oder loest der Nutzer
+waehrenddessen Pause beziehungsweise Stop aus, erfolgt keine automatische
+Wiederaufnahme. Ein permanenter Fokusverlust ausserhalb eines aktiven
+Gespraechs bleibt pausiert.
+
+Eine bewusst im Tube-NEXT-Vordergrund gestartete Wiedergabe darf auch dann
+laufen, wenn Android Audio Focus wegen eines bereits aktiven Telefon- oder
+VoIP-Gespraechs (`MODE_IN_CALL` beziehungsweise `MODE_IN_COMMUNICATION`)
+verweigert. Als aktive Handlung gilt ein MediaSession-Play-Befehl oder ein
+Gecko-Play-Ereignis innerhalb von zehn Sekunden nach einer Bedienung in der
+App. Diese Ausnahme gilt nicht fuer einen fokuslosen Start im Hintergrund und
+nicht bei normaler Audiokonkurrenz. Eine danach in den Hintergrund wechselnde,
+bereits laufende Wiedergabe bleibt unberuehrt. Android kann bereits vor dem
+Anruf laufende Medien waehrend eines eingehenden Anrufs systemseitig
+stummschalten; Tube NEXT kann diese Plattformgrenze nicht aufheben. Bei Pause,
+Tab-Schliessen und Shutdown wird ein gehaltener Fokus weiterhin aufgegeben.
 
 Der spezielle Gecko-Wiederherstellungsimpuls ist derzeit nur fuer einen
 Audio-Routenwechsel vorgesehen. Ein allgemeiner Audio-Fokusverlust setzt
@@ -220,3 +252,19 @@ Vordergrund keine Media-Button-Session besass.
 9. Eine Watch-Seite vor ihrer vorgesehenen Wiedergabebereitschaft oeffnen:
    Das blosse Erzeugen der nativen MediaSession darf keinen automatischen
    Videoanlauf ausloesen.
+10. Bei einem kurzen Benachrichtigungston: Wiedergabe laeuft geduckt weiter und
+    darf nicht pausiert zurueckbleiben.
+11. Bei laufender Wiedergabe mit internem Lautsprecher und mit verbundenem
+    Headset anrufen: Das Video muss waehrend des blossen Klingelns in beiden
+    Faellen weiterlaufen. Erst beim Annehmen muss es pausieren. Ohne weiteren
+    Eingriff wird es nach dem Anruf nur dann
+    automatisch fortgesetzt, wenn es zuvor lief und nicht bewusst pausiert
+    oder gestoppt wurde.
+12. Waehrend eines aktiven Telefon- oder VoIP-Gespraechs Tube NEXT in den
+    Vordergrund holen und aktiv das pausierte oder ein anderes Video starten:
+    Die Wiedergabe darf trotz verweigertem Audio Focus anlaufen und nach dem
+    Gespraech nicht ein zweites Mal automatisch gestartet werden. Ohne diesen
+    Nutzereingriff bleibt das beim Anruf pausierte Video waehrend des
+    Gespraechs stehen und wird erst nach dessen Ende automatisch fortgesetzt.
+    Dieselbe Ausnahme darf im Hintergrund oder ohne aktives Gespraech nicht
+    greifen.

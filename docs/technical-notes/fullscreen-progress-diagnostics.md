@@ -50,23 +50,25 @@ bleiben mit `flex: 0 0 auto` erhalten. Ein moeglicher Subpixel-Ueberstand bleibt
 damit horizontal und kann das letzte Kapitel nicht mehr in eine zweite Zeile
 verschieben.
 
-## Diagnosevariante
+## Diagnosevariante (Kampagne abgeschlossen)
 
-Der Buildtyp `diagnosticRelease` verwendet dieselbe App-ID und dieselbe
-Produktionssignierung wie der normale Release, traegt aber den sichtbaren
-Versionszusatz `-diagnostic`. Ein regulaeres Update mit hoeherem VersionCode
-kann ihn ohne Datenverlust ersetzen.
+Die Kampagne ist seit dem 15.08.2026 abgeschlossen. Ohne explizite
+Gradle-Eigenschaft existiert der Buildtyp `diagnosticRelease` deshalb nicht;
+regulaere Builds und Releases koennen die Diagnose weder erfassen noch in den
+Einstellungen anzeigen. Vorhandene private Diagnosedaten werden durch diese
+Deaktivierung nicht automatisch geloescht und bleiben bei einem signierten
+Update erhalten.
 
-Solange diese Diagnosekampagne aktiv ist, wird bei jedem regulaeren Release
-aus demselben Stand auch `diagnosticRelease` gebaut. Auf GitHub werden nur die
-normalen Release-APKs veroeffentlicht; anschliessend wird die arm64-Diagnose-APK
-per `adb install -r` auf das bekannte Testtelefon aktualisiert. Versionierung,
-Signaturpruefung, Geraeteauswahl und Schutz der vorhandenen Diagnosedaten sind
-verbindlich in
+Fuer eine neue, konkret begruendete Diagnosekampagne kann der bestehende Pfad
+mit `"-Ptubenext.enableProgressDiagnostics=true"` reaktiviert und an das neue
+Fehlerbild angepasst werden. Erst dann wird `diagnosticRelease` angelegt. Er
+verwendet dieselbe App-ID und Produktionssignierung wie der normale Release,
+traegt aber den sichtbaren Versionszusatz `-diagnostic`. Versionierung,
+Signaturpruefung, Geraeteauswahl und Schutz vorhandener App-Daten sind in
 [`release-and-diagnostic-deployment.md`](release-and-diagnostic-deployment.md)
 dokumentiert.
 
-Nur dieser Buildtyp aktiviert die Fortschrittsdiagnose. Die WebExtension
+Nur der explizit aktivierte Buildtyp schaltet die Fortschrittsdiagnose ein. Die WebExtension
 prueft im Landscape-Watch-Modus in einem Intervall von 2,5 Sekunden:
 
 - ob sichtbare `.ytp-play-progress`-Segmente auf mehreren vertikalen Zeilen

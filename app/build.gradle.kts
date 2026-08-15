@@ -27,6 +27,10 @@ val hasCompleteReleaseSigningProperties = releaseSigningPropertyNames.all { name
 }
 val hasProductionReleaseSigning = hasCompleteReleaseSigningProperties &&
     file(keyProperties.getProperty("storeFile").orEmpty()).isFile
+val progressDiagnosticsEnabled = providers
+    .gradleProperty("tubenext.enableProgressDiagnostics")
+    .map(String::toBoolean)
+    .getOrElse(false)
 
 val verifyProductionReleaseSigning = tasks.register("verifyProductionReleaseSigning") {
     group = "verification"
@@ -50,8 +54,8 @@ android {
         applicationId = "de.shakie.tubenext"
         minSdk = 29
         targetSdk = 35
-        versionCode = 22
-        versionName = "1.4.6"
+        versionCode = 23
+        versionName = "1.4.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appLabel"] = "Tube NEXT"
@@ -110,12 +114,14 @@ android {
             )
         }
 
-        create("diagnosticRelease") {
-            initWith(getByName("release"))
-            versionNameSuffix = "-diagnostic"
-            manifestPlaceholders["appLabel"] = "Tube NEXT Diagnose"
-            buildConfigField("boolean", "PROGRESS_DIAGNOSTICS_ENABLED", "true")
-            matchingFallbacks += listOf("release")
+        if (progressDiagnosticsEnabled) {
+            create("diagnosticRelease") {
+                initWith(getByName("release"))
+                versionNameSuffix = "-diagnostic"
+                manifestPlaceholders["appLabel"] = "Tube NEXT Diagnose"
+                buildConfigField("boolean", "PROGRESS_DIAGNOSTICS_ENABLED", "true")
+                matchingFallbacks += listOf("release")
+            }
         }
 
         create("localRelease") {

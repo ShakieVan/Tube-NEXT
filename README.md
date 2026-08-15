@@ -113,13 +113,16 @@ getrennte App-ID `de.shakie.tubenext.local`:
 .\gradlew.bat :app:assembleLocalRelease --console=plain
 ```
 
-Fuer die zeitlich begrenzte Fullscreen-Fortschrittsdiagnose existiert ausserdem
-`diagnosticRelease`. Diese Variante verwendet absichtlich App-ID und
-Produktionssignatur des regulaeren Releases und darf deshalb nur nach dem
-dokumentierten Diagnose- und Deployment-Ablauf eingesetzt werden:
+Die abgeschlossene Fullscreen-Fortschrittsdiagnose ist standardmaessig
+deaktiviert; der Buildtyp `diagnosticRelease` wird dann gar nicht angelegt.
+Fuer eine neue, ausdruecklich beschlossene Diagnosekampagne kann er gezielt
+reaktiviert werden. Die Variante verwendet App-ID und Produktionssignatur des
+regulaeren Releases und darf deshalb nur nach dem dokumentierten Diagnose- und
+Deployment-Ablauf eingesetzt werden:
 
 ```powershell
-.\gradlew.bat :app:assembleDiagnosticRelease --console=plain
+.\gradlew.bat "-Ptubenext.enableProgressDiagnostics=true" `
+    :app:assembleDiagnosticRelease --console=plain
 ```
 
 Der vollstaendige Ablauf fuer Versionsanhebung, GitHub-Veroeffentlichung und

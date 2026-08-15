@@ -1,26 +1,26 @@
 # GitHub-Release und Diagnose-Deployment
 
-Stand: am 09.08.2026 fuer `v1.4.6` aktualisiert und gegen den mit `v1.4.3`
-praktisch durchgefuehrten Ablauf geprueft
+Stand: am 15.08.2026 nach Abschluss der Fortschrittsdiagnose aktualisiert
 
 Diese Notiz ist der verbindliche Arbeitsablauf fuer einen neuen stabilen
-Tube-NEXT-Release, solange parallel die Fullscreen-Fortschrittsdiagnose auf
-dem bekannten Testtelefon laeuft. Sie verhindert, dass der Zusammenhang nur
-in einem Chat bekannt ist.
+Tube-NEXT-Release und bewahrt den optionalen Diagnose-Deploymentpfad fuer eine
+spaetere, ausdruecklich beschlossene Kampagne.
 
-Die Diagnosekampagne gilt als aktiv, bis diese Notiz ausdruecklich auf
-`abgeschlossen` gesetzt und die weitere Behandlung der gespeicherten Daten
-dokumentiert wurde. Ein Themen- oder Chatwechsel beendet sie nicht.
+Die Fullscreen-Fortschrittsdiagnose ist seit dem 15.08.2026 abgeschlossen und
+standardmaessig deaktiviert. Der Buildtyp `diagnosticRelease` wird ohne
+`"-Ptubenext.enableProgressDiagnostics=true"` nicht angelegt. Vorhandene private
+Diagnosedaten werden weder beim Deaktivieren noch durch ein signiertes Update
+automatisch geloescht; die App zeigt ohne aktive Diagnose aber keine Export-
+oder Loeschfunktionen dafuer an.
 
 ## Zielzustand
 
-Jede neue stabile Version wird in zwei Varianten aus demselben Commit und mit
-demselben `versionCode` gebaut:
+Jede neue stabile Version wird regulaer nur als oeffentliche Release-Variante
+gebaut:
 
 | Ziel | Variante | Versionsname | Verteilung |
 |---|---|---|---|
 | Nutzer | `release` | zum Beispiel `1.4.3` | drei ABI-APKs auf GitHub |
-| Testtelefon | `diagnosticRelease` | zum Beispiel `1.4.3-diagnostic` | nur direkt per ADB |
 
 Der regulaere Release hat
 `BuildConfig.PROGRESS_DIAGNOSTICS_ENABLED=false`. Die Diagnosevariante hat
@@ -29,7 +29,10 @@ aber `PROGRESS_DIAGNOSTICS_ENABLED=true`. Sie ersetzt daher die vorhandene
 Produktions-/Diagnoseinstallation ohne Verlust von Profil, Login, Tabs,
 Einstellungen, Android-Linkzuordnungen oder Diagnoseprotokoll.
 
-Die Diagnose-APK wird nicht als GitHub-Release-Asset veroeffentlicht. Sie ist
+Nur waehrend einer reaktivierten Diagnosekampagne wird zusaetzlich aus
+demselben Commit und mit demselben `versionCode` ein `diagnosticRelease` mit
+dem Suffix `-diagnostic` gebaut. Die Diagnose-APK wird nie als
+GitHub-Release-Asset veroeffentlicht. Sie ist
 eine zeitlich begrenzte, geraetespezifische Untersuchungsfassung und kein
 allgemeines Nutzerangebot.
 
@@ -85,8 +88,7 @@ In `app/build.gradle.kts`:
 1. `versionCode` strikt erhoehen,
 2. `versionName` auf die neue stabile Version ohne Suffix setzen.
 
-`diagnosticRelease` erhaelt den Suffix `-diagnostic` automatisch. Fuer jede
-veroeffentlichte Version wird `docs/releases/vX.Y.Z.md` angelegt oder
+Fuer jede veroeffentlichte Version wird `docs/releases/vX.Y.Z.md` angelegt oder
 aktualisiert. Die Nutzer-Notiz beschreibt nur ausgelieferte Funktionen und
 nennt die ABI-Zuordnung. Interne Diagnosefunktionen duerfen nicht als Funktion
 des regulaeren Releases dargestellt werden; falls relevant, ausdruecklich
@@ -106,7 +108,7 @@ Die Links zeigen direkt auf die versionierten APK-Assets unter
 besonderer Wiederherstellungshinweis wie in `v1.4.4` ist nur bei Bedarf
 noetig; die erklaerten Direktlinks selbst bleiben Bestandteil jedes Releases.
 
-## 3. Beide Varianten aus demselben Stand pruefen und bauen
+## 3. Release aus demselben Stand pruefen und bauen
 
 Mindestens folgende Pruefungen ausfuehren:
 
@@ -115,26 +117,36 @@ $node = "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependenci
 & $node --check app/src/main/assets/web_extensions/tubenext_nav_switch/content.js
 Get-Content -Raw app/src/main/assets/web_extensions/tubenext_nav_switch/manifest.json |
     ConvertFrom-Json | Out-Null
-.\gradlew.bat testDebugUnitTest assembleRelease assembleDiagnosticRelease
+.\gradlew.bat testDebugUnitTest assembleRelease
 git diff --check
 ```
 
-`assembleRelease` und `assembleDiagnosticRelease` muessen wegen ihrer
-Produktionsidentitaet beide an `verifyProductionReleaseSigning` haengen. Ein
+`assembleRelease` muss an `verifyProductionReleaseSigning` haengen. Ein
 Fehlschlag der Signierung darf nicht durch Debug-Signierung oder
-`localRelease` umgangen werden.
+`localRelease` umgangen werden. Waehrend einer reaktivierten Diagnosekampagne
+wird zusaetzlich mit derselben Gradle-Eigenschaft gebaut:
 
-Danach mindestens die arm64-Metadaten beider Varianten mit `aapt dump
-badging` pruefen:
+```powershell
+.\gradlew.bat "-Ptubenext.enableProgressDiagnostics=true" `
+    assembleDiagnosticRelease
+```
+
+Auch `assembleDiagnosticRelease` muss dann an
+`verifyProductionReleaseSigning` haengen.
+
+Danach mindestens die arm64-Metadaten des Release mit `aapt dump badging`
+pruefen:
 
 - Package: `de.shakie.tubenext`
-- gleicher, neuer `versionCode`
 - Release: `versionName=X.Y.Z`
-- Diagnose: `versionName=X.Y.Z-diagnostic`
 
-In den generierten `BuildConfig.java`-Dateien muss die Diagnose beim Release
-`false` und beim Diagnostic Release `true` sein. Alle drei oeffentlichen
-Release-APKs und die zu installierende Diagnose-APK mit
+Bei reaktivierter Diagnose muessen Package und `versionCode` mit dem Release
+uebereinstimmen und der Versionsname `X.Y.Z-diagnostic` lauten.
+
+Im generierten `BuildConfig.java` muss die Diagnose beim Release `false` sein;
+bei reaktivierter Diagnose muss sie im Diagnostic Release `true` sein. Alle
+drei oeffentlichen Release-APKs und gegebenenfalls die zu installierende
+Diagnose-APK mit
 `apksigner verify --print-certs` pruefen. Der SHA-256-Zertifikat-Fingerprint
 muss exakt dem ausserhalb des Repositorys verwahrten Produktionswert und dem
 vorherigen stabilen Release entsprechen. Keystore, Kennwoerter und Inhalt von
@@ -198,7 +210,12 @@ gh release list --repo ShakieVan/Tube-NEXT --limit 5
 - alle vier Assets sind vollstaendig hochgeladen,
 - Groessen und von GitHub gemeldete SHA-256-Digests stimmen lokal ueberein.
 
-## 5. Diagnosevariante auf dem Testtelefon aktualisieren
+## 5. Nur bei reaktivierter Kampagne: Diagnosevariante aktualisieren
+
+Dieser Abschnitt wird im aktuellen, abgeschlossenen Diagnosezustand nicht
+ausgefuehrt. Eine neue Kampagne muss zuvor die Gradle-Eigenschaft explizit
+aktivieren und diese Notiz um ihr konkretes Ziel, ihre Daten und ihre
+Abschlussbedingung ergaenzen.
 
 Erst nach erfolgreichem oeffentlichem Release die aus demselben Commit
 erzeugte arm64-Diagnose-APK installieren. Android-SDK-Pfade portabel
@@ -271,10 +288,12 @@ Vor Abschluss noch einmal pruefen:
 - `master`, `origin/master` und der neue Tag zeigen auf den Release-Commit,
 - GitHub meldet den Release als `Latest`,
 - oeffentliche APKs enthalten keine aktive Fortschrittsdiagnose,
-- das Testtelefon verwendet die gleich versionierte Diagnosefassung,
-- vorhandene Diagnoseereignisse wurden weder geloescht noch zurueckgesetzt.
+- das Testtelefon verwendet die aktuelle regulaere Releasefassung; nur bei
+  reaktivierter Kampagne die gleich versionierte Diagnosefassung,
+- vorhandene Diagnoseereignisse wurden nicht unbeabsichtigt geloescht oder
+  zurueckgesetzt.
 
-In der Abschlussmeldung GitHub-URL, Test-/Signaturstatus, installierte
-Diagnoseversion und Zustand der vier Linkzuordnungen nennen. Falls einer
-dieser Punkte nicht verifiziert werden konnte, ihn ausdruecklich als offen
-ausweisen.
+In der Abschlussmeldung GitHub-URL, Test-/Signaturstatus, auf dem Testtelefon
+installierte Version samt Variante und Zustand der vier Linkzuordnungen nennen.
+Falls einer dieser Punkte nicht verifiziert werden konnte, ihn ausdruecklich
+als offen ausweisen.

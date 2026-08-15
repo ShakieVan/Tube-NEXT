@@ -40,14 +40,14 @@ Bestehende Querschnittsdokumente:
   getrennte App-IDs, verpflichtende Produktionssignierung und der weiterhin
   unminifizierte GeckoView-Release-Build.
 - [`technical-notes/release-and-diagnostic-deployment.md`](technical-notes/release-and-diagnostic-deployment.md):
-  verbindlicher Ablauf fuer ein regulaeres GitHub-Release und das
-  anschliessende, datenerhaltende Diagnose-Update des bekannten Testtelefons.
+  verbindlicher Ablauf fuer regulaere GitHub-Releases und die nur bei einer
+  neuen Diagnosekampagne explizit reaktivierte Diagnosevariante.
 - [`technical-notes/watch-fullscreen-lifecycle.md`](technical-notes/watch-fullscreen-lifecycle.md):
   heutige Aufgabenteilung und historische Erkenntnisse zu Watch,
   Landscape, Fullscreen und Lade-Overlay.
 - [`technical-notes/fullscreen-progress-diagnostics.md`](technical-notes/fullscreen-progress-diagnostics.md):
-  begrenzte Diagnosefassung fuer den sporadisch mehrzeilig umgebrochenen
-  YouTube-Fortschrittsbalken.
+  abgeschlossene Diagnose des sporadisch mehrzeilig umgebrochenen
+  YouTube-Fortschrittsbalkens samt Opt-in-Reaktivierung.
 - [`technical-notes/watch-readiness-and-retries.md`](technical-notes/watch-readiness-and-retries.md):
   Grenzen von Lade-/Fertigerkennung und Regeln fuer sichere DOM-Nachlaeufe.
 - [`technical-notes/youtube-responsive-layout-diagnostics.md`](technical-notes/youtube-responsive-layout-diagnostics.md):

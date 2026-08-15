@@ -48,7 +48,8 @@ Der eingehende VIEW-Filter liegt auf dem Aktivitaetsalias
 `YouTubeLinkHandler`. Seine Aktivierung wird pro Buildtyp gesetzt:
 
 - `release`: aktiv,
-- `diagnosticRelease`: aktiv; gleiche App-ID und Produktionssignatur wie der
+- ein explizit mit `tubenext.enableProgressDiagnostics=true` reaktivierter
+  `diagnosticRelease`: aktiv; gleiche App-ID und Produktionssignatur wie der
   Release, daher bleibt die nutzerspezifische Linkzuordnung bei Updates
   erhalten,
 - `debug`: deaktiviert,
@@ -61,8 +62,9 @@ irrefuehrenden Linkstatus in ihren Einstellungen.
 
 ## Regression
 
-1. Merged Manifest pruefen: Alias in `release` und `diagnosticRelease` aktiv,
-   in `debug` und `localRelease` deaktiviert.
+1. Merged Manifest pruefen: Alias in `release` aktiv, in `debug` und
+   `localRelease` deaktiviert; bei reaktivierter Diagnose muss er auch in
+   `diagnosticRelease` aktiv sein.
 2. Frische Installation ohne Zuordnung: Hinweis erscheint genau einmal und
    oeffnet die app-spezifische Systemseite.
 3. `Spaeter`: kein erneuter Hinweis innerhalb von sieben Tagen.

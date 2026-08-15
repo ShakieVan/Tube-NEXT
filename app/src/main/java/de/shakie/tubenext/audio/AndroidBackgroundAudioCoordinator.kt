@@ -10,6 +10,7 @@ import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -53,7 +54,8 @@ class AndroidBackgroundAudioCoordinator(
     private val audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
         .setAudioAttributes(mediaAudioAttributes)
         .setAcceptsDelayedFocusGain(false)
-        .setWillPauseWhenDucked(true)
+        // Notifications should duck media briefly instead of pausing Gecko.
+        .setWillPauseWhenDucked(false)
         .setOnAudioFocusChangeListener(::onAudioFocusChanged, Handler(Looper.getMainLooper()))
         .build()
     private var controls: EngineMediaControls? = null
@@ -62,7 +64,10 @@ class AndroidBackgroundAudioCoordinator(
     private var lastStateTabId: String? = null
     private var artwork: Bitmap? = null
     private var appInBackground = false
-    private var hasAudioFocus = false
+    private var audioFocusRequestActive = false
+    private var playingWithoutFocusDuringCall = false
+    private var lastUserInteractionAtMs: Long? = null
+    private val audioFocusInterruptionPolicy = AudioFocusInterruptionPolicy()
     private var foregroundRecoveryPending = false
     private var artworkVersion = 0
     private var controlsGeneration = 0
@@ -70,6 +75,21 @@ class AndroidBackgroundAudioCoordinator(
     private var lastMediaMetadata: MediaMetadataSnapshot? = null
     private var isShutdown = false
     private val handler = Handler(Looper.getMainLooper())
+    private var activeCallMode = isActiveCallMode(audioManager.mode)
+    private var audioModeChangedListener: AudioManager.OnModeChangedListener? = null
+    private val transientFocusLossRunnable = Runnable {
+        val ringing = audioManager.mode == AudioManager.MODE_RINGTONE
+        when {
+            !audioFocusInterruptionPolicy.shouldPauseForTransientFocusLoss(ringing) -> {
+                debugLog("transient focus loss while ringing; keep playback active")
+            }
+            isActiveCall() -> pauseForActiveCall()
+            else -> handleAudioFocusLoss(AudioFocusInterruptionPolicy.Loss.TRANSIENT)
+        }
+    }
+    private val resumeAfterCallRunnable = Runnable {
+        resumeAfterActiveCallIfNeeded()
+    }
     private val foregroundServiceStopRunnable = Runnable {
         if (!appInBackground) {
             BackgroundAudioService.stop(context)
@@ -113,6 +133,15 @@ class AndroidBackgroundAudioCoordinator(
         }
     }
 
+    init {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            audioModeChangedListener = AudioManager.OnModeChangedListener(::onAudioModeChanged)
+                .also { listener ->
+                    audioManager.addOnModeChangedListener(context.mainExecutor, listener)
+                }
+        }
+    }
+
     fun setArtwork(bitmap: Bitmap?) {
         if (isShutdown) return
         artwork = bitmap?.let(::createSoftArtwork)
@@ -133,11 +162,14 @@ class AndroidBackgroundAudioCoordinator(
         lastState = state
         lastStateTabId = tabId
         updateMediaSession(state)
-        if (state.isPlaying && controls != null && !requestAudioFocus()) {
-            pauseForAudioFocus("request denied")
-            return
+        if (state.isPlaying && controls != null) {
+            if (!requestAudioFocus(explicitUserPlayback = hadRecentUserInteraction())) {
+                pauseForAudioFocus("request denied")
+                return
+            }
+            audioFocusInterruptionPolicy.cancelResume()
         }
-        if (!state.isPlaying) {
+        if (!state.isPlaying && !audioFocusInterruptionPolicy.resumePending) {
             abandonAudioFocus()
         }
         if (MediaSessionLifecyclePolicy.shouldShowBackgroundPlayer(
@@ -194,6 +226,10 @@ class AndroidBackgroundAudioCoordinator(
     override fun shutdown() {
         if (isShutdown) return
         isShutdown = true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            audioModeChangedListener?.let(audioManager::removeOnModeChangedListener)
+            audioModeChangedListener = null
+        }
         BackgroundAudioService.controller = null
         handler.removeCallbacksAndMessages(null)
         abandonAudioFocus()
@@ -203,20 +239,28 @@ class AndroidBackgroundAudioCoordinator(
     }
 
     override fun play() {
-        if (requestAudioFocus()) {
+        if (requestAudioFocus(explicitUserPlayback = true)) {
+            audioFocusInterruptionPolicy.cancelResume()
             controls?.play()
         } else {
+            audioFocusInterruptionPolicy.cancelResume()
             pauseForAudioFocus("play denied")
         }
     }
 
+    fun onUserInteraction() {
+        lastUserInteractionAtMs = SystemClock.elapsedRealtime()
+    }
+
     override fun pause() {
+        audioFocusInterruptionPolicy.cancelResume()
         controls?.pause()
         abandonAudioFocus()
     }
 
     override fun pauseForAudioRouteChange() {
         debugLog("pause for audio route change")
+        audioFocusInterruptionPolicy.cancelResume()
         if (appInBackground) {
             foregroundRecoveryPending = true
         }
@@ -232,6 +276,7 @@ class AndroidBackgroundAudioCoordinator(
     }
 
     override fun stop() {
+        audioFocusInterruptionPolicy.cancelResume()
         controls?.stop()
         abandonAudioFocus()
     }
@@ -310,32 +355,145 @@ class AndroidBackgroundAudioCoordinator(
         )
     }
 
-    private fun requestAudioFocus(): Boolean {
-        if (hasAudioFocus) return true
+    private fun requestAudioFocus(explicitUserPlayback: Boolean): Boolean {
+        if (audioFocusRequestActive) {
+            if (isActiveCall() && audioFocusInterruptionPolicy.resumePending) {
+                return mayPlayWithoutFocusDuringCall(explicitUserPlayback)
+            }
+            return true
+        }
+        if (playingWithoutFocusDuringCall) {
+            if (mayPlayWithoutFocusDuringCall(explicitUserPlayback = true)) return true
+            playingWithoutFocusDuringCall = false
+        }
         val result = audioManager.requestAudioFocus(audioFocusRequest)
-        hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-        debugLog("audioFocus granted=$hasAudioFocus result=$result")
-        return hasAudioFocus
+        audioFocusRequestActive = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        debugLog("audioFocus granted=$audioFocusRequestActive result=$result")
+        if (audioFocusRequestActive) return true
+        if (mayPlayWithoutFocusDuringCall(explicitUserPlayback)) {
+            // Android can lock audio focus during calls. A foreground start is
+            // nevertheless an explicit user choice and Android deliberately
+            // permits newly started media to remain audible during the call.
+            playingWithoutFocusDuringCall = true
+            debugLog("audioFocus denied during active call; allow foreground playback")
+            return true
+        }
+        return false
+    }
+
+    private fun isActiveCall(): Boolean = isActiveCallMode(audioManager.mode)
+
+    private fun isActiveCallMode(mode: Int): Boolean = when (mode) {
+        AudioManager.MODE_IN_CALL,
+        AudioManager.MODE_IN_COMMUNICATION,
+        AudioManager.MODE_CALL_REDIRECT,
+        AudioManager.MODE_COMMUNICATION_REDIRECT -> true
+        else -> false
+    }
+
+    private fun mayPlayWithoutFocusDuringCall(explicitUserPlayback: Boolean): Boolean {
+        return audioFocusInterruptionPolicy.mayPlayWithoutFocus(
+            appInBackground = appInBackground,
+            activeCall = isActiveCall(),
+            explicitUserPlayback = explicitUserPlayback
+        )
+    }
+
+    private fun hadRecentUserInteraction(): Boolean {
+        val interactionAtMs = lastUserInteractionAtMs ?: return false
+        val elapsed = SystemClock.elapsedRealtime() - interactionAtMs
+        return elapsed in 0..USER_PLAYBACK_INTERACTION_WINDOW_MS
     }
 
     private fun abandonAudioFocus() {
-        if (!hasAudioFocus) return
+        audioFocusInterruptionPolicy.cancelResume()
+        playingWithoutFocusDuringCall = false
+        if (!audioFocusRequestActive) return
         audioManager.abandonAudioFocusRequest(audioFocusRequest)
-        hasAudioFocus = false
+        audioFocusRequestActive = false
         debugLog("audioFocus abandoned")
     }
 
     private fun onAudioFocusChanged(focusChange: Int) {
-        debugLog("audioFocus change=$focusChange")
+        debugLog("audioFocus change=$focusChange mode=${audioManager.mode}")
         when (focusChange) {
-            AudioManager.AUDIOFOCUS_LOSS,
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                hasAudioFocus = false
-                pauseForAudioFocus("focus loss $focusChange")
+                handleAudioFocusLoss(AudioFocusInterruptionPolicy.Loss.CAN_DUCK)
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                handler.removeCallbacks(transientFocusLossRunnable)
+                handler.postDelayed(transientFocusLossRunnable, TRANSIENT_FOCUS_MODE_SETTLE_MS)
+            }
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                audioFocusRequestActive = false
+                if (isActiveCall()) {
+                    pauseForActiveCall()
+                } else {
+                    handleAudioFocusLoss(AudioFocusInterruptionPolicy.Loss.PERMANENT)
+                }
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
-                hasAudioFocus = true
+                handler.removeCallbacks(transientFocusLossRunnable)
+                handler.removeCallbacks(resumeAfterCallRunnable)
+                audioFocusRequestActive = true
+                playingWithoutFocusDuringCall = false
+                resumeAfterActiveCallIfNeeded()
+            }
+        }
+    }
+
+    private fun onAudioModeChanged(mode: Int) {
+        if (isShutdown) return
+        debugLog("audioMode change=$mode")
+        val wasActiveCall = activeCallMode
+        activeCallMode = isActiveCallMode(mode)
+        if (!wasActiveCall && activeCallMode) {
+            handler.removeCallbacks(transientFocusLossRunnable)
+            handler.removeCallbacks(resumeAfterCallRunnable)
+            pauseForActiveCall()
+        } else if (wasActiveCall && !activeCallMode) {
+            handler.removeCallbacks(resumeAfterCallRunnable)
+            handler.postDelayed(resumeAfterCallRunnable, CALL_END_FOCUS_SETTLE_MS)
+        }
+    }
+
+    private fun pauseForActiveCall() {
+        if (lastState?.isPlaying != true || controls == null) {
+            debugLog("active call does not pause inactive playback")
+            return
+        }
+        debugLog("active call pauses playback")
+        audioFocusInterruptionPolicy.onFocusLoss(
+            loss = AudioFocusInterruptionPolicy.Loss.TRANSIENT,
+            wasPlaying = true
+        )
+        pauseForAudioFocus("active call")
+    }
+
+    private fun resumeAfterActiveCallIfNeeded() {
+        if (!audioFocusInterruptionPolicy.resumePending || isActiveCall()) return
+        if (requestAudioFocus(explicitUserPlayback = false)) {
+            debugLog("resume after active call")
+            controls?.play()
+        }
+    }
+
+    private fun handleAudioFocusLoss(loss: AudioFocusInterruptionPolicy.Loss) {
+        when (audioFocusInterruptionPolicy.onFocusLoss(
+            loss = loss,
+            wasPlaying = lastState?.isPlaying == true && controls != null
+        )) {
+            AudioFocusInterruptionPolicy.LossAction.KEEP_PLAYING -> {
+                // Usually Android handles this automatically because
+                // willPauseWhenDucked=false. Keep playing if a vendor still
+                // delivers the callback.
+                debugLog("audioFocus ducking keeps playback active")
+            }
+            AudioFocusInterruptionPolicy.LossAction.PAUSE_UNTIL_GAIN -> {
+                pauseForAudioFocus("transient focus loss")
+            }
+            AudioFocusInterruptionPolicy.LossAction.PAUSE -> {
+                pauseForAudioFocus("permanent focus loss")
             }
         }
     }
@@ -360,6 +518,8 @@ class AndroidBackgroundAudioCoordinator(
         lastNotification = null
         lastMediaMetadata = null
         foregroundRecoveryPending = false
+        audioFocusInterruptionPolicy.cancelResume()
+        playingWithoutFocusDuringCall = false
         mediaSession.setPlaybackState(
             PlaybackState.Builder()
                 .setActions(MEDIA_SESSION_ACTIONS)
@@ -397,6 +557,9 @@ class AndroidBackgroundAudioCoordinator(
         private const val MEDIA_SESSION_TAG = "Tube NEXT"
         private const val CONTROLS_LOST_GRACE_MS = 5_000L
         private const val FOREGROUND_SERVICE_STOP_DELAY_MS = 750L
+        private const val USER_PLAYBACK_INTERACTION_WINDOW_MS = 10_000L
+        private const val TRANSIENT_FOCUS_MODE_SETTLE_MS = 100L
+        private const val CALL_END_FOCUS_SETTLE_MS = 200L
         private const val MEDIA_SESSION_ACTIONS =
             PlaybackState.ACTION_PLAY or
                 PlaybackState.ACTION_PAUSE or

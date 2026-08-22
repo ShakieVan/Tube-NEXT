@@ -14,7 +14,7 @@ object LinkInterceptor {
 
     fun isInternalFlowUri(uri: Uri?): Boolean {
         if (uri == null) return false
-        return isInternalHttpNavigation(uri.scheme, uri.host)
+        return NavigationHostPolicy.isInternalHttpNavigation(uri.toString())
     }
 
     internal fun isYouTubeHttpNavigation(scheme: String?, host: String?): Boolean {
@@ -24,5 +24,9 @@ object LinkInterceptor {
 
     internal fun isInternalHttpNavigation(scheme: String?, host: String?): Boolean {
         return NavigationHostPolicy.isInternalHttpNavigation(scheme, host)
+    }
+
+    internal fun isInternalHttpNavigation(url: String): Boolean {
+        return NavigationHostPolicy.isInternalHttpNavigation(url)
     }
 }

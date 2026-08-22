@@ -78,6 +78,13 @@ umgeschrieben. Der Modus wird ueber den User-Agent gewaehlt; ein Host-Redirect
 waere ein zusaetzlicher, sichtbarer Navigationsschritt und wuerde die History
 verfaelschen.
 
+Der aktuelle Modus wird pro gehaltener Gecko-Session an genau einer Stelle
+gefuehrt. Explizite `EngineTab.loadUrl()`-Aufrufe und Gecko-Callbacks duerfen
+nicht getrennte Moduskopien pflegen. Andernfalls kann ein expliziter Wechsel
+von Desktop-Watch zu einem mobilen Zwischenziel nur die Session umstellen,
+waehrend der folgende serverseitige Redirect zu `/watch` aufgrund eines
+veralteten Desktop-Flags den notwendigen Rueckwechsel ueberspringt.
+
 ## Navigation vor dem Laden entscheiden
 
 Fuer klassische Top-Level-Navigationen setzt `onLoadRequest()` den
@@ -167,11 +174,14 @@ unbemerkt durch vorsorgliche Reloads ersetzen.
 3. `youtu.be` sowie direkte externe YouTube-Intents pruefen.
 4. Login-/Account-Flow durchlaufen: kein UA-Pingpong und keine
    `RotateCookiesPage` als dauerhaft sichtbare Toolbar-URL.
-5. Mehrere Tabs oeffnen, rotieren und Multi-Window-Groesse aendern:
+5. Eine Google-`sorry`-Challenge von einer Watch-Seite abschliessen: Der
+   serverseitige Redirect auf `m.youtube.com/watch` bleibt intern und wird
+   wieder mit Desktop-UA geladen.
+6. Mehrere Tabs oeffnen, rotieren und Multi-Window-Groesse aendern:
    keine zweite Runtime, kein `Session is open`, Tabs bleiben erhalten.
-6. Einen Tab explizit schliessen: seine Session und Bridge muessen entfernt
+7. Einen Tab explizit schliessen: seine Session und Bridge muessen entfernt
    sein; die anderen Tabs bleiben unveraendert.
-7. Nach Activity-Neustart Long-Press-Neuer-Tab, Home-Feed-Einstellungen und
+8. Nach Activity-Neustart Long-Press-Neuer-Tab, Home-Feed-Einstellungen und
    weitere Extension-Nachrichten pruefen, damit die Bridge nach dem Rebind auf
    die neue Activity zeigt.
 

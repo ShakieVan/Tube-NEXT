@@ -44,6 +44,35 @@ class LinkInterceptorTest {
     }
 
     @Test
+    fun `allows Google sorry challenge only when it returns to YouTube`() {
+        assertInternalUrl(
+            "https://www.google.com/sorry/index?" +
+                "continue=https://m.youtube.com/watch%3Fv%3DQpEXO_XOHhI&q=challenge"
+        )
+        assertInternalUrl(
+            "https://google.com/sorry/?" +
+                "continue=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc"
+        )
+        assertInternalUrl("https://www.google.com/sorry/index")
+    }
+
+    @Test
+    fun `rejects unrelated or unsafe Google sorry urls`() {
+        assertExternalUrl("https://www.google.com/search?q=youtube")
+        assertExternalUrl(
+            "https://www.google.com/sorry/index?continue=https%3A%2F%2Fexample.org%2F"
+        )
+        assertExternalUrl(
+            "https://www.google.com/sorry/index?" +
+                "continue=https%3A%2F%2Fyoutube.com.example.org%2Fwatch%3Fv%3Dabc"
+        )
+        assertExternalUrl(
+            "http://www.google.com/sorry/index?" +
+                "continue=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc"
+        )
+    }
+
+    @Test
     fun `rejects non web schemes even for trusted hosts`() {
         assertExternal("javascript", "www.youtube.com")
         assertExternal("file", "accounts.google.com")
@@ -70,5 +99,13 @@ class LinkInterceptorTest {
             "$scheme://$host should leave Gecko",
             LinkInterceptor.isInternalHttpNavigation(scheme, host)
         )
+    }
+
+    private fun assertInternalUrl(url: String) {
+        assertTrue("$url should remain inside Gecko", LinkInterceptor.isInternalHttpNavigation(url))
+    }
+
+    private fun assertExternalUrl(url: String) {
+        assertFalse("$url should leave Gecko", LinkInterceptor.isInternalHttpNavigation(url))
     }
 }

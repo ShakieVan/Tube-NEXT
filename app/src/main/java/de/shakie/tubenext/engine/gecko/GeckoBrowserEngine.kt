@@ -137,11 +137,9 @@ class GeckoBrowserEngine(
                 )
             )
         }
-        fun applyUserAgentForUrl(url: String, source: String): Boolean {
-            if (!shouldApplyUserAgentForUrl(url)) return false
-            val targetDesktopMode = shouldUseDesktopMode(url)
-            if (retainedTab.desktopMode == targetDesktopMode) return false
-            retainedTab.desktopMode = targetDesktopMode
+        fun setDesktopMode(enabled: Boolean, source: String): Boolean {
+            if (retainedTab.desktopMode == enabled) return false
+            retainedTab.desktopMode = enabled
             session.settings.userAgentMode = if (retainedTab.desktopMode) {
                 GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
             } else {
@@ -149,9 +147,15 @@ class GeckoBrowserEngine(
             }
             debugLog(
                 "TUBENEXT_ENGINE",
-                "tab=$tabId source=$source uaMode=${if (retainedTab.desktopMode) "DESKTOP" else "MOBILE"} url=$url"
+                "tab=$tabId source=$source " +
+                    "uaMode=${if (retainedTab.desktopMode) "DESKTOP" else "MOBILE"}"
             )
             return true
+        }
+
+        fun applyUserAgentForUrl(url: String, source: String): Boolean {
+            if (!shouldApplyUserAgentForUrl(url)) return false
+            return setDesktopMode(shouldUseDesktopMode(url), source)
         }
 
         session.navigationDelegate = object : GeckoSession.NavigationDelegate {
@@ -388,6 +392,9 @@ class GeckoBrowserEngine(
             canGoBackProvider = { retainedTab.canGoBack },
             canGoForwardProvider = { retainedTab.canGoForward },
             shouldUseDesktopMode = shouldUseDesktopMode,
+            onDesktopModeChanged = { enabled, source ->
+                setDesktopMode(enabled, source)
+            },
             onDetach = {
                 removeNavigationBridge(session)
                 geckoView.releaseSession()
@@ -720,17 +727,17 @@ private data class GeckoEngineTab(
     val canGoBackProvider: () -> Boolean,
     val canGoForwardProvider: () -> Boolean,
     val shouldUseDesktopMode: (String) -> Boolean,
+    val onDesktopModeChanged: (enabled: Boolean, source: String) -> Unit,
     val onDetach: () -> Unit,
     val onDestroy: () -> Unit,
     val onHomeFeedSettingsChanged: (EngineHomeFeedSettings) -> Unit,
     val onVideoTransformChanged: (Float, Float, Float) -> Unit
 ) : EngineTab {
     override val view: GeckoView = geckoView
-    private var desktopMode: Boolean = true
 
     override fun loadUrl(url: String) {
         this.url = url
-        setDesktopMode(shouldUseDesktopMode(url))
+        onDesktopModeChanged(shouldUseDesktopMode(url), "loadUrl")
         session.loadUri(url)
     }
 
@@ -765,13 +772,7 @@ private data class GeckoEngineTab(
     }
 
     override fun setDesktopMode(enabled: Boolean) {
-        if (desktopMode == enabled) return
-        desktopMode = enabled
-        session.settings.userAgentMode = if (enabled) {
-            GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
-        } else {
-            GeckoSessionSettings.USER_AGENT_MODE_MOBILE
-        }
+        onDesktopModeChanged(enabled, "setDesktopMode")
     }
 
     override fun isInCustomView(): Boolean = false

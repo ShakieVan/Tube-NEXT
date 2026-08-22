@@ -1,7 +1,7 @@
 # Login-, Consent- und Link-Handling
 
-Stand: am 01.08.2026 gegen den aktuellen GeckoView-Code und den Geraeteablauf
-auf dem Samsung SM-S928B geprueft
+Stand: am 22.08.2026 gegen den aktuellen GeckoView-Code und die dokumentierten
+Geraeteablaeufe geprueft
 
 ## Zweck
 
@@ -50,13 +50,30 @@ App nur zu, wenn sie:
 
 - auf einen unterstuetzten YouTube-Host zeigt oder
 - exakt auf `accounts.google.com`, `consent.google.com` oder
-  `gds.google.com` zeigt.
+  `gds.google.com` zeigt oder
+- eine HTTPS-Challenge unter `google.com/sorry/` beziehungsweise
+  `www.google.com/sorry/` ist. Ein vorhandener, dekodierter
+  `continue`-Parameter muss wieder auf einen YouTube-Host zeigen.
 
 `gds.google.com` ist kein pauschal angenommener Google-Host. Er wurde auf
 einem echten Geraeteablauf nach Passwort und 2FA als Vorschlagsseite fuer
 Google-Kontodaten beobachtet, bevor der Flow zu YouTube zurueckkehrt. Fuer
-weitere Google-Hosts bleibt die Grenze geschlossen; neue Hosts werden erst
-nach einem protokollierten Top-Level-Ablauf einzeln aufgenommen.
+weitere Google-Hosts und Pfade bleibt die Grenze geschlossen; neue Ziele
+werden erst nach einem protokollierten Top-Level-Ablauf einzeln aufgenommen.
+
+Die pfadspezifische `sorry`-Ausnahme deckt Googles Seite zur Pruefung
+ungewoehnlichen Datenverkehrs ab, die beim Oeffnen eines Videos nach einem
+Netzwerkwechsel beobachtet wurde. Google-Suche und andere Seiten auf denselben
+Hosts bleiben extern. Ebenso wird die Challenge abgelehnt, wenn der
+explizite Ruecksprung ungueltig ist oder nicht zu YouTube fuehrt.
+
+Beim Setzen des reCAPTCHA-Hakens sendet Google ein Formular an die querylose
+URL `https://www.google.com/sorry/index`. Der YouTube-Ruecksprung liegt dabei
+im POST-Inhalt, den Geckos Top-Level-Navigationscallback nicht bereitstellt.
+Auch diese querylose URL muss deshalb intern bleiben. Wird sie extern
+geoeffnet, geht der POST-Inhalt verloren und der Systembrowser zeigt nur noch
+eine nackte Sorry-Seite. Ein anschliessender Redirect auf einen Nicht-YouTube-
+Host durchlaeuft weiterhin die normale externe Navigationsgrenze.
 
 YouTube-Unterhosts bleiben ueber die label-begrenzte Domain
 `*.youtube.com` intern; dadurch funktionieren insbesondere
@@ -161,16 +178,20 @@ Bei Aenderungen an `contextmenu`-Listenern ist die Reihenfolge wichtig:
    `RotateCookiesPage`- oder `about:*`-URL dauerhaft anzeigt.
 4. Einen beliebigen externen Nicht-YouTube-Link oeffnen: Er geht an eine
    externe Anwendung.
-5. Kurzer Tap auf Home-, Shorts-, Abo-, Feed- und Watch-Link: normales
+5. Eine `google.com/sorry/`-Challenge mit YouTube-`continue` oeffnen und
+   abschliessen: Die querylose POST-Navigation, Challenge und anschliessendes
+   Video bleiben im selben Tab. Eine Google-Suche und eine Challenge mit
+   externem `continue` bleiben extern.
+6. Kurzer Tap auf Home-, Shorts-, Abo-, Feed- und Watch-Link: normales
    YouTube-Verhalten, kein Tube-NEXT-Aktionsmenue.
-6. Long-Press und links ziehen: Aktionsmenue erscheint; Abbrechen navigiert
+7. Long-Press und links ziehen: Aktionsmenue erscheint; Abbrechen navigiert
    nicht. Alle fuenf Aktionen jeweils einmal pruefen.
-7. Long-Press und rechts ziehen: genau ein neuer App-Tab mit dem Ziel entsteht.
-8. Long-Press und mittig loslassen sowie vertikal scrollen: keine Linkaktion.
-9. Long-Press auf normalen Text, Bild ohne YouTube-Link und Player-Control:
+8. Long-Press und rechts ziehen: genau ein neuer App-Tab mit dem Ziel entsteht.
+9. Long-Press und mittig loslassen sowie vertikal scrollen: keine Linkaktion.
+10. Long-Press auf normalen Text, Bild ohne YouTube-Link und Player-Control:
    keine Linkaktion.
-10. Account-, Burger-, Kommentar- und Player-Menues normal bedienen.
-11. Im Landscape-Player Pinch-to-Zoom und normales Einstellungsmenue pruefen;
+11. Account-, Burger-, Kommentar- und Player-Menues normal bedienen.
+12. Im Landscape-Player Pinch-to-Zoom und normales Einstellungsmenue pruefen;
    das technische Player-Kontextmenue bleibt verborgen.
 
 ## Historische Einordnung

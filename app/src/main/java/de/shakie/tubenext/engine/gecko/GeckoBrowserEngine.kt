@@ -15,6 +15,7 @@ import de.shakie.tubenext.engine.EngineMediaControls
 import de.shakie.tubenext.engine.EnginePlaybackState
 import de.shakie.tubenext.engine.EngineTab
 import de.shakie.tubenext.engine.EngineType
+import de.shakie.tubenext.engine.EngineWatchProgress
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -492,7 +493,28 @@ class GeckoBrowserEngine(
                     message: Any,
                     sender: WebExtension.MessageSender
                 ): GeckoResult<Any>? {
-                    if (sender.session != session || !sender.isTopLevel()) {
+                    if (sender.session != session || !sender.isTopLevel() ||
+                        navBridgeBySession[session] !== bridge
+                    ) {
+                        return GeckoResult.fromValue(null)
+                    }
+                    if (parseMessageType(message) == "WATCH_PROGRESS") {
+                        val payload = when (message) {
+                            is JSONObject -> message
+                            is Map<*, *> -> runCatching { JSONObject(message) }.getOrNull()
+                            else -> null
+                        }
+                        payload?.let {
+                            bridge.callbacks.onWatchProgress(
+                                bridge.tabId,
+                                EngineWatchProgress(
+                                    it.optString("url"),
+                                    it.optDouble("position"),
+                                    it.optDouble("duration"),
+                                    it.optBoolean("ended", false)
+                                )
+                            )
+                        }
                         return GeckoResult.fromValue(null)
                     }
                     val intent = parseNavigationIntent(message)

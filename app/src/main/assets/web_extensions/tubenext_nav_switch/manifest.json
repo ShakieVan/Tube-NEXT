@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Tube NEXT Nav Switch",
-  "version": "1.31",
+  "version": "1.32",
   "description": "Handles YouTube mode changes, watch-page tweaks, and link actions for Tube NEXT.",
   "applications": {
     "gecko": {
@@ -33,6 +33,7 @@
         "*://youtu.be/*"
       ],
       "js": [
+        "watch-progress.js",
         "content.js"
       ],
       "run_at": "document_start",

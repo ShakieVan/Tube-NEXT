@@ -36,6 +36,8 @@ Bestehende Querschnittsdokumente:
 - [`technical-notes/tab-restoration-and-previews.md`](technical-notes/tab-restoration-and-previews.md):
   Lazy Restore, Gecko-Snapshot-Grenzen und Watch-Artwork fuer schnelle
   Hintergrund-Tabwechsel.
+- [`technical-notes/watch-position-restoration.md`](technical-notes/watch-position-restoration.md):
+  persistierte Videopositionen und Zeitparameter beim Wiederherstellen offener Tabs.
 - [`technical-notes/build-variants-and-geckoview-r8.md`](technical-notes/build-variants-and-geckoview-r8.md):
   getrennte App-IDs, verpflichtende Produktionssignierung und der weiterhin
   unminifizierte GeckoView-Release-Build.

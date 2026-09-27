@@ -15,6 +15,8 @@ class TabPersistence(context: Context) {
                     .put(KEY_ID, session.id)
                     .put(KEY_URL, session.url)
                     .put(KEY_TITLE, session.title)
+                    .put(KEY_RESUME_VIDEO_ID, session.watchProgress?.videoId)
+                    .put(KEY_RESUME_SECONDS, session.watchProgress?.positionSeconds)
             )
         }
 
@@ -42,7 +44,11 @@ class TabPersistence(context: Context) {
                         id = id,
                         url = url,
                         title = item.optString(KEY_TITLE)
-                    )
+                    ).let { session ->
+                        val videoId = item.optString(KEY_RESUME_VIDEO_ID)
+                        val seconds = item.optLong(KEY_RESUME_SECONDS, -1L)
+                        session.withWatchProgress(WatchProgress(videoId, seconds))
+                    }
                 )
             }
         }
@@ -60,6 +66,8 @@ class TabPersistence(context: Context) {
         private const val KEY_ID = "id"
         private const val KEY_URL = "url"
         private const val KEY_TITLE = "title"
+        private const val KEY_RESUME_VIDEO_ID = "resume_video_id"
+        private const val KEY_RESUME_SECONDS = "resume_seconds"
     }
 }
 

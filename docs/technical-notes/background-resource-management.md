@@ -40,7 +40,9 @@ Historie und Preview bestehen. Die schwere Gecko-Session und View werden
 dagegen kontrolliert zerstoert und durch `HibernatedEngineTab` ersetzt.
 
 Beim spaeteren Auswaehlen erzeugt `ensureTabAwake()` eine neue Gecko-Session
-und laedt die letzte URL. Der laufende DOM-/Feed-Zustand dieses Tabs ist dann
+und laedt die letzte URL, seit v1.4.9 mit der gespeicherten Videoposition
+(siehe [`watch-position-restoration.md`](watch-position-restoration.md)).
+Der laufende DOM-/Feed-Zustand dieses Tabs ist dann
 nicht mehr vorhanden.
 
 ## Warum kein 5-Minuten-Standby existiert

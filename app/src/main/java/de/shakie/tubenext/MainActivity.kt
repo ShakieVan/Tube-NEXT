@@ -78,6 +78,7 @@ import de.shakie.tubenext.tabs.TabManager
 import de.shakie.tubenext.tabs.TabPersistence
 import de.shakie.tubenext.tabs.TabPreviewStore
 import de.shakie.tubenext.tabs.TabSession
+import de.shakie.tubenext.tabs.WatchProgress
 import de.shakie.tubenext.tabs.YouTubePreviewArtworkLoader
 import de.shakie.tubenext.update.GitHubReleaseClient
 import de.shakie.tubenext.update.UpdateAsset
@@ -325,7 +326,7 @@ class MainActivity : AppCompatActivity() {
             currentTab()?.let(::navigateForwardForTab)
         }
         reloadButton.setOnClickListener {
-            currentTab()?.engineTab?.reload()
+            reloadCurrentTab()
         }
         privacyShareButton.setOnClickListener {
             currentTab()
@@ -364,7 +365,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 R.id.action_reload -> {
-                    currentTab()?.engineTab?.reload()
+                    reloadCurrentTab()
                     true
                 }
 
@@ -455,7 +456,7 @@ class MainActivity : AppCompatActivity() {
     private fun createBrowserTab(session: TabSession, loadInitialUrl: Boolean = true): AppTab {
         val engineTab = browserEngine.createTab(
             tabId = session.id,
-            initialUrl = session.url,
+            initialUrl = session.restoreUrl(),
             title = session.title,
             loadInitialUrl = loadInitialUrl,
             callbacks = createEngineCallbacks()
@@ -483,6 +484,19 @@ class MainActivity : AppCompatActivity() {
         configureLongPressMenu(browserTab)
         browserTabs[session.id] = browserTab
         return browserTab
+    }
+
+    private fun reloadCurrentTab() {
+        val tab = currentTab() ?: return
+        val target = tabManager.restoreUrl(tab.id)
+        // Only an explicit reload uses the checkpoint; a healthy resumed session is left running.
+        if (target != null && target != tab.url &&
+            YouTubeNavigationPolicy.urlsReferToSameVideo(target, tab.engineLocationUrl)
+        ) {
+            tab.engineTab.loadUrl(target)
+        } else {
+            tab.engineTab.reload()
+        }
     }
 
     private fun createEngineCallbacks(): EngineCallbacks {
@@ -546,6 +560,13 @@ class MainActivity : AppCompatActivity() {
             },
             onPlaybackStateChanged = { tabId, state ->
                 backgroundAudioCoordinator.onForegroundPlaybackState(tabId, state)
+            },
+            onWatchProgress = { tabId, sample ->
+                if (browserTabs[tabId]?.isHibernated == false) {
+                    WatchProgress.fromSample(
+                        sample.url, sample.positionSeconds, sample.durationSeconds, sample.ended
+                    )?.let { tabManager.recordWatchProgress(tabId, it) }
+                }
             },
             onMediaControlsChanged = { tabId, controls ->
                 backgroundAudioCoordinator.onMediaControlsChanged(tabId, controls)
@@ -652,7 +673,7 @@ class MainActivity : AppCompatActivity() {
         val tab = browserTabs[tabId] ?: return null
         if (!tab.isHibernated) return tab
 
-        val url = tab.url.ifBlank { DEFAULT_URL }
+        val url = tabManager.restoreUrl(tabId) ?: tab.url.ifBlank { DEFAULT_URL }
         val title = tab.title
         Log.i(
             "TUBENEXT_MEMORY",
@@ -730,7 +751,7 @@ class MainActivity : AppCompatActivity() {
             tab.engineTab.onResume()
             if (!tab.hasLoadedInitialUrl) {
                 tab.hasLoadedInitialUrl = true
-                tab.engineTab.loadUrl(tab.url.ifBlank { DEFAULT_URL })
+                tab.engineTab.loadUrl(tabManager.restoreUrl(tabId) ?: tab.url.ifBlank { DEFAULT_URL })
             }
             schedulePendingPreviewCapture(tab)
         }
@@ -793,7 +814,8 @@ class MainActivity : AppCompatActivity() {
             }
 
             val replacement = createBrowserTab(
-                TabSession(id = tabId, url = url, title = title),
+                tabManager.all().firstOrNull { it.id == tabId }
+                    ?: TabSession(id = tabId, url = url, title = title),
                 loadInitialUrl = wasSelected
             )
             replacement.navigationHistory.restore(history)

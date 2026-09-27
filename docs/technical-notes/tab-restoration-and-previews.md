@@ -10,12 +10,16 @@ SM-S928B geprueft
 - ID,
 - letzte URL,
 - letzten Titel,
+- Video-ID und Wiedergabeposition, sofern fuer den Watch-Tab erfasst,
 - Reihenfolge,
 - ID des ausgewaehlten Tabs.
 
 Der interne Gecko-Sitzungszustand wird nicht serialisiert. Cookies und Login
 werden separat von Gecko verwaltet; beim Wiederherstellen eines Tabs wird
-seine letzte URL neu geladen.
+seine letzte URL neu geladen. Seit v1.4.9 ergaenzt die App dabei fuer
+Watch-Tabs die gespeicherte Videoposition als Zeitparameter. Details,
+Grenzen und Regressionstests stehen in
+[`watch-position-restoration.md`](watch-position-restoration.md).
 
 ## Lazy Restore
 

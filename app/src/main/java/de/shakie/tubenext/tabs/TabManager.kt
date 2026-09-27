@@ -37,12 +37,20 @@ class TabManager(
     fun update(tabId: String, url: String, title: String) {
         val index = sessions.indexOfFirst { it.id == tabId }
         if (index < 0) return
-        sessions[index] = sessions[index].copy(
-            url = url,
-            title = title
-        )
+        sessions[index] = sessions[index].withPage(url, title)
         persist()
     }
+
+    fun recordWatchProgress(tabId: String, progress: WatchProgress) {
+        val index = sessions.indexOfFirst { it.id == tabId }
+        if (index < 0) return
+        val updated = sessions[index].withWatchProgress(progress)
+        if (updated == sessions[index]) return
+        sessions[index] = updated
+        persist()
+    }
+
+    fun restoreUrl(tabId: String): String? = sessions.firstOrNull { it.id == tabId }?.restoreUrl()
 
     fun select(tabId: String) {
         if (sessions.none { it.id == tabId }) return

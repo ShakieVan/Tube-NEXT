@@ -117,7 +117,7 @@
       normalized === "youtu.be";
   }
 
-  function shouldUseDesktop(urlString) {
+  function isWatchUrl(urlString) {
     try {
       var url = new URL(urlString, window.location.href);
       if (!isYouTubeHost(url.hostname)) {
@@ -129,12 +129,29 @@
     }
   }
 
+  // YouTube's own downloads list stays empty on the mobile site.
+  function isDownloadsUrl(urlString) {
+    try {
+      var url = new URL(urlString, window.location.href);
+      if (!isYouTubeHost(url.hostname)) {
+        return false;
+      }
+      return url.pathname === "/feed/downloads" || url.pathname.startsWith("/feed/downloads/");
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function shouldUseDesktop(urlString) {
+    return isWatchUrl(urlString) || isDownloadsUrl(urlString);
+  }
+
   function isLandscapeWatch() {
-    return shouldUseDesktop(window.location.href) && window.innerWidth > window.innerHeight;
+    return isWatchPage() && window.innerWidth > window.innerHeight;
   }
 
   function isWatchPage() {
-    return shouldUseDesktop(window.location.href);
+    return isWatchUrl(window.location.href);
   }
 
   function isHomePage() {

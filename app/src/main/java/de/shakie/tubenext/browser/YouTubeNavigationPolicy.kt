@@ -5,15 +5,20 @@ import java.net.URI
 object YouTubeNavigationPolicy {
     enum class RenderMode {
         MOBILE,
-        DESKTOP_WATCH
+        DESKTOP_WATCH,
+        DESKTOP_DOWNLOADS
     }
 
     fun renderModeForUrl(url: String): RenderMode {
-        return if (isWatchUrl(url)) RenderMode.DESKTOP_WATCH else RenderMode.MOBILE
+        return when {
+            isWatchUrl(url) -> RenderMode.DESKTOP_WATCH
+            isDownloadsUrl(url) -> RenderMode.DESKTOP_DOWNLOADS
+            else -> RenderMode.MOBILE
+        }
     }
 
     fun shouldUseDesktopMode(url: String): Boolean {
-        return renderModeForUrl(url) == RenderMode.DESKTOP_WATCH
+        return renderModeForUrl(url) != RenderMode.MOBILE
     }
 
     fun isWatchUrl(url: String): Boolean {
@@ -21,6 +26,14 @@ object YouTubeNavigationPolicy {
         val host = uri.host.lowercase()
         if (!isSupportedYouTubeHost(host)) return false
         return host == "youtu.be" || uri.path.orEmpty().startsWith("/watch")
+    }
+
+    // YouTube's own downloads list stays empty on the mobile site.
+    fun isDownloadsUrl(url: String): Boolean {
+        val uri = parseHttpUri(url) ?: return false
+        if (!isSupportedYouTubeHost(uri.host.lowercase())) return false
+        val path = uri.path.orEmpty()
+        return path == "/feed/downloads" || path.startsWith("/feed/downloads/")
     }
 
     fun isUserVisibleUrl(url: String): Boolean {

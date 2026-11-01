@@ -20,6 +20,7 @@ Tube NEXT ist der Versuch, genau diese Browser-Erfahrung in eine alltagstauglich
 
 - **Mobile Oberflaeche fuer normale YouTube-Seiten:** Start, Suche, Kanal- und Uebersichtsseiten bleiben touchfreundlich.
 - **Desktop-Watch fuer Video-Seiten:** Watch-Seiten koennen Desktop-Funktionen nutzen, werden aber per CSS/Viewport-Anpassung mobil passend gemacht.
+- **YouTube-Downloads mit Premium:** YouTubes eigene Download-Funktion und die Seite `Downloads` funktionieren auch in Tube NEXT. Das gibt es nur mit YouTube Premium; die App selbst speichert keine Videos.
 - **Tabs wie im Browser:** Mehrere YouTube-Seiten parallel offen halten,
   wechseln, schliessen und per live aktualisierter Vorschau wiederfinden. Sehr
   schnell verlassene Watch-Tabs erhalten mindestens das offizielle
@@ -85,7 +86,7 @@ verarbeitet.
 
 ## Was Tube NEXT bewusst nicht macht
 
-- keine Downloads von YouTube-Inhalten
+- keine eigenen Downloads von YouTube-Inhalten (YouTubes eigene Download-Funktion gibt es nur mit YouTube Premium)
 - keine DRM-Umgehung
 - kein Ad-Blocking
 - keine inoffiziellen YouTube-APIs

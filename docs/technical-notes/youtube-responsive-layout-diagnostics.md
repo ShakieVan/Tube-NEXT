@@ -51,10 +51,12 @@ festgehalten.
 
 ## Heutige Umsetzung
 
-`YouTubeNavigationPolicy` kennt genau zwei Render-Modi:
+`YouTubeNavigationPolicy` kennt drei Render-Modi:
 
 - `MOBILE` fuer normale YouTube-Bereiche,
-- `DESKTOP_WATCH` fuer `/watch` und `youtu.be`.
+- `DESKTOP_WATCH` fuer `/watch` und `youtu.be`,
+- `DESKTOP_DOWNLOADS` fuer YouTubes eigene Liste unter `/feed/downloads`, ohne
+  die Watch-Anpassungen der Extension.
 
 `GeckoBrowserEngine` schaltet den User-Agent-Modus beim Wechsel dieser
 Seitentypen. Die WebExtension verwendet dieselbe URL-Abgrenzung in
@@ -95,6 +97,15 @@ automatisch fuer die heutige GeckoView-Engine. `EngineTab.evaluateJavascript`
 ist unter Gecko ein No-op. Fuer aktuelle App-Diagnosen sind daher entweder
 ein explizit eingerichteter Gecko-Debugging-Pfad oder eine temporaere,
 rein lesende WebExtension-Diagnose mit Native-Messaging erforderlich.
+
+Der Debugging-Pfad funktionierte am 01.11.2026 mit einem nur lokal geaenderten
+Debug-Bau: `GeckoRuntimeSettings.Builder().remoteDebuggingEnabled(true)` an
+`GeckoRuntime.create()` uebergeben und mit
+`adb forward tcp:6000 localabstract:de.shakie.tubenext.debug/firefox-debugger-socket`
+verbinden. Ein kleiner Firefox-RDP-Client (`listTabs`, `getTarget`, dann
+`evaluateJSAsync` am `consoleActor`) wertet JavaScript live in der Seite aus.
+Nicht committen und nicht ausliefern. Nach Tests mit angemeldetem Konto den Bau
+wieder entfernen, weil der Socket Zugriff auf die eingeloggte Sitzung gibt.
 
 Ein normaler Desktop-Browser bleibt als Vergleichsreferenz sinnvoll, ersetzt
 aber nicht die Messung in der betroffenen App-Session.

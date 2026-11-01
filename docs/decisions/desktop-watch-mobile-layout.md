@@ -26,6 +26,20 @@ die Inhalte passten aber nicht auf das Display. Messmethode und technische
 Folgerungen stehen in
 [`../technical-notes/youtube-responsive-layout-diagnostics.md`](../technical-notes/youtube-responsive-layout-diagnostics.md).
 
+## Ausnahme: YouTubes eigene Downloads-Liste
+
+`/feed/downloads` wird ebenfalls mit Desktop-User-Agent geladen. Die
+Download-Funktion gibt es nur mit YouTube Premium: Die Desktop-Watch-Seite zeigt
+Premium-Konten YouTubes eigene Download-Schaltflaeche und im Menue den Eintrag
+`Downloads`; ohne Premium fuehrt die Schaltflaeche zu YouTubes Premium-Angebot.
+Mit mobilem User-Agent leitet YouTube diesen Pfad auf
+`m.youtube.com/feed/downloads` um; dort blieb die Seite in Tube NEXT dunkel und
+leer.
+
+Die Ausnahme gilt nur fuer diesen Pfad. Tube NEXT zeigt damit lediglich YouTubes
+eigene Seite an und speichert, extrahiert oder exportiert selbst keine Inhalte.
+Das Nicht-Ziel `Downloads von YouTube-Inhalten` bleibt unveraendert.
+
 ## Grenzen fuer Aenderungen
 
 - Layout-, Viewport-, CSS- und Touch-Anpassungen duerfen den Desktop-Modus

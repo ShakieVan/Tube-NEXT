@@ -96,6 +96,33 @@ class YouTubeNavigationPolicyTest {
     }
 
     @Test
+    fun `keeps youtube downloads list in desktop mode without treating it as watch`() {
+        listOf(
+            "https://www.youtube.com/feed/downloads",
+            "https://m.youtube.com/feed/downloads",
+            "https://www.youtube.com/feed/downloads?app=desktop",
+            "https://youtube.com/feed/downloads/"
+        ).forEach { url ->
+            assertEquals(RenderMode.DESKTOP_DOWNLOADS, YouTubeNavigationPolicy.renderModeForUrl(url))
+            assertTrue(YouTubeNavigationPolicy.shouldUseDesktopMode(url))
+            assertFalse(YouTubeNavigationPolicy.isWatchUrl(url))
+        }
+    }
+
+    @Test
+    fun `leaves other feeds and lookalike download paths in mobile mode`() {
+        listOf(
+            "https://m.youtube.com/feed/history",
+            "https://m.youtube.com/feed/downloadsfoo",
+            "https://m.youtube.com/downloads",
+            "https://example.org/feed/downloads"
+        ).forEach { url ->
+            assertEquals(RenderMode.MOBILE, YouTubeNavigationPolicy.renderModeForUrl(url))
+            assertFalse(YouTubeNavigationPolicy.shouldUseDesktopMode(url))
+        }
+    }
+
+    @Test
     fun `rejects unsupported schemes hosts and lookalikes`() {
         assertFalse(YouTubeNavigationPolicy.isSupportedYouTubeUrl("javascript://www.youtube.com/"))
         assertFalse(YouTubeNavigationPolicy.isSupportedYouTubeUrl("https://youtube.com.example.org/"))

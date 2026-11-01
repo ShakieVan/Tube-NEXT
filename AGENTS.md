@@ -17,7 +17,9 @@ anderer Audio-Kanaele erhalten.
 - Alle Tabs verwenden GeckoView. Kein Android-WebView-, Custom-Tab- oder
   gemischter Produktpfad.
 - Watch-Seiten und `youtu.be` verwenden Desktop-Modus; andere unterstuetzte
-  YouTube-Seiten mobilen Modus.
+  YouTube-Seiten mobilen Modus. Einzige Ausnahme ist YouTubes eigene
+  Downloads-Liste `/feed/downloads` (nur mit YouTube Premium), ebenfalls im
+  Desktop-Modus.
 - Die Wiedergabe bleibt in der offiziellen YouTube-Seite. Die
   Android-Medienbenachrichtigung steuert die Gecko-MediaSession; sie ist kein
   zweiter Player.

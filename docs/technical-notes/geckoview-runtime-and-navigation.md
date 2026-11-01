@@ -70,6 +70,8 @@ kann.
 - `youtube.com`, `www.youtube.com` und `m.youtube.com` verwenden grundsaetzlich
   den mobilen User-Agent,
 - Pfade ab `/watch` sowie `youtu.be` verwenden den Desktop-User-Agent,
+- `/feed/downloads` verwendet ebenfalls den Desktop-User-Agent, gilt aber nicht
+  als Watch-Seite,
 - transiente Seiten wie `about:*` oder Account-/Cookie-Flows duerfen den
   User-Agent-Modus nicht umschalten.
 
@@ -84,6 +86,45 @@ nicht getrennte Moduskopien pflegen. Andernfalls kann ein expliziter Wechsel
 von Desktop-Watch zu einem mobilen Zwischenziel nur die Session umstellen,
 waehrend der folgende serverseitige Redirect zu `/watch` aufgrund eines
 veralteten Desktop-Flags den notwendigen Rueckwechsel ueberspringt.
+
+## YouTubes eigene Downloads-Liste
+
+Gemessen am 01.11.2026 ohne Login und mit Firefox-User-Agents:
+
+| Anfrage | User-Agent | Antwort |
+|---|---|---|
+| `www.youtube.com/feed/downloads` | mobil | 302 auf `m.youtube.com/feed/downloads` |
+| `m.youtube.com/feed/downloads` | Desktop | 302 auf `www.youtube.com/feed/downloads?app=desktop` |
+
+Vor der Korrektur schaltete der Menue-Eintrag `Downloads` auf der Desktop-Watch-Seite
+per `MODE_NAV` in den Mobile-Modus. Die Seite landete damit auf
+`m.youtube.com` und blieb dunkel. Mit Desktop-User-Agent bleibt sie auf demselben
+`www.youtube.com`-Origin wie die Watch-Seite, von der aus der Download ausgeloest
+wurde.
+
+In der Extension sind `shouldUseDesktop()` und `isWatchPage()` deshalb getrennt:
+Watch-Anpassungen wie `tubenext-watch-fit` und der Landscape-Modus gelten auf der
+Downloads-Seite nicht. Ohne Beleg aus einem echten Geraetetest gibt es fuer diese
+Seite keine eigenen CSS-Regeln.
+
+Die Download-Funktion gibt es nur mit YouTube Premium.
+
+Geraetepruefung am 01.11.2026 auf dem S24 mit Premium-Konto (Debug-Bau, Nutzer):
+Die Seite zeigt `Meine Downloads` mit dem heruntergeladenen Video und ist auf dem
+Handy gut bedienbar. Eine eigene mobile Ansicht ist deshalb nicht noetig. Die
+Wiedergabe ohne Netz wurde nicht gesondert geprueft.
+
+Geraetepruefung am 01.11.2026 auf dem S21 (Breite 360 CSS-Pixel), Konto ohne
+Premium:
+
+- `m.youtube.com/feed/downloads` landet mit Desktop-User-Agent auf
+  `www.youtube.com/feed/downloads`.
+- Die leere Seite (`ytd-rich-grid-renderer` mit Hinweistext) passt ohne seitliches
+  Scrollen auf die Breite.
+- Der Download-Button endet in YouTubes Premium-Angebot.
+- `ytd-download-button-renderer` ist dort per `display: none` ausgeblendet und
+  steht auch nicht im `...`-Menue, obwohl YouTube ihn in `flexibleItems` liefert.
+  Auf dem S24 war er sichtbar. Die Ursache ist nicht geklaert.
 
 ## Navigation vor dem Laden entscheiden
 
@@ -184,6 +225,10 @@ unbemerkt durch vorsorgliche Reloads ersetzen.
 8. Nach Activity-Neustart Long-Press-Neuer-Tab, Home-Feed-Einstellungen und
    weitere Extension-Nachrichten pruefen, damit die Bridge nach dem Rebind auf
    die neue Activity zeigt.
+9. Mit einem YouTube-Premium-Konto auf einer Watch-Seite ein Video
+   herunterladen und im Menue `Downloads` oeffnen: Die Toolbar zeigt
+   `youtube.com/feed/downloads`, das Video steht in der Liste und laesst sich
+   abspielen. Von dort zu Home wechseln: genau eine Navigation in den mobilen Modus.
 
 ## Historie
 

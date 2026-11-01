@@ -3,6 +3,8 @@ package de.shakie.tubenext.engine.gecko
 import android.app.Activity
 import android.content.Context
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.ViewGroup
 import de.shakie.tubenext.browser.LinkInterceptor
@@ -37,6 +39,7 @@ class GeckoBrowserEngine(
     private var navExtensionInstallRequested = false
     private var navExtension: WebExtension? = null
     private val navBridgeBySession = WeakHashMap<GeckoSession, NavBridge>()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     init {
         ensureNavigationExtensionInstalled()
@@ -414,6 +417,9 @@ class GeckoBrowserEngine(
                     translationXFraction,
                     translationYFraction
                 )
+            },
+            onWatchPositionRequested = { callback ->
+                requestWatchPosition(session, callback)
             }
         )
         if (shouldLoadInitialUrl) {
@@ -475,7 +481,10 @@ class GeckoBrowserEngine(
     }
 
     private fun removeNavigationBridge(session: GeckoSession) {
-        navBridgeBySession.remove(session)?.homeFeedPort?.disconnect()
+        navBridgeBySession.remove(session)?.let { bridge ->
+            bridge.homeFeedPort?.disconnect()
+            finishWatchPositionRequest(bridge, null)
+        }
     }
 
     private fun bindAllNavigationBridges() {
@@ -499,21 +508,8 @@ class GeckoBrowserEngine(
                         return GeckoResult.fromValue(null)
                     }
                     if (parseMessageType(message) == "WATCH_PROGRESS") {
-                        val payload = when (message) {
-                            is JSONObject -> message
-                            is Map<*, *> -> runCatching { JSONObject(message) }.getOrNull()
-                            else -> null
-                        }
-                        payload?.let {
-                            bridge.callbacks.onWatchProgress(
-                                bridge.tabId,
-                                EngineWatchProgress(
-                                    it.optString("url"),
-                                    it.optDouble("position"),
-                                    it.optDouble("duration"),
-                                    it.optBoolean("ended", false)
-                                )
-                            )
+                        jsonPayload(message)?.let {
+                            bridge.callbacks.onWatchProgress(bridge.tabId, parseWatchProgress(it))
                         }
                         return GeckoResult.fromValue(null)
                     }
@@ -562,6 +558,11 @@ class GeckoBrowserEngine(
                             when (parseMessageType(message)) {
                                 HOME_FEED_READY_TYPE -> postHomeFeedSettings(bridge)
                                 PAGE_PREVIEW_READY_TYPE -> bridge.callbacks.onPageReadyForPreview(bridge.tabId)
+                                WATCH_POSITION_TYPE -> jsonPayload(message)?.let { payload ->
+                                    if (payload.optInt("requestId") == bridge.watchPositionRequest?.id) {
+                                        finishWatchPositionRequest(bridge, parseWatchProgress(payload))
+                                    }
+                                }
                                 PROGRESS_LAYOUT_ANOMALY_TYPE -> {
                                     if (BuildConfig.PROGRESS_DIAGNOSTICS_ENABLED) {
                                         diagnosticPayload(message)?.let { payload ->
@@ -578,6 +579,7 @@ class GeckoBrowserEngine(
                         override fun onDisconnect(port: WebExtension.Port) {
                             if (bridge.homeFeedPort == port) {
                                 bridge.homeFeedPort = null
+                                finishWatchPositionRequest(bridge, null)
                             }
                         }
                     })
@@ -647,6 +649,50 @@ class GeckoBrowserEngine(
         )
     }
 
+    private fun requestWatchPosition(session: GeckoSession, callback: (EngineWatchProgress?) -> Unit) {
+        val bridge = navBridgeBySession[session]
+        val port = bridge?.homeFeedPort
+        if (bridge == null || port == null) {
+            callback(null)
+            return
+        }
+        finishWatchPositionRequest(bridge, null)
+        val timeout = Runnable { finishWatchPositionRequest(bridge, null) }
+        val requestId = bridge.lastWatchPositionRequestId + 1
+        bridge.lastWatchPositionRequestId = requestId
+        bridge.watchPositionRequest = WatchPositionRequest(requestId, callback, timeout)
+        mainHandler.postDelayed(timeout, WATCH_POSITION_TIMEOUT_MS)
+        port.postMessage(
+            JSONObject()
+                .put("type", WATCH_POSITION_REQUEST_TYPE)
+                .put("requestId", requestId)
+        )
+    }
+
+    private fun finishWatchPositionRequest(bridge: NavBridge, position: EngineWatchProgress?) {
+        val request = bridge.watchPositionRequest ?: return
+        bridge.watchPositionRequest = null
+        mainHandler.removeCallbacks(request.timeout)
+        request.callback(position)
+    }
+
+    private fun jsonPayload(message: Any?): JSONObject? {
+        return when (message) {
+            is JSONObject -> message
+            is Map<*, *> -> runCatching { JSONObject(message) }.getOrNull()
+            else -> null
+        }
+    }
+
+    private fun parseWatchProgress(payload: JSONObject): EngineWatchProgress {
+        return EngineWatchProgress(
+            payload.optString("url"),
+            payload.optDouble("position"),
+            payload.optDouble("duration"),
+            payload.optBoolean("ended", false)
+        )
+    }
+
     private fun parseNavigationIntent(message: Any?): NavigationIntent? {
         return when (message) {
             is JSONObject -> {
@@ -688,7 +734,15 @@ class GeckoBrowserEngine(
         var homeFeedPort: WebExtension.Port? = null,
         var videoScale: Float = 1f,
         var videoTranslationXFraction: Float = 0f,
-        var videoTranslationYFraction: Float = 0f
+        var videoTranslationYFraction: Float = 0f,
+        var lastWatchPositionRequestId: Int = 0,
+        var watchPositionRequest: WatchPositionRequest? = null
+    )
+
+    private class WatchPositionRequest(
+        val id: Int,
+        val callback: (EngineWatchProgress?) -> Unit,
+        val timeout: Runnable
     )
 
     private data class RetainedGeckoTab(
@@ -723,6 +777,9 @@ class GeckoBrowserEngine(
         private const val PAGE_PREVIEW_READY_TYPE = "PAGE_PREVIEW_READY"
         private const val PROGRESS_DIAGNOSTICS_SETTINGS_TYPE = "PROGRESS_DIAGNOSTICS_SETTINGS"
         private const val PROGRESS_LAYOUT_ANOMALY_TYPE = "PROGRESS_LAYOUT_ANOMALY"
+        private const val WATCH_POSITION_REQUEST_TYPE = "WATCH_POSITION_REQUEST"
+        private const val WATCH_POSITION_TYPE = "WATCH_POSITION"
+        private const val WATCH_POSITION_TIMEOUT_MS = 500L
         private const val MAX_DIAGNOSTIC_PAYLOAD_CHARACTERS = 48_000
         private const val MEDIA_ARTWORK_SIZE_PX = 384
         fun debugLog(tag: String, message: String) {
@@ -753,7 +810,8 @@ private data class GeckoEngineTab(
     val onDetach: () -> Unit,
     val onDestroy: () -> Unit,
     val onHomeFeedSettingsChanged: (EngineHomeFeedSettings) -> Unit,
-    val onVideoTransformChanged: (Float, Float, Float) -> Unit
+    val onVideoTransformChanged: (Float, Float, Float) -> Unit,
+    val onWatchPositionRequested: ((EngineWatchProgress?) -> Unit) -> Unit
 ) : EngineTab {
     override val view: GeckoView = geckoView
 
@@ -815,6 +873,10 @@ private data class GeckoEngineTab(
         translationYFraction: Float
     ) {
         onVideoTransformChanged(scale, translationXFraction, translationYFraction)
+    }
+
+    override fun requestWatchPosition(callback: (EngineWatchProgress?) -> Unit) {
+        onWatchPositionRequested(callback)
     }
 
     override fun onPause() {

@@ -27,6 +27,8 @@ interface EngineTab {
         translationXFraction: Float,
         translationYFraction: Float
     )
+    /** Calls back exactly once with the live player position, or null if the page has none. */
+    fun requestWatchPosition(callback: (EngineWatchProgress?) -> Unit)
     fun onPause()
     fun onResume()
     fun recoverFromAudioRouteChange()

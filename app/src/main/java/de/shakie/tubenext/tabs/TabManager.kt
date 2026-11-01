@@ -50,6 +50,9 @@ class TabManager(
         persist()
     }
 
+    fun watchProgress(tabId: String): WatchProgress? =
+        sessions.firstOrNull { it.id == tabId }?.watchProgress
+
     fun restoreUrl(tabId: String): String? = sessions.firstOrNull { it.id == tabId }?.restoreUrl()
 
     fun select(tabId: String) {

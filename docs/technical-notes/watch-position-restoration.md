@@ -58,6 +58,13 @@ Es gibt keine durch Positionsmeldungen ausgeloesten Loads, History-Eintraege,
 DOM-Seeks oder `history.replaceState`-Aufrufe. Rotation und Rebind behalten
 weiterhin vorhandene Sessions; `createTab()` laedt nur neu erzeugte Sessions.
 
+## Abfrage fuer das Teilen
+
+Der Teilen-Dialog nutzt dieselbe Pruefung (`validatedPlayback`), liest die Zeit
+aber im Moment des Taps ueber `tubeNextWatchPosition()`, ohne einen Checkpoint
+zu senden. Der Ablauf steht in
+[`privacy-preserving-watch-sharing.md`](privacy-preserving-watch-sharing.md).
+
 ## Grenzen
 
 Es wird auf die letzte volle Sekunde abgerundet. Bei abruptem Prozessende

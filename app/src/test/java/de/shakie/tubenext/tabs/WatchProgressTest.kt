@@ -17,6 +17,32 @@ class WatchProgressTest {
     }
 
     @Test
+    fun `shares the live position before the checkpoint and only for the same video`() {
+        val live = WatchProgress("abcdefghijk", 182)
+        val otherVideo = WatchProgress("lmnopqrstuv", 182)
+        assertEquals(182L, WatchProgress.shareableSeconds(watch, live, progress))
+        assertEquals(135L, WatchProgress.shareableSeconds(watch, null, progress))
+        assertEquals(135L, WatchProgress.shareableSeconds(watch, otherVideo, progress))
+        assertNull(WatchProgress.shareableSeconds(watch, null, null))
+        assertNull(WatchProgress.shareableSeconds(watch, otherVideo, null))
+        assertNull(WatchProgress.shareableSeconds("https://www.youtube.com/", live, progress))
+    }
+
+    @Test
+    fun `a finished or unstarted video has no shareable position`() {
+        val atStart = WatchProgress("abcdefghijk", 0)
+        assertNull(WatchProgress.shareableSeconds(watch, atStart, progress))
+        assertNull(WatchProgress.shareableSeconds(watch, null, atStart))
+    }
+
+    @Test
+    fun `labels positions like the player clock`() {
+        assertEquals("0:45", WatchProgress.clockLabel(45))
+        assertEquals("3:02", WatchProgress.clockLabel(182))
+        assertEquals("1:03:02", WatchProgress.clockLabel(3782))
+    }
+
+    @Test
     fun `replaces all conflicting times and retains encoded playlist context`() {
         assertEquals(
             "$watch&list=PL%2Bxyz&index=2&t=135s",

@@ -51,6 +51,21 @@ class YouTubeNavigationPolicyTest {
     }
 
     @Test
+    fun `adds only the chosen position to privacy share urls`() {
+        val url = "https://m.youtube.com/watch?si=recipient-token&v=abc_123-XYZ&list=PL123&t=42"
+        val shared = "https://www.youtube.com/watch?v=abc_123-XYZ"
+        assertEquals("$shared&t=3m2s", YouTubeNavigationPolicy.privacyShareUrlAtPosition(url, 182))
+        assertEquals("$shared&t=45s", YouTubeNavigationPolicy.privacyShareUrlAtPosition(url, 45))
+        assertEquals("$shared&t=3m0s", YouTubeNavigationPolicy.privacyShareUrlAtPosition(url, 180))
+        assertEquals("$shared&t=1h0m5s", YouTubeNavigationPolicy.privacyShareUrlAtPosition(url, 3605))
+        assertEquals(shared, YouTubeNavigationPolicy.privacyShareUrlAtPosition(url, 0))
+        assertEquals(
+            null,
+            YouTubeNavigationPolicy.privacyShareUrlAtPosition("https://www.youtube.com/", 182)
+        )
+    }
+
+    @Test
     fun `does not offer privacy sharing outside valid watch urls`() {
         assertEquals(null, YouTubeNavigationPolicy.privacyShareUrlForUrl("https://www.youtube.com/"))
         assertEquals(

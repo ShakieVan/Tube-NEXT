@@ -19,6 +19,8 @@
   var VIDEO_TRANSFORM = "VIDEO_TRANSFORM";
   var PAGE_PREVIEW_READY = "PAGE_PREVIEW_READY";
   var PROGRESS_DIAGNOSTICS_SETTINGS = "PROGRESS_DIAGNOSTICS_SETTINGS";
+  var WATCH_POSITION_REQUEST = "WATCH_POSITION_REQUEST";
+  var WATCH_POSITION = "WATCH_POSITION";
   var PROGRESS_LAYOUT_ANOMALY = "PROGRESS_LAYOUT_ANOMALY";
   var RYD_GET_VOTES = "TUBENEXT_RYD_GET_VOTES";
   var RYD_SUBMIT_VOTE = "TUBENEXT_RYD_SUBMIT_VOTE";
@@ -1021,6 +1023,13 @@
         if (message.type === PROGRESS_DIAGNOSTICS_SETTINGS) {
           progressDiagnosticsEnabled = message.enabled === true;
           scheduleProgressLayoutDiagnosticCheck();
+          return;
+        }
+        if (message.type === WATCH_POSITION_REQUEST) {
+          nativePort.postMessage(Object.assign(
+            { type: WATCH_POSITION, requestId: message.requestId },
+            globalThis.tubeNextWatchPosition()
+          ));
           return;
         }
         if (message.type !== HOME_FEED_SETTINGS) {

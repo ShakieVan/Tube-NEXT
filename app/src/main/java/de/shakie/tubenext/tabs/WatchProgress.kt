@@ -3,6 +3,7 @@ package de.shakie.tubenext.tabs
 import de.shakie.tubenext.browser.YouTubeNavigationPolicy
 import java.net.URI
 import java.net.URLDecoder
+import java.util.Locale
 
 /** A tab checkpoint, kept separate from the live URL and canonical history. */
 data class WatchProgress(val videoId: String, val positionSeconds: Long) {
@@ -32,6 +33,25 @@ data class WatchProgress(val videoId: String, val positionSeconds: Long) {
                 position < 0 || position > duration || position >= Long.MAX_VALUE.toDouble()
             ) return null
             return WatchProgress(videoId, if (ended) 0 else position.toLong())
+        }
+
+        /** The live player wins; the checkpoint only covers moments like ads or running seeks. */
+        fun shareableSeconds(url: String, live: WatchProgress?, checkpoint: WatchProgress?): Long? {
+            val videoId = YouTubeNavigationPolicy.videoIdForUrl(url) ?: return null
+            return listOfNotNull(live, checkpoint)
+                .firstOrNull { it.videoId == videoId }
+                ?.positionSeconds
+                ?.takeIf { it > 0 }
+        }
+
+        fun clockLabel(seconds: Long): String {
+            val minutes = seconds / 60 % 60
+            val rest = seconds % 60
+            return if (seconds >= 3600) {
+                String.format(Locale.ROOT, "%d:%02d:%02d", seconds / 3600, minutes, rest)
+            } else {
+                String.format(Locale.ROOT, "%d:%02d", minutes, rest)
+            }
         }
     }
 }

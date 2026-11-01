@@ -63,6 +63,20 @@ object YouTubeNavigationPolicy {
         return "https://www.youtube.com/watch?v=$videoId"
     }
 
+    fun privacyShareUrlAtPosition(url: String, positionSeconds: Long): String? {
+        val shareUrl = privacyShareUrlForUrl(url) ?: return null
+        if (positionSeconds <= 0) return shareUrl
+        val hours = positionSeconds / 3600
+        val minutes = positionSeconds / 60 % 60
+        val seconds = positionSeconds % 60
+        val time = when {
+            hours > 0 -> "${hours}h${minutes}m${seconds}s"
+            minutes > 0 -> "${minutes}m${seconds}s"
+            else -> "${seconds}s"
+        }
+        return "$shareUrl&t=$time"
+    }
+
     private fun parseHttpUri(url: String): URI? {
         if (url.isBlank()) return null
         val uri = runCatching { URI(url) }.getOrNull() ?: return null

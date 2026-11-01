@@ -55,8 +55,8 @@ Bestehende Querschnittsdokumente:
 - [`technical-notes/youtube-responsive-layout-diagnostics.md`](technical-notes/youtube-responsive-layout-diagnostics.md):
   Live-Diagnose von Layout-, Sichtviewport und YouTube-Breakpoints.
 - [`technical-notes/privacy-preserving-watch-sharing.md`](technical-notes/privacy-preserving-watch-sharing.md):
-  nativer Watch-Share-Link ohne Kontextparameter und eng begrenztes
-  Ausblenden von YouTubes Teilen-Aktion.
+  nativer Watch-Share-Link ohne Kontextparameter, Zwischendialog fuer die
+  aktuelle Position und eng begrenztes Ausblenden von YouTubes Teilen-Aktion.
 - [`technical-notes/return-youtube-dislike-integration.md`](technical-notes/return-youtube-dislike-integration.md):
   optionale geschaetzte Dislike-Zahl mit Einwilligung, Stimmenprotokoll,
   Cache und konservativen lokalen Abfragelimits.

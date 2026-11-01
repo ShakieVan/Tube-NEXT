@@ -30,15 +30,17 @@ function harness() {
       throw new Error(selector);
     }
   };
-  vm.runInNewContext(script, { window, document, URL, Date: { now: () => now },
+  const context = { window, document, URL, Date: { now: () => now },
     browser: { runtime: { sendNativeMessage(app, message) {
       assert.equal(app, "tubenext_nav_switch");
       sent.push(JSON.parse(JSON.stringify(message)));
       return Promise.resolve();
     } } }
-  });
+  };
+  vm.runInNewContext(script, context);
   return {
     sent, classes, window, document,
+    position() { return JSON.parse(JSON.stringify(context.tubeNextWatchPosition())); },
     get video() { return video; },
     emit(name, target = video) { (events.get(name) || []).forEach(fn => fn({ target })); },
     tick(ms) { now += ms; },
@@ -190,6 +192,48 @@ test("metadata arriving before the watch renderer ID can be bound on the next ev
   h.rendererId("lmnopqrstuv");
   h.emit("pause");
   assert.equal(h.sent[0].position, 42);
+});
+
+test("position requests read the exact time without sending or disturbing checkpoints", () => {
+  const h = harness();
+  h.video.currentTime = 135;
+  h.emit("timeupdate");
+  h.video.currentTime = 182.7;
+  assert.deepEqual(h.position(), {
+    url: "https://www.youtube.com/watch?v=abcdefghijk",
+    position: 182.7,
+    duration: 600,
+    ended: false
+  });
+  assert.equal(h.sent.length, 1);
+  h.tick(1000);
+  h.emit("timeupdate");
+  assert.equal(h.sent.length, 1);
+  h.tick(4000);
+  h.emit("timeupdate");
+  assert.deepEqual(h.sent.map(x => x.position), [135, 182.7]);
+});
+
+test("position requests return nothing where a link could not start at that time", () => {
+  const h = harness();
+  assert.equal(h.position(), null);
+  h.video.currentTime = 135;
+  assert.equal(h.position().position, 135);
+  for (const flag of ["ad-showing", "ad-interrupting", "ytp-live"]) {
+    h.classes.add(flag);
+    assert.equal(h.position(), null);
+    h.classes.delete(flag);
+  }
+  h.video.seeking = true;
+  assert.equal(h.position(), null);
+  h.video.seeking = false;
+  h.emit("yt-navigate-start");
+  assert.equal(h.position(), null);
+  h.navigate("lmnopqrstuv");
+  h.emit("yt-navigate-finish");
+  assert.equal(h.position(), null);
+  h.window.location.href = "https://www.youtube.com/";
+  assert.equal(h.position(), null);
 });
 
 test("separate tabs keep independent checkpoints and non-watch pages do not report", () => {

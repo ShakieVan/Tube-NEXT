@@ -36,27 +36,47 @@
     lastSentAt = -Infinity;
   }
 
-  function checkpoint(force) {
-    if (navigating) return;
+  // The main player, only while its time is a position of the video in the URL.
+  function validatedPlayback() {
+    if (navigating) return null;
     var video = mainVideo();
     var player = document.querySelector("#movie_player");
     var id = videoId();
-    if (!video || !player || !id) return;
+    if (!video || !player || !id) return null;
     // The watch renderer can receive its video-id after the media metadata event.
     if (pendingMetadata && pendingMetadata.video === video && pendingMetadata.source === video.currentSrc) {
       bind(video);
     }
     var binding = bindings.get(video);
-    if (!binding || binding.videoId !== id || binding.source !== video.currentSrc) return;
+    if (!binding || binding.videoId !== id || binding.source !== video.currentSrc) return null;
     // Ads and live/DVR have a different time origin from an on-demand watch URL.
     if (player.classList.contains("ad-showing") || player.classList.contains("ad-interrupting") ||
         player.classList.contains("ytp-live") || video.readyState < 2 || video.seeking ||
         !Number.isFinite(video.currentTime) || !Number.isFinite(video.duration) ||
-        video.duration <= 0 || video.currentTime < 0 || video.currentTime > video.duration) return;
+        video.duration <= 0 || video.currentTime < 0 || video.currentTime > video.duration) return null;
     // Initial zero-valued events must not erase a checkpoint before YouTube seeks to t=.
-    if (!video.ended && video.currentTime === 0 && !binding.checkpointed && !video.played.length) return;
+    if (!video.ended && video.currentTime === 0 && !binding.checkpointed && !video.played.length) return null;
+    return { video: video, binding: binding, id: id };
+  }
+
+  // content.js owns the native port and answers position requests through this snapshot.
+  globalThis.tubeNextWatchPosition = function () {
+    var playback = validatedPlayback();
+    return playback && {
+      url: window.location.href,
+      position: playback.video.currentTime,
+      duration: playback.video.duration,
+      ended: playback.video.ended
+    };
+  };
+
+  function checkpoint(force) {
+    var playback = validatedPlayback();
+    if (!playback) return;
+    var video = playback.video;
+    var binding = playback.binding;
     var seconds = video.ended ? 0 : Math.floor(video.currentTime);
-    var key = id + ":" + seconds;
+    var key = playback.id + ":" + seconds;
     var now = Date.now();
     if (key === lastSentKey || (!force && now - lastSentAt < 5000)) return;
     try {

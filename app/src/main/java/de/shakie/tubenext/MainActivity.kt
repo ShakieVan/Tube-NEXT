@@ -71,6 +71,7 @@ import de.shakie.tubenext.engine.EngineCallbacks
 import de.shakie.tubenext.engine.EngineHomeFeedSettings
 import de.shakie.tubenext.engine.EngineTab
 import de.shakie.tubenext.engine.EngineType
+import de.shakie.tubenext.engine.EngineWatchProgress
 import de.shakie.tubenext.engine.gecko.GeckoBrowserEngine
 import de.shakie.tubenext.tabs.AppTab
 import de.shakie.tubenext.tabs.CanonicalTabHistory
@@ -133,6 +134,8 @@ class MainActivity : AppCompatActivity() {
     private var updateDownloadHandle: UpdateDownloader.DownloadHandle? = null
     private var settingsDialog: androidx.appcompat.app.AlertDialog? = null
     private var linkMenuDialog: androidx.appcompat.app.AlertDialog? = null
+    private var watchShareDialog: androidx.appcompat.app.AlertDialog? = null
+    private var watchPositionRequestPending = false
     private var youtubeLinkAssociationStatusTextView: TextView? = null
     private var activeTabOverviewAdapter: TabOverviewAdapter? = null
     private var batteryOptimizationDialogVisible = false
@@ -329,10 +332,7 @@ class MainActivity : AppCompatActivity() {
             reloadCurrentTab()
         }
         privacyShareButton.setOnClickListener {
-            currentTab()
-                ?.url
-                ?.let(YouTubeNavigationPolicy::privacyShareUrlForUrl)
-                ?.let(::shareLink)
+            shareCurrentWatchPage()
         }
         tabSwitcherButton.setOnClickListener {
             showTabOverview()
@@ -2558,6 +2558,44 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun shareCurrentWatchPage() {
+        val tab = currentTab() ?: return
+        if (watchPositionRequestPending || watchShareDialog?.isShowing == true) return
+        watchPositionRequestPending = true
+        tab.engineTab.requestWatchPosition { sample ->
+            watchPositionRequestPending = false
+            if (isDestroyed || selectedTabId != tab.id) return@requestWatchPosition
+            val live = sample?.let {
+                WatchProgress.fromSample(it.url, it.positionSeconds, it.durationSeconds, it.ended)
+            }
+            val positionSeconds = WatchProgress.shareableSeconds(
+                tab.url, live, tabManager.watchProgress(tab.id)
+            )
+            if (positionSeconds == null) {
+                YouTubeNavigationPolicy.privacyShareUrlForUrl(tab.url)?.let(::shareLink)
+            } else {
+                showWatchShareDialog(tab.url, positionSeconds)
+            }
+        }
+    }
+
+    private fun showWatchShareDialog(url: String, positionSeconds: Long) {
+        val labels = arrayOf(
+            getString(R.string.watch_share_at_position, WatchProgress.clockLabel(positionSeconds)),
+            getString(R.string.watch_share_from_start)
+        )
+        watchShareDialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.watch_share_title)
+            .setItems(labels) { _, index ->
+                YouTubeNavigationPolicy.privacyShareUrlAtPosition(
+                    url,
+                    if (index == 0) positionSeconds else 0
+                )?.let(::shareLink)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
     private fun shareLink(url: String) {
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
@@ -3310,6 +3348,10 @@ class MainActivity : AppCompatActivity() {
             translationXFraction: Float,
             translationYFraction: Float
         ) = Unit
+
+        override fun requestWatchPosition(callback: (EngineWatchProgress?) -> Unit) {
+            callback(null)
+        }
 
         override fun onPause() = Unit
 

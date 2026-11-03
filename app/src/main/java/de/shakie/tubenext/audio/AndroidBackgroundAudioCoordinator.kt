@@ -60,6 +60,8 @@ class AndroidBackgroundAudioCoordinator(
         .build()
     private var controls: EngineMediaControls? = null
     private var controlsTabId: String? = null
+    // Gecko keeps one media session per tab; only the owning tab is mirrored to Android.
+    private val tabControls = mutableMapOf<String, EngineMediaControls>()
     private var lastState: EnginePlaybackState? = null
     private var lastStateTabId: String? = null
     private var artwork: Bitmap? = null
@@ -98,9 +100,26 @@ class AndroidBackgroundAudioCoordinator(
 
     override fun onMediaControlsChanged(tabId: String, controls: EngineMediaControls?) {
         if (isShutdown) return
+        if (controls == null) tabControls.remove(tabId) else tabControls[tabId] = controls
         if (controls == null && controlsTabId != tabId) {
             debugLog("ignore controls=false tab=$tabId active=$controlsTabId")
             return
+        }
+        if (controls != null && !MediaSessionLifecyclePolicy.mayMoveControlsTo(
+                ownerTabId = lastStateTabId,
+                tabId = tabId,
+                ownerIsPlaying = lastState?.isPlaying == true
+            )
+        ) {
+            debugLog("keep controls of playing tab=$lastStateTabId; tab=$tabId waits for its start")
+            return
+        }
+        if (controls != null && lastStateTabId != null && lastStateTabId != tabId) {
+            // The paused owner hands over; this tab reports its own state right after activation.
+            debugLog("session moves from paused tab=$lastStateTabId to tab=$tabId")
+            audioFocusInterruptionPolicy.cancelResume()
+            lastState = null
+            lastStateTabId = tabId
         }
         this.controls = controls
         controlsTabId = if (controls == null) null else tabId
@@ -155,9 +174,23 @@ class AndroidBackgroundAudioCoordinator(
 
     override fun onForegroundPlaybackState(tabId: String, state: EnginePlaybackState) {
         if (isShutdown) return
-        if (!state.isPlaying && lastStateTabId != null && lastStateTabId != tabId) {
-            debugLog("ignore paused state tab=$tabId active=$lastStateTabId")
-            return
+        when (MediaSessionLifecyclePolicy.ownershipForPlaybackState(
+            ownerTabId = lastStateTabId,
+            tabId = tabId,
+            isPlaying = state.isPlaying,
+            startedPlayback = state.startedPlayback
+        )) {
+            MediaSessionLifecyclePolicy.PlaybackOwnership.IGNORE -> {
+                debugLog("ignore playing=${state.isPlaying} state tab=$tabId active=$lastStateTabId")
+                return
+            }
+            MediaSessionLifecyclePolicy.PlaybackOwnership.TAKE_OVER -> {
+                debugLog("playback moves from tab=$lastStateTabId to tab=$tabId")
+                adoptControls(tabId)
+            }
+            MediaSessionLifecyclePolicy.PlaybackOwnership.ACCEPT -> {
+                if (controlsTabId != tabId && tabControls.containsKey(tabId)) adoptControls(tabId)
+            }
         }
         lastState = state
         lastStateTabId = tabId
@@ -179,10 +212,18 @@ class AndroidBackgroundAudioCoordinator(
             )
         ) {
             showNotification(state)
+        } else if (MediaSessionLifecyclePolicy.shouldRemoveBackgroundPlayer(
+                appInBackground = appInBackground,
+                isPlaying = state.isPlaying
+            )
+        ) {
+            // The service drops its paused notification and stops; it ignores this if not running.
+            showNotification(state)
         }
     }
 
     override fun onTabClosing(tabId: String) {
+        tabControls.remove(tabId)
         if (controlsTabId != tabId && lastStateTabId != tabId) return
         debugLog("tab closing clears playback tab=$tabId")
         controls?.stop()
@@ -195,6 +236,7 @@ class AndroidBackgroundAudioCoordinator(
 
     fun onTabSuspended(tabId: String) {
         if (isPlaybackActiveForTab(tabId)) return
+        tabControls.remove(tabId)
         if (controlsTabId != tabId && lastStateTabId != tabId) return
         debugLog("tab suspended clears playback tab=$tabId")
         clearPlaybackState()
@@ -233,6 +275,7 @@ class AndroidBackgroundAudioCoordinator(
         BackgroundAudioService.controller = null
         handler.removeCallbacksAndMessages(null)
         abandonAudioFocus()
+        tabControls.clear()
         clearPlaybackState(stopService = false)
         BackgroundAudioService.stop(context)
         mediaSession.release()
@@ -287,6 +330,16 @@ class AndroidBackgroundAudioCoordinator(
 
     override fun seekBackward() {
         controls?.seekBackward()
+    }
+
+    private fun adoptControls(tabId: String) {
+        val adopted = tabControls[tabId]
+        controls = adopted
+        controlsTabId = adopted?.let { tabId }
+        controlsGeneration += 1
+        mediaSession.isActive = MediaSessionLifecyclePolicy.shouldExposeSession(adopted != null)
+        BackgroundAudioService.controller = if (adopted == null) null else this
+        debugLog("controls=${adopted != null} adopted tab=$tabId")
     }
 
     private fun showNotification(state: EnginePlaybackState, force: Boolean = false) {

@@ -7,5 +7,7 @@ data class EnginePlaybackState(
     val isPlaying: Boolean,
     val positionMs: Long,
     val durationMs: Long?,
-    val isLive: Boolean
+    val isLive: Boolean,
+    /** Only Gecko's play event; metadata and position refreshes may repeat a stale playing state. */
+    val startedPlayback: Boolean = false
 )

@@ -127,7 +127,7 @@ class GeckoBrowserEngine(
                 activeMediaSession?.previousTrack()
             }
         }
-        fun emitPlaybackState() {
+        fun emitPlaybackState(startedPlayback: Boolean = false) {
             callbacks.onPlaybackStateChanged(
                 tabId,
                 EnginePlaybackState(
@@ -137,7 +137,8 @@ class GeckoBrowserEngine(
                     isPlaying = mediaPlaying,
                     positionMs = mediaPositionMs,
                     durationMs = mediaDurationMs,
-                    isLive = mediaDurationMs == null
+                    isLive = mediaDurationMs == null,
+                    startedPlayback = startedPlayback
                 )
             )
         }
@@ -351,7 +352,7 @@ class GeckoBrowserEngine(
             override fun onPlay(session: GeckoSession, mediaSession: MediaSession) {
                 debugLog("TUBENEXT_AUDIO", "tab=$tabId media play")
                 mediaPlaying = true
-                emitPlaybackState()
+                emitPlaybackState(startedPlayback = true)
             }
 
             override fun onPause(session: GeckoSession, mediaSession: MediaSession) {

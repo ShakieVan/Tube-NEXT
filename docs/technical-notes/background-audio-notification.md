@@ -1,7 +1,7 @@
 # Hintergrund-Audio und Player-Benachrichtigung
 
-Stand: am 15.08.2026 gegen `master` und den aktuellen Android-Audiofokus-
-Vertrag geprueft
+Stand: am 03.11.2026 nach den Korrekturen zum Wiedergabewechsel zwischen Tabs
+und zur Pause ueber Systemsteuerungen geprueft
 
 ## Zweck
 
@@ -66,6 +66,39 @@ Eine Notification wird im Hintergrund nur erzeugt, wenn:
 Pausenmeldungen eines anderen Tabs duerfen den gerade aktiven Wiedergabetab
 nicht ueberschreiben.
 
+## Wiedergabewechsel zwischen Tabs
+
+GeckoView haelt je Tab eine eigene Mediensitzung. Startet in einem Tab ein
+Video, pausiert Gecko das Video eines anderen Tabs selbst. Dieser alte Tab
+meldet dabei kein `onPause`, sondern wiederholt in `onMetadata` noch kurz seinen
+alten Zustand `isPlaying = true` und wird danach deaktiviert.
+
+Bis `v1.4.11` nahm der Koordinator jede Spielt-Meldung an. Die veraltete
+Meldung des alten Tabs ueberschrieb deshalb den neuen Wiedergabetab, und
+dessen Deaktivierung gab den Audio-Fokus ab. Je nach Reihenfolge blieb die
+Steuerung ganz leer. Das neue Video lief danach weiter, im Hintergrund aber
+ohne Benachrichtigung, Foreground-Service, Audio-Fokus und Systemsteuerung.
+Android zeigte gleichzeitig den alten Titel als pausiert. Auf dem S21 lief so
+ein Video bei ausgeschaltetem Bildschirm mit etwa 60 % eines CPU-Kerns weiter,
+ohne dass man es dort anhalten konnte. Ausloeser im Alltag: im ersten Tab einen
+Vorschlag anklicken, der automatisch startet, und gleichzeitig in einem neuen
+Tab ein anderes Video starten.
+
+Seitdem gilt:
+
+- Der Koordinator merkt sich die Gecko-Steuerung jedes Tabs. Android spiegelt
+  nur den besitzenden Tab.
+- Nur Geckos echtes Play-Ereignis (`EnginePlaybackState.startedPlayback`)
+  eines anderen Tabs uebernimmt Besitz, Steuerung und Benachrichtigung.
+  Metadaten-, Positions- und Pausenmeldungen nicht besitzender Tabs werden
+  verworfen.
+- Ein neu aktivierter Tab erhaelt die Steuerung nicht, solange ein anderer Tab
+  spielt. Er wartet auf seinen eigenen Start. Ist der Besitzer pausiert,
+  wechselt die Sitzung sofort mitsamt Zustand zum neuen Tab, damit Titel und
+  Steuerung zusammenpassen.
+
+Die Regeln liegen testbar in `MediaSessionLifecyclePolicy`.
+
 ## Schliessen und Suspendieren von Tabs
 
 `MainActivity.closeTabById()` ruft
@@ -94,6 +127,18 @@ Wenn der Service einen pausierten Zustand erhaelt, entfernt er die
 Foreground-Notification mit `STOP_FOREGROUND_REMOVE` und beendet sich. Dieses
 Verhalten ist beabsichtigt: Besonders auf Samsung-Geraeten kann eine pausierte
 MediaStyle-Zeile sonst nicht wegwischbar bleiben.
+
+Jede Pause im Hintergrund muss diesen Service erreichen, nicht nur die
+Pause-Aktion der Benachrichtigung selbst. Ab Android 13 bedient die
+Systemoberflaeche Benachrichtigungsleiste, Sperrbildschirm und Samsung Now Bar
+ueber die `MediaSession`. Dazu kommen Headset- und Bluetooth-Tasten sowie
+Pausen der Seite selbst, etwa am Videoende. Seit `v1.4.6` meldete der
+Koordinator pausierte Zustaende nicht mehr an den Service. Foreground-Service
+und partieller Wake-Lock blieben deshalb nach einer solchen Pause gehalten, bis
+die App wieder in den Vordergrund kam. Das Telefon konnte dann trotz
+angehaltenem Video nicht schlafen. Seit der Korrektur schickt der Koordinator
+jede pausierte Meldung des besitzenden Tabs im Hintergrund an den Service
+(`shouldRemoveBackgroundPlayer`). Laeuft der Service nicht, ignoriert er sie.
 
 Daraus folgt eine bewusste Produktentscheidung:
 
@@ -229,6 +274,11 @@ Benachrichtigungs-Service getrennt. Anlass war der auf dem Testtelefon
 nachgewiesene Zustand, dass Bluetooth-Befehle ankamen, waehrend Tube NEXT im
 Vordergrund keine Media-Button-Session besass.
 
+Am 03.11.2026 wurden nach einer Nutzermeldung zu erhoehtem Akkuverbrauch zwei
+Fehler behoben, die auf dem S21 nachgestellt wurden: der Besitzwechsel
+zwischen Tabs und die nicht freigegebene Pause ueber Systemsteuerungen.
+Details stehen in den Abschnitten oben.
+
 ## Regressionstest
 
 1. Video starten, den spielenden Tab schliessen und die App minimieren:
@@ -268,3 +318,13 @@ Vordergrund keine Media-Button-Session besass.
     Gespraechs stehen und wird erst nach dessen Ende automatisch fortgesetzt.
     Dieselbe Ausnahme darf im Hintergrund oder ohne aktives Gespraech nicht
     greifen.
+13. Video A spielen, Video B in einem neuen Tab oeffnen und starten, dann die
+    App minimieren: Die Benachrichtigung zeigt B, und Pause/Play steuern B. Der
+    Wake-Lock `BackgroundAudio` ist gehalten, und A ist pausiert.
+14. Im ersten Tab einen Vorschlag anklicken, der automatisch startet, und
+    sofort im zweiten Tab ein Video starten: wie Test 13, keine
+    Hintergrundwiedergabe ohne Benachrichtigung.
+15. Im Hintergrund ueber Benachrichtigungsleiste, Sperrbildschirm oder
+    `KEYCODE_MEDIA_PAUSE` pausieren: Benachrichtigung, Foreground-Service und
+    Wake-Lock verschwinden (`dumpsys power`). Danach startet Play bei
+    ausgeschaltetem Bildschirm die Wiedergabe samt Benachrichtigung wieder.

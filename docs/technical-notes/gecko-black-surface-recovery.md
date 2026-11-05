@@ -1,6 +1,7 @@
 # Schwarze GeckoView-Oberflaechen nach Resume oder Tabwechsel
 
-Stand: am 25.07.2026 gegen `master` und die Git-Historie geprueft
+Stand: am 05.11.2026 um die Eskalation auf einen frischen Seitenaufruf
+(`v1.4.13`) ergaenzt
 
 ## Symptom
 
@@ -25,6 +26,19 @@ Im Verlauf wurden mehrere verwandte, aber nicht identische Ursachen gefunden:
    `lmkd`-Meldungen, verschwundene alte Tab-Prozesse und danach neu erzeugte
    Prozesse. Dieser Pfad erzeugte nicht immer GeckoViews `onKill()`- oder
    `onCrash()`-Callback.
+4. Ein Seitenprozess lebte nach einer langen Hintergrundphase noch, zeichnete
+   aber nicht mehr. Fall vom 04./05.11.2026 auf dem SM-S928B mit `v1.4.12`:
+   Der Hauptprozess lief seit dem Vorabend weiter, kein Kaltstart. Vier
+   App-Starts zwischen 06:06 und 06:07 zeigten jeweils Schwarz, und auch die
+   Neu-laden-Taste half nicht. Erst ein erneutes Oeffnen derselben URL ueber die
+   Adresszeile lud die Seite. Im Bugreport starten genau dann (06:10:23) neue
+   Tab-Prozesse, und der alte Tab-Prozess mit adj 0 endet. `session.reload()`
+   bleibt also im haengenden Prozess, ein frischer `loadUri()` nicht.
+   Sichtbar wurde der Fall erst mit `v1.4.12`. Bis `v1.4.11` hielt der nach
+   jeder Hintergrundpause weiterlaufende Medien-Foreground-Service die App
+   versehentlich auf hoher Prioritaet und verdeckte das Problem, auf Kosten des
+   Akkus. Seit `v1.4.12` darf Android die pausierte App wieder einfrieren oder
+   zuruecksetzen. Das ist gewollt.
 
 Ein einzelner Gecko-Tab-Prozess erreichte im damaligen Test ungefaehr 456 MB
 PSS beziehungsweise 581 MB RSS. Mehrere Desktop-YouTube-Tabs koennen daher
@@ -42,20 +56,56 @@ entfernt, statt lediglich per Sichtbarkeit versteckt zu werden.
 Dieser Fix stammt aus Commit `92463c2` und beseitigt ueberlagernde
 `SurfaceView`s.
 
-### Render-Healthcheck ohne vorsorglichen Reload
+### Render-Healthcheck mit zweistufiger Reparatur
 
 Nach Resume und Tabwechsel wird ein gedrosselter Healthcheck fuer den aktiven
 Gecko-Tab geplant:
 
 - `capturePixels()` fragt den aktuellen Compositor ab, ohne zu navigieren.
-- Ein Capture-Fehler gilt als starkes Fehlersignal.
+- Ein Capture-Fehler gilt als starkes Fehlersignal. Antwortet der Capture nicht
+  innerhalb von 2,5 Sekunden, zaehlt das als Fehler (`capture-timeout`). Sonst
+  koennte ein Compositor, der auf einen haengenden Seitenprozess wartet, die
+  Pruefung lautlos beenden.
 - Ein nahezu schwarzes Bild gilt nur als Heuristik und wird ein zweites Mal
   geprueft.
-- Erst nach zwei fehlgeschlagenen Versuchen laeuft die Surface-Recovery.
+- Erst nach zwei fehlgeschlagenen Versuchen laeuft die Reparatur.
 
-`recoverVisibleGeckoSurface()` entfernt die aktive `GeckoView` kurz aus dem
-Container und haengt dieselbe View wieder ein. URL, Cookies und
-`GeckoSession` werden dabei nicht vorsorglich verworfen.
+Die Reihenfolge entscheidet `BlankTabRecoveryPolicy`:
+
+1. Neu einhaengen: `recoverVisibleGeckoSurface()` entfernt die aktive
+   `GeckoView` kurz aus dem Container und haengt dieselbe View wieder ein.
+   URL, Cookies und `GeckoSession` bleiben unveraendert. Danach folgt eine
+   Pruefung mit dem Grund `post-recovery`.
+2. Frisch laden, nur wenn das Neu-Einhaengen nicht geholfen hat: Das ist der
+   Fall, wenn das Bild bei der `post-recovery`-Pruefung weiter leer ist oder wenn
+   derselbe Tab innerhalb von 12 Sekunden nach seinem Neu-Einhaengen erneut
+   leer ist (etwa bei einem zweiten App-Start). Dann laedt
+   `freshLoadBlankGeckoTab()` die Seite per `loadUri()` neu, wie ein erneutes
+   Oeffnen der URL. Fuer dasselbe Video gilt der Watch-Checkpoint mit `t=`, die
+   Position bleibt also erhalten. Grenzen dieses Schritts:
+   - hoechstens einmal pro Tab und Minute,
+   - nie bei aktiver Wiedergabe des Tabs, im Querformat-Videomodus oder bei
+     einer Watch-Seite im Querformat, weil dunkle Videobilder dort legitim
+     sind (`SKIP_VIDEO`),
+   - nie auf transienten Account- oder Consent-Seiten ohne eigene Tab-URL.
+
+Das ist eine bewusste, vom Nutzer am 05.11.2026 freigegebene Ausnahme von der
+Regel, Tabs nicht aufgrund der Schwarz-Heuristik vorsorglich neu zu laden. Sie
+greift erst nach vier leeren Pruefungen und einem erfolglosen Neu-Einhaengen.
+Ein gesunder Tab erhaelt weiterhin keinen Reload.
+
+Die Neu-laden-Taste nutzt dieselbe URL-Wahl (`BlankTabRecoveryPolicy.freshLoadUrl`)
+und laedt per `loadUri()` statt `session.reload()`. Nur auf transienten
+Account- oder Consent-Seiten bleibt es bei `session.reload()`, damit ein
+Login-Fluss nicht zu YouTube zurueckspringt. Ein `loadUri()` derselben URL legt
+keinen doppelten Verlaufseintrag an; Zurueck fuehrt weiter zur vorherigen
+Seite.
+
+Protokoll unter `TUBENEXT_RENDER`: `render health ok`, `render health skipped
+while loading`, `blank Gecko capture`, `recover Gecko surface`,
+`fresh load blank Gecko tab`, `skip Gecko render recovery action=...` und
+`manual reload ... fresh=...`. Ein Bugreport direkt nach einem Blackscreen
+zeigt damit, welche Stufe gelaufen ist.
 
 ### Nachgewiesener Gecko-Prozessverlust
 
@@ -99,12 +149,15 @@ zweiter Schritt mit neuer `GeckoView` an derselben `GeckoSession` implementiert
 und lokal gebaut. Diese nicht separat committete Variante ist im heutigen
 `master` nicht vorhanden:
 
-- `lastGeckoSurfaceRecoveryAtMs` ist aktuell wieder global.
+- Die Drossel fuer das Neu-Einhaengen ist weiterhin global.
+  `lastGeckoSurfaceRecoveryTabId` merkt sich seit `v1.4.13` nur zusaetzlich den
+  Tab, damit ein erneut leerer Tab zum frischen Laden eskaliert.
 - Recoveries verschiedener Tabs koennen sich innerhalb von 12 Sekunden
-  gegenseitig drosseln.
-- `recoverVisibleGeckoSurface()` haengt nur dieselbe View erneut an.
+  gegenseitig drosseln (`SKIP_THROTTLED`).
+- Das Neu-Einhaengen haengt nur dieselbe View erneut an.
 - Ein eigener Display-/Session-Reattach-Schritt existiert derzeit nicht im
-  `EngineTab`-Vertrag.
+  `EngineTab`-Vertrag. Die zweite Stufe seit `v1.4.13` ist kein solcher Schritt,
+  sondern ein frischer Seitenaufruf in derselben `GeckoSession`.
 
 Das ist kein Beweis fuer einen aktuellen Fehler, aber eine bekannte
 Regressions- beziehungsweise Verbesserungsluecke. Vor einer erneuten
@@ -121,6 +174,17 @@ und gegen die Hibernation aus `v1.3.6` bewertet werden.
   Tab-Recreate und Speicherdruck-Hibernation.
 - Testgeraet: Samsung SM-S928B, spaeter Android 16/API 36; Tube NEXT war von
   der Akkuoptimierung ausgenommen.
+- Release `v1.4.13`: Neu laden per `loadUri()`, Eskalation auf einen frischen
+  Seitenaufruf nach erfolglosem Neu-Einhaengen, Capture-Timeout und
+  zusaetzliches Protokoll. Auf dem SM-G991B (S21) liess sich der haengende
+  Seitenprozess nicht nachstellen. Versucht wurden: GPU-Prozess beenden,
+  Seitenprozess beenden, alle Child-Prozesse beenden, ganze App beenden,
+  Nachtmodus-Wechsel sowie Seitenprozess per `SIGSTOP` anhalten plus
+  GPU-Prozess beenden. Die Kette wurde dort mit einem nur im Debug-Build
+  gesetzten Schwarz-Urteil geprueft.
+  Bei einem gesunden Prozess blieb die Seite nach `loadUri()` im selben
+  Seitenprozess. Dass Gecko einen haengenden Prozess beim frischen Aufruf
+  verlaesst, ist nur durch den Bugreport vom 05.11.2026 belegt.
 
 ## Regressionstest
 
@@ -132,8 +196,22 @@ und gegen die Hibernation aus `v1.3.6` bewertet werden.
    `capturePixels()`-Fehler achten.
 5. Bei schwarzem Zustand vor jeder Reparatur Screenshot, Prozesse und Logs
    sichern.
-6. Sicherstellen, dass ein gesunder Tab keinen URL-Reload erhaelt.
+6. Sicherstellen, dass ein gesunder Tab keinen URL-Reload erhaelt
+   (`render health ok`).
 7. Nach nachgewiesenem `onCrash()`/`onKill()` pruefen, dass nur der betroffene
    Tab neu aufgebaut wird.
 8. Mehrere kurz nacheinander fehlschlagende Tabs beobachten; dabei die globale
    Recovery-Drossel als bekannte Grenze beruecksichtigen.
+9. Eskalation im Debug-Build mit einem voruebergehend erzwungenen
+   Schwarz-Urteil in `handleGeckoRenderHealthCapture()` pruefen. Dieser Eingriff
+   wird nie committet. Bei pausiertem Video auf einer Watch-Seite muss beim
+   naechsten Resume diese Folge erscheinen: `recover Gecko surface`, dann
+   `fresh load blank Gecko tab ... url=...&t=...s`, nach fuenf Sekunden
+   `skip Gecko render recovery action=SKIP_THROTTLED`. Bei laufendem Video
+   folgt auf das Neu-Einhaengen nur `action=SKIP_VIDEO`, und die Wiedergabe
+   laeuft weiter.
+10. Neu laden auf einer Watch-Seite antippen: `manual reload ... fresh=true`,
+    die Position bleibt erhalten, und Zurueck fuehrt ohne doppelten
+    Verlaufseintrag zur vorherigen Seite.
+11. Bei einem echten Blackscreen nach langer Hintergrundzeit sofort einen
+    Bugreport ziehen und auf die Folge der `TUBENEXT_RENDER`-Zeilen achten.

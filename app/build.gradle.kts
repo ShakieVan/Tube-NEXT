@@ -54,8 +54,8 @@ android {
         applicationId = "de.shakie.tubenext"
         minSdk = 29
         targetSdk = 35
-        versionCode = 28
-        versionName = "1.4.12"
+        versionCode = 29
+        versionName = "1.4.13"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appLabel"] = "Tube NEXT"

@@ -53,7 +53,9 @@ Kontextparameter bleiben erhalten. Eine vorhandene Startzeit eines neu
 geoeffneten Links gilt bis zum ersten eigenen Checkpoint.
 
 Die URL wird beim Kaltstart, Lazy Restore, Aufwecken nach Hibernation,
-Gecko-Crash/-Kill-Recovery und ausdruecklichen Toolbar-Reload verwendet.
+Gecko-Crash/-Kill-Recovery, ausdruecklichen Toolbar-Reload und seit `v1.4.13`
+fuer den frischen Seitenaufruf nach einem bestaetigten Blackscreen verwendet
+(siehe `gecko-black-surface-recovery.md`).
 Es gibt keine durch Positionsmeldungen ausgeloesten Loads, History-Eintraege,
 DOM-Seeks oder `history.replaceState`-Aufrufe. Rotation und Rebind behalten
 weiterhin vorhandene Sessions; `createTab()` laedt nur neu erzeugte Sessions.

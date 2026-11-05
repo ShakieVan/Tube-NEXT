@@ -74,6 +74,7 @@ import de.shakie.tubenext.engine.EngineType
 import de.shakie.tubenext.engine.EngineWatchProgress
 import de.shakie.tubenext.engine.gecko.GeckoBrowserEngine
 import de.shakie.tubenext.tabs.AppTab
+import de.shakie.tubenext.tabs.BlankTabRecoveryPolicy
 import de.shakie.tubenext.tabs.CanonicalTabHistory
 import de.shakie.tubenext.tabs.TabManager
 import de.shakie.tubenext.tabs.TabPersistence
@@ -149,6 +150,8 @@ class MainActivity : AppCompatActivity() {
     private var landscapeVideoTranslationY = 0f
     private var geckoRenderHealthGeneration = 0L
     private var lastGeckoSurfaceRecoveryAtMs = 0L
+    private var lastGeckoSurfaceRecoveryTabId: String? = null
+    private val lastGeckoFreshLoadAtMs = mutableMapOf<String, Long>()
     private val loggedProcessExitKeys = mutableSetOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -488,11 +491,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun reloadCurrentTab() {
         val tab = currentTab() ?: return
-        val target = tabManager.restoreUrl(tab.id)
-        // Only an explicit reload uses the checkpoint; a healthy resumed session is left running.
-        if (target != null && target != tab.url &&
-            YouTubeNavigationPolicy.urlsReferToSameVideo(target, tab.engineLocationUrl)
-        ) {
+        // A fresh load like re-opening the URL: session.reload() stays in a page process that no
+        // longer answers after a long background phase, and the tab would stay black. Only an
+        // explicit reload uses the watch checkpoint; a healthy resumed session is left running.
+        val target = BlankTabRecoveryPolicy.freshLoadUrl(
+            tabUrl = tab.url,
+            engineLocationUrl = tab.engineLocationUrl,
+            restoreUrl = tabManager.restoreUrl(tab.id)
+        )
+        Log.i("TUBENEXT_RENDER", "manual reload tab=${tab.id} fresh=${target != null}")
+        if (target != null) {
             tab.engineTab.loadUrl(target)
         } else {
             tab.engineTab.reload()
@@ -871,6 +879,8 @@ class MainActivity : AppCompatActivity() {
         if (tab.loadingOverlayVisible) {
             if (attempt < GECKO_RENDER_HEALTH_MAX_ATTEMPTS) {
                 scheduleGeckoRenderHealthRetry(tabId, generation, reason, attempt + 1)
+            } else {
+                Log.i("TUBENEXT_RENDER", "render health skipped while loading tab=$tabId reason=$reason")
             }
             return
         }
@@ -885,21 +895,43 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        // A compositor that waits on an unresponsive page process may never answer the capture;
+        // the timeout turns that silence into a failed attempt instead of ending the check.
+        var settled = false
+        val captureTimeout = Runnable {
+            if (settled) return@Runnable
+            settled = true
+            handleGeckoRenderHealthFailure(tabId, generation, "$reason:capture-timeout", attempt, null)
+        }
+        webViewContainer.postDelayed(captureTimeout, GECKO_RENDER_HEALTH_CAPTURE_TIMEOUT_MS)
         runCatching {
             geckoView.capturePixels().accept(
                 { captured ->
                     runOnUiThread {
+                        webViewContainer.removeCallbacks(captureTimeout)
+                        if (settled) {
+                            captured?.recycle()
+                            return@runOnUiThread
+                        }
+                        settled = true
                         handleGeckoRenderHealthCapture(tabId, generation, reason, attempt, captured)
                     }
                 },
                 { error ->
                     runOnUiThread {
+                        webViewContainer.removeCallbacks(captureTimeout)
+                        if (settled) return@runOnUiThread
+                        settled = true
                         handleGeckoRenderHealthFailure(tabId, generation, reason, attempt, error)
                     }
                 }
             )
         }.onFailure { error ->
-            handleGeckoRenderHealthFailure(tabId, generation, reason, attempt, error)
+            webViewContainer.removeCallbacks(captureTimeout)
+            if (!settled) {
+                settled = true
+                handleGeckoRenderHealthFailure(tabId, generation, reason, attempt, error)
+            }
         }
     }
 
@@ -919,7 +951,10 @@ class MainActivity : AppCompatActivity() {
             isEffectivelyBlankPreview(captured)
         }.getOrDefault(false)
         captured.recycle()
-        if (!isBlank) return
+        if (!isBlank) {
+            Log.i("TUBENEXT_RENDER", "render health ok tab=$tabId attempt=$attempt reason=$reason")
+            return
+        }
 
         if (attempt < GECKO_RENDER_HEALTH_MAX_ATTEMPTS) {
             Log.w("TUBENEXT_RENDER", "blank Gecko capture tab=$tabId attempt=$attempt reason=$reason")
@@ -974,11 +1009,28 @@ class MainActivity : AppCompatActivity() {
         val tab = healthCheckedGeckoTab(tabId, geckoRenderHealthGeneration) ?: return
         val view = tab.engineTab.view as? GeckoView ?: return
         val now = SystemClock.uptimeMillis()
-        if (now - lastGeckoSurfaceRecoveryAtMs < GECKO_SURFACE_RECOVERY_THROTTLE_MS) {
-            Log.w("TUBENEXT_RENDER", "skip throttled Gecko surface recovery tab=$tabId reason=$reason")
-            return
+        val msSinceReattach = lastGeckoSurfaceRecoveryTabId?.let { now - lastGeckoSurfaceRecoveryAtMs }
+        val action = BlankTabRecoveryPolicy.decide(
+            afterSurfaceReattach = reason.startsWith(POST_SURFACE_RECOVERY_REASON),
+            msSinceTabReattach = msSinceReattach?.takeIf { lastGeckoSurfaceRecoveryTabId == tabId },
+            msSinceAnyReattach = msSinceReattach,
+            msSinceTabFreshLoad = lastGeckoFreshLoadAtMs[tabId]?.let { now - it },
+            videoMayFillFrame = isVideoFillingGeckoFrame(tabId)
+        )
+        when (action) {
+            BlankTabRecoveryPolicy.Action.REATTACH_SURFACE -> Unit
+            BlankTabRecoveryPolicy.Action.FRESH_LOAD -> {
+                freshLoadBlankGeckoTab(tab, reason, now)
+                return
+            }
+            BlankTabRecoveryPolicy.Action.SKIP_THROTTLED,
+            BlankTabRecoveryPolicy.Action.SKIP_VIDEO -> {
+                Log.w("TUBENEXT_RENDER", "skip Gecko render recovery action=$action tab=$tabId reason=$reason")
+                return
+            }
         }
         lastGeckoSurfaceRecoveryAtMs = now
+        lastGeckoSurfaceRecoveryTabId = tabId
         Log.w("TUBENEXT_RENDER", "recover Gecko surface tab=$tabId reason=$reason url=${tab.url}")
 
         (view.parent as? ViewGroup)?.removeView(view)
@@ -993,8 +1045,40 @@ class MainActivity : AppCompatActivity() {
             currentView.visibility = View.VISIBLE
             currentView.requestLayout()
             currentTab.engineTab.onResume()
-            scheduleGeckoRenderHealthCheck("post-recovery")
+            scheduleGeckoRenderHealthCheck(POST_SURFACE_RECOVERY_REASON)
         }
+    }
+
+    /**
+     * Second repair step, after a re-attach left the frame blank: a fresh load like re-opening the
+     * URL lets Gecko leave an unresponsive page process. Limited by [BlankTabRecoveryPolicy].
+     */
+    private fun freshLoadBlankGeckoTab(tab: AppTab, reason: String, now: Long) {
+        val target = BlankTabRecoveryPolicy.freshLoadUrl(
+            tabUrl = tab.url,
+            engineLocationUrl = tab.engineLocationUrl,
+            restoreUrl = tabManager.restoreUrl(tab.id)
+        )
+        if (target == null) {
+            Log.w(
+                "TUBENEXT_RENDER",
+                "skip fresh load of blank Gecko tab without tab URL tab=${tab.id} reason=$reason"
+            )
+            return
+        }
+        lastGeckoFreshLoadAtMs[tab.id] = now
+        logRecentProcessExitInfo("fresh-load:$reason")
+        Log.w("TUBENEXT_RENDER", "fresh load blank Gecko tab tab=${tab.id} reason=$reason url=$target")
+        tab.engineTab.loadUrl(target)
+        scheduleGeckoRenderHealthCheck("post-fresh-load", delayMs = GECKO_POST_FRESH_LOAD_CHECK_DELAY_MS)
+    }
+
+    private fun isVideoFillingGeckoFrame(tabId: String): Boolean {
+        val playing = ::backgroundAudioCoordinator.isInitialized &&
+            backgroundAudioCoordinator.isPlaybackActiveForTab(tabId)
+        val landscapeWatch = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE &&
+            isCurrentTabWatchPage()
+        return playing || landscapeVideoModeActive || landscapeWatch
     }
 
     private fun healthCheckedGeckoTab(tabId: String, generation: Long): AppTab? {
@@ -3370,7 +3454,9 @@ class MainActivity : AppCompatActivity() {
         private const val GECKO_RENDER_HEALTH_CHECK_DELAY_MS = 900L
         private const val GECKO_RENDER_HEALTH_RECHECK_DELAY_MS = 650L
         private const val GECKO_RENDER_HEALTH_MAX_ATTEMPTS = 2
-        private const val GECKO_SURFACE_RECOVERY_THROTTLE_MS = 12_000L
+        private const val GECKO_RENDER_HEALTH_CAPTURE_TIMEOUT_MS = 2_500L
+        private const val GECKO_POST_FRESH_LOAD_CHECK_DELAY_MS = 5_000L
+        private const val POST_SURFACE_RECOVERY_REASON = "post-recovery"
         private const val RECENT_EXIT_INFO_LIMIT = 16
         private const val TARGET_LIVE_GECKO_TABS_AFTER_TRIM = 2
         private const val UPDATE_CHECK_INTERVAL_MS = 24L * 60L * 60L * 1000L
